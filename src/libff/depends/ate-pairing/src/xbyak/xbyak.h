@@ -90,7 +90,7 @@
 
 #if defined(_WIN64) || defined(__MINGW64__) || (defined(__CYGWIN__) && defined(__x86_64__))
 	#define XBYAK64_WIN
-#elif defined(__x86_64__)
+#elif defined(_M_X64) || defined(__x86_64__) || (__arm64__) || (__aarch64__)
 	#define XBYAK64_GCC
 #endif
 #if !defined(XBYAK64) && !defined(XBYAK32)

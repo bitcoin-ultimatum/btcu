@@ -18,7 +18,7 @@ NavMenuWidget::NavMenuWidget(BTCUGUI *mainWindow, QWidget *parent) :
     ui->setupUi(this);
     this->setFixedWidth(100);
     //setCssProperty(ui->navContainer_2, "container-nav");
-   setCssProperty(ui->navContainer_2, "container-Dashboard");
+    setCssProperty(ui->navContainer_2, "container-dashboard");
     setCssProperty(ui->imgLogo, "img-nav-logo");
 
     // App version

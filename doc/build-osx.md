@@ -39,6 +39,7 @@ It is important:  Even if you had homebrew installed beforehand, update your ver
 ```
 
 ## Troubleshooting
+### Brew problems
 If you see throught brew installation process errors like  `LibreSSL SSL_connect: SSL_ERROR_SYSCALL in connection`, try:
 ```shell
     networksetup -setv6off Wi-Fi
@@ -49,30 +50,43 @@ If you goes into error  `Error: Operation already in progress `, try:
     rm -rf /usr/local/var/homebrew/locks
 ```
 
-For other issues please check [Homebrew's Troubleshooting page](https://docs.brew.sh/Troubleshooting).
+For other brew-specific issues please check [Homebrew's Troubleshooting page](https://docs.brew.sh/Troubleshooting).
 
+### Installation problems
 In a case when you get `dmg` image or sources via browser, telegramm and etc you'll face with an error `Operation not permitted` for the application extracted from the the `dmg` or in a terminal thought the building process accordingly.
-
-Note: The described behaviour for the sources case will be overlapped with another problem while you try to complete a command `cmake .` from the build section. The terminal will show a successfull generation but commands for the autogen.sh and configure won't show any actual result and appopriate result files won't be generated. You can run separately a command `./autogen.sh` to see the actual problem which is the same `Operation not permitted` as for the dmg image case.
-
-To solve the problem in a sources folder please run:
-```shell
-    xattr -d com.apple.quarantine autogen.sh
-```
 
 To solve the problem for the image case:
 ```shell
     xattr -d com.apple.quarantine btcu-qt.dmg
 ```
-in the download folder where you've placed the file. If the file has another name please change the command accordingly to the file name (i.e. if your file name for example if `btcu-qt_somesimbols.dmg`, you'll run `xattr -d com.apple.quarantine btcu-qt_somesimbols.dmg`).
+in the download folder where you've placed the file (in that case you will have to reinstall the app from the dmg) or 
+```shell
+    sudo xattr -rd com.apple.quarantine /Applications/btcu-qt.app
+```
+for the installed app.
+
+### BUILTIN_QTDEPLOY and .dmg building flag caveats
+Sometimes the packaging into .dmg step will be failed due to `btcu-qt` image from the previous build is still mounted (error will be like `Permission denied`). You will have to unmount it in order to make it successful.
+
+It is good to unmount all unused images anyway.
+
+### Build problems
+If you face with problems in a build process please make sure you've read the instruction carefully and you've done all required steps.
+
+Also please check all Note and Important hints from the instruction. Probably thay have an essential information to solve the problem.
+
+If you face with an error on `cmake` command like `No CMAKE_C_COMPILER could be found.` please run a command:
+```shell
+    sudo xcode-select --reset
+```
 
 ## Dependencies
 ```shell
-    brew install automake libtool miniupnpc pkg-config python qt libevent qrencode protobuf rocksdb snappy zeromq openssl libjson-rpc-cpp google-benchmark googletest cmake git gmp
+    brew install automake libtool miniupnpc pkg-config python qt libevent qrencode protobuf snappy zeromq openssl libjson-rpc-cpp google-benchmark googletest cmake git gmp gflags
     # libscrypt from local since we need a version with cmake support but you still can get it via brew
 ```
 
-If you want to build the disk image with `make deploy` (.dmg / optional), you need RSVG:
+If you want to build the disk image with `make osx=dmg` (.dmg / optional), you need RSVG:
 ```shell
     brew install librsvg
 ```
@@ -87,36 +101,38 @@ If you'll get a refuse result such as "Warning: Refusing to link macOS provided/
     ( brew --prefix openssl && echo '/include/openssl'; ) | tr -d "[:space:]" | xargs -I '{}' ln -s {} /usr/local/include
 ```
 
-Next run an important command to keep appopriate versions to run:
+#### Boost
+In order to make things simplier and to support Apple M-series we will have to build Boost from the sources.
+To do this please run commands:
 ```shell
-    export HOMEBREW_NO_AUTO_UPDATE=1
-    export HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1
+    alias nproc="sysctl -n hw.logicalcpu"
+
+    curl https://dl.bintray.com/boostorg/release/1.71.0/source/boost_1_71_0.tar.gz -o boost_1_71_0.tar.gz
+    tar -xf boost_1_71_0.tar.gz
+
+    cd boost_1_71_0
+    ./bootstrap.sh --prefix=/usr/local/opt/boost --with-python=python3 &&
+    sudo ./b2 stage -j$(nproc) cxxflags="-std=c++11" --reconfigure threading=multi link=shared --with-regex --with-test --with-filesystem --with-date_time --with-random --with-system --with-thread --with-program_options --with-chrono --with-fiber --with-log --with-context --with-math && sudo ./b2 install --prefix=/usr/local/opt/boost
+    sudo ln -s /usr/local/opt/boost/lib/*.dylib /usr/local/lib
+    cd -
 ```
 
-Next:
+This will install Boost to the brew default packages folder. You can change it but make sure it is visible in system path for lib and for includes.
+
+#### Rocksdb
+If you build on Mac Intell you can just run:
 ```shell
-    # since brew has been removed the required version of the boost
-    curl https://raw.githubusercontent.com/Homebrew/homebrew-core/8d748e26ccc9afc8ea0d0201ae234fda35de721e/Formula/boost.rb -o boost.rb
-    brew install ./boost.rb
+    brew install rocksdb
 ```
 
-Also it may be usefull to add openssl bin folder to PATH as it recommended by result of the command "brew link openssl --force".
-
-See [dependencies.md](dependencies.md) for a complete overview.
-
-
-Also it is important to have the exact version of the icu4c:
+In an M-series you will have to compile it from the sources:
 ```shell
-    brew uninstall --ignore-dependencies icu4c
-    curl https://raw.githubusercontent.com/Homebrew/homebrew-core/a806a621ed3722fb580a58000fb274a2f2d86a6d/Formula/icu4c.rb -o icu4c.rb
-    brew install ./icu4c.rb
-    ln -s /usr/local/Cellar/icu4c/64.2 /usr/local/opt/icu4c
-```
+    git clone https://github.com/facebook/rocksdb.git
+    cd rocksdb
+    cmake . -DPORTABLE=ON -DUSE_RTTI=ON -DWITH_BENCHMARK_TOOLS=OFF -DWITH_BZ2=O -DWITH_TESTS=OFF -DCMAKE_BUILD_TYPE=Release
 
-After finishing this steps of the dependencies installation you may run the command to undo brew configuration:
-```shell
-    export HOMEBREW_NO_AUTO_UPDATE=0
-    export HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=0
+    sudo make install
+    cd -
 ```
 
 #### SQLite
@@ -164,7 +180,7 @@ If the brew installed a different version run the followed command:
 
 1. Clone the BTCU source code:
 ```shell
-    git clone https://github.com/bitcoin-ultimatum/orion
+    git clone https://github.com/bitcoin-ultimatum/btcu
     cd btcu
 ```
 
@@ -190,6 +206,8 @@ It is important: Do not use spaces and other line breaking simbols in a path to 
     make
 ```
 
+Note: There is a supported flag QUIET for more quiet build. It is usefull.
+
 4.  It is recommended to build and run the unit tests:
 ```shell
     make check
@@ -198,6 +216,45 @@ It is important: Do not use spaces and other line breaking simbols in a path to 
 5.  You can also create a .dmg that contains the .app bundle (optional):
 ```shell
     make osx-dmg
+```
+
+## Code Signing
+In order to sign the application you will have to install you're apple developer certificate on your MacBook.
+
+Next, run CMake with the flag SIGN_DMG. SIGN_DMG is required to tell cmake that it should use codesign tool to sign final .dmg image.
+
+By default cmake will try to detect you developer certificate identifier by himself. It will take the first one from the command `security find-identity -v -p codesigning` (For more information please check file `cmake/scripts/CodeSignIOS.cmake`). The result command will be:
+```shell
+    cmake . -DSIGN_DMG=ON
+    make osx-dmg
+```
+
+But you can provide specific certificate name with a flag SIGN_CERT_NAME, e.g.:
+```shell
+    cmake . -DSIGN_DMG=ON -DSIGN_CERT_NAME="Mac Developer: John Smith"
+    make osx-dmg
+```
+
+Important note: In some cases there will be a problem with missed media resources in the signed app. In that case you will have to recompile the app with the flag BUILTIN_QTDEPLOY.
+
+The flag BUILTIN_QTDEPLOY will tell cmake that it should use macdeployqt from qt package installed from brew on previous steps and the open source python script `contrib\macdeploy\macdeployqtplus.py` will be used only to create fancy-looking installer from the result.
+
+The result command will be:
+```shell
+    cmake . -DBUILTIN_QTDEPLOY=ON -DSIGN_DMG=ON
+    make osx-dmg
+```
+
+## Apple Silicon Processors Support (M-Series)
+We support build for Apple M-Series processors. You can build a runnable binaries just by following the build step from the instruction.
+
+However if you need to create a .dmg-file you will need to use apple developer certificate since it is required in ARM-architecture in Apple.
+In order to do this you will have to install you're apple developer certificate on your M-Series processor. Please check Code Signing section from the instruction. 
+
+It is also important to use BUILTIN_QTDEPLOY for the M-series build. The result command will be:
+
+```shell
+    cmake . -DBUILTIN_QTDEPLOY=ON -DSIGN_DMG=ON -DSIGN_CERT_NAME="Mac Developer: John Smith"
 ```
 
 ## XCode build
@@ -234,7 +291,7 @@ In this case there is no dependency on [*Berkeley DB*](#berkeley-db) and [*SQLit
 Mining is also possible in disable-wallet mode using the `getblocktemplate` RPC call.
 
 ## Running
-BTCU is now available at `./btcud`
+BTCU is now available at `./bin/btcud`
 
 Before running, it's recommended that you create an RPC configuration file:
 ```shell
@@ -252,10 +309,10 @@ You can monitor the download process by looking at the debug.log file:
 
 ## Other commands:
 ```shell
-    btcud -daemon      # Starts the btcu daemon.
-    btcu-cli --help    # Outputs a list of command-line options.
-    btcu-cli help      # Outputs a list of RPC commands when the daemon is running.
-    ./bin/btcu-qt   # Start GUI
+    ./bin/btcud -daemon      # Starts the btcu daemon.
+    ./bin/btcu-cli --help    # Outputs a list of command-line options.
+    ./bin/btcu-cli help      # Outputs a list of RPC commands when the daemon is running.
+    ./bin/btcu-qt      # Start GUI
 ```
 
 ## Notes

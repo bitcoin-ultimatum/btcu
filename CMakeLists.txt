@@ -1,5 +1,19 @@
+option(QUIET "Hide all gcc warnings (-w) and CMake messages" OFF)
+
+if(QUIET)
+    function(message)
+        list(GET ARGV 0 MessageType)
+        if(MessageType STREQUAL FATAL_ERROR OR
+            MessageType STREQUAL SEND_ERROR OR
+            MessageType STREQUAL WARNING OR
+            MessageType STREQUAL AUTHOR_WARNING)
+            list(REMOVE_AT ARGV 0)
+            _message(${MessageType} "${ARGV}")
+        endif()
+    endfunction()
+endif()
+
 cmake_minimum_required(VERSION 3.14)
-set(CMAKE_VERBOSE_MAKEFILE ON)
 
 # the version of this package
 set(PROJECT_VERSION 1.0.0.0)
@@ -12,7 +26,11 @@ project(btcu
 
 # Package information
 set(PACKAGE_NAME "BTCU")
-set(PACKAGE_BUGREPORT "https://github.com/bitcoin-ultimatum/btcu/issues")
+set(PACKAGE_BUGREPORT "https://github.com/bitcoin-ultimatum/orion/issues")
+
+if (CMAKE_GENERATOR MATCHES "Xcode")
+    set_property(GLOBAL PROPERTY XCODE_ATTRIBUTE_SKIP_INSTALL "Yes")
+endif()
 
 # currently the crossbuild is not supported
 set(__IS_NATIVE_BUILD 1 CACHE INTERNAL "Indicate if this is a native build")
@@ -106,7 +124,7 @@ endif()
 # USE_QTCHARTS --with-qtcharts  --  ENABLE_QTCHARTS, configure flag, no cmake
 # USE_LCOV --enable-lcov 
 # GLIBC_BACK_COMPAT --enable-glibc-back-compat  --  ENABLE_GLIBC_BACK_COMPAT, configure flag, no cmake
-# HARDEN --disable-hardening  --  DISABLE_HARDENING, configure flag, no cmake
+# HARDEN --disable-hardening  --  ENABLE_HARDENING, configure flag, no cmake
 # USE_ASM --enable-asm   --  ENABLE_ASM, configure flag, no cmake
 # BUILD_BITCOIND --with-daemon 
 # BUILD_BITCOIN_UTILS --with-utils  --  BUILD_UTILS, configure flag, no cmake
@@ -136,7 +154,7 @@ option(ENABLE_ZMQ "Activate the ZMQ notifications" ON)
 option(ENABLE_WALLET "Activate the wallet functionality" ON)
 option(BUILD_UTILS "Build btcu-cli and btcu-tx" ON)
 option(BUILD_LIBS "Build the btcuconsensus shared library" ON)
-option(DISABLE_HARDENING "Do not attempt to harden the resulting executables" OFF)
+option(ENABLE_HARDENING "Attempt to harden the resulting executables" OFF)
 option(ENABLE_REDUCE_EXPORTS "Attempt to reduce exported symbols in the resulting" OFF)
 option(ENABLE_GLIBC_BACK_COMPAT "Enable backwards compatibility with glibc" OFF)
 option(WITH_MINIUNPC "Enable UPnP support" ON)
@@ -144,6 +162,37 @@ option(START_WITH_UPNP "If UPNP is enabled, turn it on at startup" OFF)
 option(ENABLE_GPROF "Use gprof profiling compiler flags " OFF)
 option(ENABLE_LEASING_MANAGER "Enable leasing manager" ON)
 option(ENABLE_TESTS "Build tests" ON)
+option(EXTRA_WARNINGS "Enable extra warnings" OFF)
+if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+    option(BUILTIN_QTDEPLOY "Use qt native qtdeploy script" OFF)
+endif()
+
+if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+    option(SIGN_DMG "Sign the application and frameworks with codesign" OFF)
+
+    if(SIGN_DMG)
+        message(STATUS "Enabled option: Sign btcu-qt")
+
+        if (NOT DEFINED SIGN_CERT_NAME)
+            message(STATUS "Parameter SIGN_CERT_NAME is not provided. Will be used first found identity from the computer.")
+
+			include(CodeSignIOS)
+
+		    code_sign_get_identity_macos(TEST_CERT)
+
+            if(NOT TEST_CERT)
+                message(WARNING "Failed to locate installed developer certificate. SIGN_DMG will be turned off. Please note that signing is required for dmg build on Apple Silicone processors")
+
+                option(SIGN_DMG "Sign the application and frameworks with codesign" OFF)
+                message(STATUS "Disabled option: Sign btcu-qt")
+            else()
+	            message(STATUS "Selected identity: ${TEST_CERT}")
+            endif()
+		endif()
+    else()
+        message(STATUS "Disabled option: Sign btcu-qt")
+    endif()
+endif()
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 	set(DEFAULT_ENABLE_DBUS_NOTIFICATIONS ON)
@@ -182,10 +231,10 @@ if(BUILD_LIBS)
 else()
     message(STATUS "Disabled option: Build the btcuconsensus shared library")
 endif()
-if(DISABLE_HARDENING)
-    message(STATUS "Disabled option: Harden the executables")
-else()
+if(ENABLE_HARDENING)
     message(STATUS "Enabled option: Harden the executables")
+else()
+    message(STATUS "Disabled option: Harden the executables")
 endif()
 if(ENABLE_REDUCE_EXPORTS)
     message(STATUS "Enabled option: Attempt to reduce exported symbols in the resulting")
@@ -216,6 +265,21 @@ if(ENABLE_TESTS)
     message(STATUS "Enabled option: Build tests")
 else()
     message(STATUS "Disabled option: Build tests")
+endif()
+if(EXTRA_WARNINGS)
+    message(STATUS "Enabled option: Extra build warnings")
+else()
+    message(STATUS "Disabled option: Extra build warnings")
+endif()
+if(QUIET)
+    # You will never see this message. :)
+    message(STATUS "Enabled option: Quiet build (hide all gcc warnings with -w flag and quieting all messages)")
+    if(EXTRA_WARNINGS)
+        message(WARNING "EXTRA_WARNINGS option will be disabled due it is incompatible with QUIET mode.")
+        option(EXTRA_WARNINGS "Enable extra warnings" OFF)
+    endif()
+else()
+    message(STATUS "Disabled option: Quiet build (hide all gcc warnings with -w flag)")
 endif()
 
 # If ccache is available, then use it.
@@ -322,20 +386,16 @@ if(ENABLE_HARDENING AND NOT MSVC)
 	endif()
 endif()
 
-if (NOT MSVC)
+if (NOT MSVC AND NOT QUIET)
     # Enable warning
     add_c_compiler_flags(-Wnested-externs -Wstrict-prototypes)
     add_compiler_flags(
-        -Wall
-        -Wextra
         -Wformat
+        -Wextra
         -Wvla
         -Wcast-align
-        -Wunused-parameter
         -Wmissing-braces
         -Wthread-safety
-        -Wshadow
-        -Wshadow-field
         -Wrange-loop-analysis
         -Wredundant-decls
         -Wunreachable-code-loop-increment
@@ -345,13 +405,28 @@ if (NOT MSVC)
         -Wredundant-move
     )
 
-    option(EXTRA_WARNINGS "Enable extra warnings" OFF)
     if(EXTRA_WARNINGS)
-        add_cxx_compiler_flags(-Wsuggest-override)
+        add_compiler_flags(
+            -Wall
+            -Wsuggest-override
+            -Wshadow-field
+            -Wshadow
+        )
     else()
-        add_compiler_flags(-Wno-unused-parameter)
-        add_compiler_flags(-Wno-implicit-fallthrough)
+        add_compiler_flags(
+            -Wno-unused-parameter
+            -Wno-implicit-fallthrough
+            -Wno-macro-redefined
+            -Wno-sign-compare
+            -Wno-unused-parameter
+        )
     endif()
+endif()
+
+if(QUIET)
+    add_compiler_flags(
+        -w
+    )
 endif()
 
 if (MSVC)
@@ -518,39 +593,58 @@ list(APPEND CMAKE_PREFIX_PATH ./src/cryptopp)
 list(APPEND CMAKE_PREFIX_PATH ./src/cpp-ethereum/ethash)
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-	list(APPEND CMAKE_PREFIX_PATH /usr/local/opt/qt5)
-	list(APPEND CMAKE_PREFIX_PATH /usr/local/opt/berkeley-db)
 	list(APPEND CMAKE_PREFIX_PATH /usr/local/opt/rocksdb)
-	list(APPEND CMAKE_PREFIX_PATH /usr/local/opt/libjson-rpc-cpp)
-	list(APPEND CMAKE_PREFIX_PATH /usr/local/opt/google-benchmark)
-	list(APPEND CMAKE_PREFIX_PATH /usr/local/opt/snappy)
-	list(APPEND CMAKE_PREFIX_PATH /usr/local/opt/libevent)
-    
-	set(BerkeleyDB_ROOT_DIR "/usr/local/opt/berkeley-db")
+	list(APPEND CMAKE_PREFIX_PATH /opt/homebrew/opt/rocksdb)
 
-	set( CURL_INCLUDE_DIR "/usr/local/opt/curl/include" )
-	set( CURL_LIBRARY "/usr/local/opt/curl/lib" )
+	find_brew_prefix(qt5_ROOT_DIR qt5)
+	find_brew_prefix(libjsonrpccpp_ROOT_DIR libjson-rpc-cpp)
+	find_brew_prefix(GBenchmark_ROOT_DIR google-benchmark)
+	find_brew_prefix(snappy_ROOT_DIR snappy)    
 
-	set( MHD_INCLUDE_DIR "/usr/local/opt/libmicrohttpd/include" )
-	set( MHD_LIBRARY "/usr/local/opt/libmicrohttpd/lib" )
-
-	set( BerkeleyDB_INCLUDE_DIR "/usr/local/opt/berkeley-db/include" )
-	set( BerkeleyDB_LIBRARY "/usr/local/opt/berkeley-db/lib" )
-
+	find_brew_prefix(CURL_ROOT_DIR curl)
+	find_brew_prefix(MHD_ROOT_DIR libmicrohttpd)
+	find_brew_prefix(BerkeleyDB_ROOT_DIR berkeley-db)
+	find_brew_prefix(LibEvent_ROOT_DIR libevent)
+	find_brew_prefix(GMP_ROOT_DIR gmp)
 	find_brew_prefix(OPENSSL_ROOT_DIR openssl)
 	find_brew_prefix(ZMQ_ROOT_DIR zmq)
+	find_brew_prefix(Qrcode_ROOT_DIR qrencode)
 
-	set( LibEvent_INCLUDE_DIR "/usr/local/opt/libevent/include" )
-	set( LibEvent_LIBRARY "/usr/local/opt/libevent/lib" )
+	list(APPEND CMAKE_PREFIX_PATH ${qt5_ROOT_DIR})
+	list(APPEND CMAKE_PREFIX_PATH ${libjsonrpccpp_ROOT_DIR})
+	list(APPEND CMAKE_PREFIX_PATH ${GBenchmark_ROOT_DIR})
+	list(APPEND CMAKE_PREFIX_PATH ${snappy_ROOT_DIR})
 
-	set( GMP_INCLUDE_DIR "/usr/local/opt/gmp/include" )
-	set( GMP_LIBRARY "/usr/local/opt/gmp/lib" )
+	list(APPEND CMAKE_PREFIX_PATH ${CURL_ROOT_DIR})
+	list(APPEND CMAKE_PREFIX_PATH ${MHD_ROOT_DIR})
+	list(APPEND CMAKE_PREFIX_PATH ${BerkeleyDB_ROOT_DIR})
+	list(APPEND CMAKE_PREFIX_PATH ${LibEvent_ROOT_DIR})
+	list(APPEND CMAKE_PREFIX_PATH ${GMP_ROOT_DIR})
+	list(APPEND CMAKE_PREFIX_PATH ${OPENSSL_ROOT_DIR})
+	list(APPEND CMAKE_PREFIX_PATH ${ZMQ_ROOT_DIR})
+	list(APPEND CMAKE_PREFIX_PATH ${Qrcode_ROOT_DIR})
+
+	set( CURL_INCLUDE_DIR "${CURL_ROOT_DIR}/include" )
+	set( CURL_LIBRARY "${CURL_ROOT_DIR}/lib" )
+
+	set( MHD_INCLUDE_DIR "${MHD_ROOT_DIR}/include" )
+	set( MHD_LIBRARY "${MHD_ROOT_DIR}/lib" )
+
+	set( BerkeleyDB_INCLUDE_DIR "${BerkeleyDB_ROOT_DIR}/include" )
+	set( BerkeleyDB_LIBRARY "${BerkeleyDB_ROOT_DIR}/lib" )
+
+	set( LibEvent_INCLUDE_DIR "${LibEvent_ROOT_DIR}/include" )
+	set( LibEvent_LIBRARY "${LibEvent_ROOT_DIR}/lib" )
+
+	set( GMP_INCLUDE_DIR "${GMP_ROOT_DIR}/include" )
+	set( GMP_LIBRARY "${GMP_ROOT_DIR}/lib" )
 
 	set( ZeroMQ_INCLUDE_DIR "${ZMQ_ROOT_DIR}/include" )
 	set( ZeroMQ_LIBRARY "${ZMQ_ROOT_DIR}/lib" )
 
-	set( Qrcode_INCLUDE_DIR "/usr/local/opt/qrencode/include" )
-	set( Qrcode_LIBRARY "/usr/local/opt/qrencode/lib" )
+	set( Qrcode_INCLUDE_DIR "${Qrcode_ROOT_DIR}/include" )
+	set( Qrcode_LIBRARY "${Qrcode_ROOT_DIR}/lib" )
+
 elseif(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 	set( GTest_DIR "/usr/src/googletest" CACHE PATH "Path to googletest")
 	set( GTEST_ROOT "/usr/src/googletest" CACHE PATH "Path to googletest")
@@ -801,7 +895,7 @@ if(BerkeleyDB_FOUND)
     message (STATUS ${BerkeleyDB_Cxx_LIBRARY_DIRS})
     
     if(${BerkeleyDB_VERSION} MATCHES "..")
-        message(WARNING "Unknown version Berkeley DB. If this is not ${BDB_VER}, please reinstall it!")
+        message(STATUS "Unknown version Berkeley DB. If this is not ${BDB_VER}, please reinstall it!")
     else()
         if(NOT ${BerkeleyDB_VERSION} MATCHES "${BDB_VER}")
             message(WARNING "BerkeleyDB version other than ${BDB_VER} found: ${BerkeleyDB_VERSION}!")
@@ -962,8 +1056,11 @@ else()
     endif()
     set(libleveldb_a_sources ${libleveldb_a_sources} ${CMAKE_CURRENT_SOURCE_DIR}/src/leveldb/port/port_posix.cc)
 endif()
-
-set(LEVELDB_COMPILE_OPTIONS -Wno-implicit-fallthrough -Wno-inconsistent-missing-override -Wno-maybe-uninitialized -Wno-shadow -Wno-sign-compare -Wno-unused-const-variable)
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+    set(LEVELDB_COMPILE_OPTIONS -Wno-implicit-fallthrough -Wno-inconsistent-missing-override -Wno-shadow -Wno-sign-compare -Wno-unused-const-variable)
+elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    set(LEVELDB_COMPILE_OPTIONS -Wno-implicit-fallthrough -Wno-inconsistent-missing-override -Wno-maybe-uninitialized -Wno-shadow -Wno-sign-compare -Wno-unused-const-variable)
+endif()
 
 add_library(leveldb ${libleveldb_a_headers} ${libleveldb_a_sources})
 if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Windows")
@@ -1727,6 +1824,8 @@ if(ENABLE_TESTS)
     add_custom_target(test_btcu_hex ALL DEPENDS ${BTCU_HEX_TEST_FILES})
 
     add_executable(test_btcu ${BTCU_TEST_SOURCES})
+    target_compile_definitions(test_btcu PUBLIC -DTEST_BTCU)
+
     add_dependencies(test_btcu test_btcu_hex leveldb leveldb_sse42 memenv)
     target_include_directories(test_btcu PUBLIC ${BTCU_HEX_DESTDIR} ./src/test)
 

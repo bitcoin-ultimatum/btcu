@@ -77,9 +77,9 @@ HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH*/
     border:  1px solid #262642;
     border-radius:2px;
 }
-*[cssClass="container-Dashboard"] {
-    /*background-color:#222241;*/
-    border-image: url("://Dashboard") 0 0 0 0 stretch stretch;
+*[cssClass="container-dashboard"] {
+    background-color:#222241;
+    background-image: url("://dashboard");
 }
 
 /*HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH

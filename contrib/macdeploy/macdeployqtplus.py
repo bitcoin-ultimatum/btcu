@@ -24,6 +24,7 @@ import shutil
 import stat
 import os.path
 import time
+import plistlib
 from string import Template
 from argparse import ArgumentParser
 from typing import List, Optional
@@ -323,16 +324,45 @@ def copyFramework(framework: FrameworkInfo, path: str,
     if not os.path.exists(toDir):
         os.makedirs(toDir)
 
-    shutil.copy2(fromPath, toPath)
-    if verbose >= 3:
-        print("Copied:", fromPath)
-        print(" to:", toPath)
+    if framework.isDylib():
+        shutil.copy2(fromPath, toPath)
+        if verbose >= 3:
+            print("Copied:", fromPath)
+            print(" to:", toPath)
+    else:
+        frameFrom = framework.frameworkPath
+        frameto = os.path.join(
+            path,
+            "Contents",
+            "Frameworks",
+            framework.frameworkName)
+
+        if os.path.exists(frameto):
+            shutil.rmtree(frameto)
+        
+        shutil.copytree(frameFrom, frameto, symlinks=True)
+
+        if verbose >= 3:
+            print("Copied:", frameFrom)
+            print(" to:", frameto)
+
+    codesignpath = os.path.join(
+            path,
+            "Contents",
+            "Frameworks",
+            framework.frameworkName,
+            "Versions",
+            "Current",
+            "_CodeSignature")
+    
+    if os.path.exists(codesignpath):
+        shutil.rmtree(codesignpath)
 
     permissions = os.stat(toPath)
     if not permissions.st_mode & stat.S_IWRITE:
         os.chmod(toPath, permissions.st_mode | stat.S_IWRITE)
 
-    if not framework.isDylib():  # Copy resources for real frameworks
+    if not framework.isDylib():  # Correct resources plists
 
         linkfrom = os.path.join(
             path,
@@ -341,29 +371,38 @@ def copyFramework(framework: FrameworkInfo, path: str,
             framework.frameworkName,
             "Versions",
             "Current")
-        linkto = framework.version
-        if not os.path.exists(linkfrom):
-            os.symlink(linkto, linkfrom)
-            if verbose >= 2:
-                print("Linked:", linkfrom, "->", linkto)
         fromResourcesDir = framework.sourceResourcesDirectory
         if os.path.exists(fromResourcesDir):
             toResourcesDir = os.path.join(
                 path, framework.destinationResourcesDirectory)
-            shutil.copytree(fromResourcesDir, toResourcesDir, symlinks=True)
+            infopath = os.path.join(toResourcesDir, 'Info.plist')
+
+            with open(infopath, 'rb') as f:
+                infoplist = plistlib.load(f)
+
+            if not "CFBundleName" in infoplist:
+                infoplist['CFBundleName'] = infoplist['CFBundleExecutable']
+                if verbose >= 3:
+                    print("Added CFBundleName plist field with value:", infoplist['CFBundleExecutable'])
+            if not "CFBundleDisplayName" in infoplist:
+                infoplist['CFBundleDisplayName'] = infoplist['CFBundleExecutable']
+                if verbose >= 3:
+                    print("Added CFBundleDisplayName plist field with value:", infoplist['CFBundleExecutable'])
+            if not "CFBundleInfoDictionaryVersion" in infoplist:
+                infoplist['CFBundleInfoDictionaryVersion'] = "6.0"
+                if verbose >= 3:
+                    print("Added CFBundleInfoDictionaryVersion plist field with value:", "6.0")
+            if "NOTE" in infoplist:
+                del infoplist["NOTE"]
+            
+            os.remove(infopath)
+
+            with open(infopath, 'wb') as f:
+                plistlib.dump(infoplist, f)
+            
             if verbose >= 3:
-                print("Copied resources:", fromResourcesDir)
-                print(" to:", toResourcesDir)
-        fromContentsDir = framework.sourceVersionContentsDirectory
-        if not os.path.exists(fromContentsDir):
-            fromContentsDir = framework.sourceContentsDirectory
-        if os.path.exists(fromContentsDir):
-            toContentsDir = os.path.join(
-                path, framework.destinationVersionContentsDirectory)
-            shutil.copytree(fromContentsDir, toContentsDir, symlinks=True)
-            if verbose >= 3:
-                print("Copied Contents:", fromContentsDir)
-                print(" to:", toContentsDir)
+                print("Patched plist:", infopath)
+                
     # Copy qt_menu.nib (applies to non-framework layout)
     elif framework.frameworkName.startswith("libQtGui"):
         qtMenuNibSourcePath = os.path.join(
@@ -639,9 +678,9 @@ Note, that the "dist" folder will be deleted before deploying on each run.
 
 Optionally, Qt translation files (.qm) and additional resources can be added to the bundle.
 
-Also optionally signs the .app bundle; set the CODESIGNARGS environment variable to pass arguments
+Also optionally signs the .app bundle; set the -codesignargs variable to pass arguments
 to the codesign tool.
-E.g. CODESIGNARGS='--sign "Developer ID Application: ..." --keychain /encrypted/foo.keychain'""")
+E.g. -codesignargs '--sign "Developer ID Application: ..." --keychain /encrypted/foo.keychain'""")
 
 ap.add_argument("app_bundle", nargs=1, metavar="app-bundle",
                 help="application bundle to be deployed")
@@ -652,6 +691,9 @@ ap.add_argument(
     default=[1],
     metavar="<0-3>",
     help="0 = no output, 1 = error/warning (default), 2 = normal, 3 = debug")
+ap.add_argument(
+    "-codesignargs",
+    help="set the codesignargs variable to pass arguments to the codesign tool")
 ap.add_argument(
     "-no-plugins",
     dest="plugins",
@@ -670,6 +712,12 @@ ap.add_argument(
     action="store_true",
     default=False,
     help="sign .app bundle with codesign tool")
+ap.add_argument(
+    "-no-processing",
+    dest="no_processing",
+    action="store_true",
+    default=False,
+    help="don't copy frameworks and resources (for funcy dmg only)")
 ap.add_argument(
     "-dmg",
     nargs="?",
@@ -750,7 +798,8 @@ if config.translations_dir and config.translations_dir[0]:
 for p in config.add_resources:
     if verbose >= 3:
         print("Checking for \"{}\"...".format(p))
-    if not os.path.exists(p):
+    path = p.replace("__", "/")
+    if not os.path.exists(path):
         if verbose >= 1:
             sys.stderr.write(
                 "Error: Could not find additional resource file \"{}\"\n".format(p))
@@ -759,16 +808,6 @@ for p in config.add_resources:
 # ------------------------------------------------
 
 if len(config.fancy) == 1:
-    if verbose >= 3:
-        print("Fancy: Importing plistlib...")
-    try:
-        import plistlib
-    except ImportError:
-        if verbose >= 1:
-            sys.stderr.write(
-                "Error: Could not import plistlib which is required for fancy disk images.\n")
-        sys.exit(1)
-
     p = config.fancy[0]
     if verbose >= 3:
         print("Fancy: Loading \"{}\"...".format(p))
@@ -863,33 +902,20 @@ shutil.copytree(app_bundle, target, symlinks=True)
 applicationBundle = ApplicationBundleInfo(target)
 
 # ------------------------------------------------
-
-if verbose >= 2:
-    print("+ Deploying frameworks +")
-
-try:
-    deploymentInfo = deployFrameworksForAppBundle(
-        applicationBundle, config.strip, verbose, config.sys_lib_dir[0], config.built_lib_dir[0])
-    if deploymentInfo.qtPath is None:
-        deploymentInfo.qtPath = os.getenv("QTDIR", None)
-        if deploymentInfo.qtPath is None:
-            if verbose >= 1:
-                sys.stderr.write(
-                    "Warning: Could not detect Qt's path, skipping plugin deployment!\n")
-            config.plugins = False
-except RuntimeError as e:
-    if verbose >= 1:
-        sys.stderr.write("Error: {}\n".format(str(e)))
-    sys.exit(1)
-
-# ------------------------------------------------
-
-if config.plugins:
+if not config.no_processing:
     if verbose >= 2:
-        print("+ Deploying plugins +")
+        print("+ Deploying frameworks +")
 
     try:
-        deployPlugins(applicationBundle, deploymentInfo, config.strip, verbose, config.sys_lib_dir[0], config.built_lib_dir[0])
+        deploymentInfo = deployFrameworksForAppBundle(
+            applicationBundle, config.strip, verbose, config.sys_lib_dir[0], config.built_lib_dir[0])
+        if deploymentInfo.qtPath is None:
+            deploymentInfo.qtPath = os.getenv("QTDIR", None)
+            if deploymentInfo.qtPath is None:
+                if verbose >= 1:
+                    sys.stderr.write(
+                        "Warning: Could not detect Qt's path, skipping plugin deployment!\n")
+                config.plugins = False
     except RuntimeError as e:
         if verbose >= 1:
             sys.stderr.write("Error: {}\n".format(str(e)))
@@ -897,56 +923,81 @@ if config.plugins:
 
 # ------------------------------------------------
 
-if len(config.add_qt_tr) == 0:
-    add_qt_tr = []
-else:
-    if translations_dir is not None:
-        qt_tr_dir = translations_dir
-    else:
-        if deploymentInfo.qtPath is not None:
-            qt_tr_dir = os.path.join(deploymentInfo.qtPath, "translations")
-        else:
-            sys.stderr.write("Error: Could not find Qt translation path\n")
-            sys.exit(1)
-    add_qt_tr = ["btcu_{}.qm".format(lng)
-                 for lng in config.add_qt_tr[0].split(",")]
-    for lng_file in add_qt_tr:
-        p = os.path.join(qt_tr_dir, lng_file)
-        if verbose >= 3:
-            print("Checking for \"{}\"...".format(p))
-        if not os.path.exists(p):
+if not config.no_processing:
+    if config.plugins:
+        if verbose >= 2:
+            print("+ Deploying plugins +")
+
+        try:
+            deployPlugins(applicationBundle, deploymentInfo, config.strip, verbose, config.sys_lib_dir[0], config.built_lib_dir[0])
+        except RuntimeError as e:
             if verbose >= 1:
-                sys.stderr.write(
-                    "Error: Could not find Qt translation file \"{}\"\n".format(lng_file))
+                sys.stderr.write("Error: {}\n".format(str(e)))
+            sys.exit(1)
+
+# ------------------------------------------------
+if not config.no_processing:
+    if len(config.add_qt_tr) == 0:
+        add_qt_tr = []
+    else:
+        if translations_dir is not None:
+            qt_tr_dir = translations_dir
+        else:
+            if deploymentInfo.qtPath is not None:
+                qt_tr_dir = os.path.join(deploymentInfo.qtPath, "translations")
+            else:
+                sys.stderr.write("Error: Could not find Qt translation path\n")
                 sys.exit(1)
+        add_qt_tr = ["btcu_{}.qm".format(lng)
+                    for lng in config.add_qt_tr[0].split(",")]
+        for lng_file in add_qt_tr:
+            p = os.path.join(qt_tr_dir, lng_file)
+            if verbose >= 3:
+                print("Checking for \"{}\"...".format(p))
+            if not os.path.exists(p):
+                if verbose >= 1:
+                    sys.stderr.write(
+                        "Error: Could not find Qt translation file \"{}\"\n".format(lng_file))
+                    sys.exit(1)
+
+# ------------------------------------------------
+if not config.no_processing:
+    if verbose >= 2:
+        print("+ Installing qt.conf +")
+
+    with open(os.path.join(applicationBundle.resourcesPath, "qt.conf"), "wb") as f:
+        f.write(qt_conf.encode())
 
 # ------------------------------------------------
 
-if verbose >= 2:
-    print("+ Installing qt.conf +")
+if not config.no_processing:
+    if len(add_qt_tr) > 0 and verbose >= 2:
+        print("+ Adding Qt translations +")
 
-with open(os.path.join(applicationBundle.resourcesPath, "qt.conf"), "wb") as f:
-    f.write(qt_conf.encode())
+    for lng_file in add_qt_tr:
+        if verbose >= 3:
+            print(
+                os.path.join(
+                    qt_tr_dir,
+                    lng_file),
+                "->",
+                os.path.join(
+                    applicationBundle.resourcesPath,
+                    lng_file))
+        shutil.copy2(
+            os.path.join(
+                qt_tr_dir, lng_file), os.path.join(
+                applicationBundle.resourcesPath, lng_file))
 
 # ------------------------------------------------
 
-if len(add_qt_tr) > 0 and verbose >= 2:
-    print("+ Adding Qt translations +")
-
-for lng_file in add_qt_tr:
-    if verbose >= 3:
-        print(
-            os.path.join(
-                qt_tr_dir,
-                lng_file),
-            "->",
-            os.path.join(
-                applicationBundle.resourcesPath,
-                lng_file))
-    shutil.copy2(
-        os.path.join(
-            qt_tr_dir, lng_file), os.path.join(
-            applicationBundle.resourcesPath, lng_file))
+if config.sign and config.codesignargs is None:
+    print("You must set the -codesignargs variable. Skipping signing.")
+elif config.sign:
+    if verbose >= 1:
+        print("Code-signing app bundle {}".format(target))
+    subprocess.check_call(
+        "codesign --force --verbose --deep {} {}".format(config.codesignargs, target), shell=True)
 
 # ------------------------------------------------
 
@@ -954,23 +1005,16 @@ if len(config.add_resources) > 0 and verbose >= 2:
     print("+ Adding additional resources +")
 
 for p in config.add_resources:
-    t = os.path.join(applicationBundle.resourcesPath, os.path.basename(p))
+    basepath = os.path.basename(p)
+    basepath = basepath.replace("__", "/")
+    p = p.replace("__", "/")
+    t = os.path.join(applicationBundle.resourcesPath, basepath)
     if verbose >= 3:
         print(p, "->", t)
     if os.path.isdir(p):
         shutil.copytree(p, t, symlinks=True)
     else:
         shutil.copy2(p, t)
-
-# ------------------------------------------------
-
-if config.sign and 'CODESIGNARGS' not in os.environ:
-    print("You must set the CODESIGNARGS environment variable. Skipping signing.")
-elif config.sign:
-    if verbose >= 1:
-        print("Code-signing app bundle {}".format(target))
-    subprocess.check_call(
-        "codesign --force {} {}".format(os.environ['CODESIGNARGS'], target), shell=True)
 
 # ------------------------------------------------
 

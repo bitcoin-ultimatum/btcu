@@ -59,7 +59,7 @@
 
 namespace mie {
 
-#if defined(_WIN64) || defined(__x86_64__)
+#if defined(_WIN64) || defined(_M_X64) || defined(__x86_64__) || (__arm64__) || (__aarch64__)
 	typedef uint64_t Unit;
 	#define MIE_USE_UNIT64
 #else

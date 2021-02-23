@@ -41,6 +41,10 @@ Some dependencies are not needed in all configurations. The following are some f
 * Berkeley DB is not needed with `-DENABLE_WALLET=OFF`.
 * Qt is not needed with `-DENABLE_GUI=OFF`.
 * ZeroMQ is not needed with the `-DENABLE_ZMQ=OFF`.
+For all available options please run a command:
+```bash
+    cmake -LAH ..
+```
 
 #### Other
 * librsvg is only needed if you need to run `make osx-dmg` on

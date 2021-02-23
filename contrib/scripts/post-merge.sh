@@ -1,10 +1,10 @@
 #!/bin/bash
 # Post merge script for repository name words replacements
-# Example (orion into btcu repo):
+# Example (merging orion into btcu repo):
 # -call git add remote orion https://github.com/bitcoin-ultimatum/orion.git
 # -call ./contrib/scripts/pre-merge.sh
 # -call git merge orion/master
-# -call ./contrib/scripts/post-merge.sh btcu orion
+# -call ./contrib/scripts/post-merge.sh orion btcu
 
 sed -i '' 's/'"${1}"'/'"${2}"'/' README.md
 sed -i '' 's/'"${1}"'/'"${2}"'/' install_ubuntu.sh

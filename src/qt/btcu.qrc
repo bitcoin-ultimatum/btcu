@@ -326,7 +326,7 @@
         <file alias="ic-check-leasing-off">btcu/res/img/ic-check-leasing-off.svg</file>
         <file alias="ic-check-leasing-enabled">btcu/res/img/ic-check-leasing-enabled.svg</file>
         <file alias="img-empty">btcu/res/img/img-empty.svg</file>
-        <file alias="Dashboard">btcu/res/img/Dashboard.svg</file>
+        <file alias="bg-dashboard">btcu/res/img/bg-dashboard.svg</file>
         <file alias="ic-update-red">btcu/res/img/ic-update-red.svg</file>
         <file alias="ic-copy-red">btcu/res/img/ic-copy-red.svg</file>
         <file alias="ic-tokens">btcu/res/img/ic-tokens.svg</file>
