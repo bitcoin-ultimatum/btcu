@@ -3,8 +3,9 @@
 # Example (merging orion into btcu repo):
 # -call git add remote orion https://github.com/bitcoin-ultimatum/orion.git
 # -call ./contrib/scripts/pre-merge.sh
-# -call git merge orion/master
+# -call git merge orion/master --no-commit
 # -call ./contrib/scripts/post-merge.sh orion btcu
+# -call git push
 
 sed -i '' 's/'"${1}"'/'"${2}"'/' README.md
 sed -i '' 's/'"${1}"'/'"${2}"'/' install_ubuntu.sh
