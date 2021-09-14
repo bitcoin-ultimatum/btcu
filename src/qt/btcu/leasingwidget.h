@@ -70,7 +70,7 @@ private Q_SLOTS:
     void onAddressCopyClicked();
     void onAddressEditClicked();
     void onTxArrived(const QString& hash, const bool& isLeasing, const bool& isCSAnyType, const bool& isLAnyType);
-    void onContactsClicked(bool ownerAdd);
+    void onOwnerClicked();
     void onContactsClicked();
     void clearAll();
     void onLabelClicked();
@@ -81,9 +81,17 @@ private Q_SLOTS:
     void onpbnMenuClicked();
     void onNewLeasingClicked();
     void onMoreInformationClicked();
+    void handleTransactionClicked(const QModelIndex &index);
+    void onSortTypeChanged(const QString& value);
+    void onBoxSortTypeClicked();
+    void BoxSortTypeClick(const QModelIndex &index);
+    void onResetForm();
 
 private:
     std::unique_ptr<Ui::LeasingWidget> ui;
+    FurAbstractListItemDelegate* txViewDelegate;
+    TxViewHolder* txHolder;
+    TransactionFilterProxy* filter;
     FurAbstractListItemDelegate *leasing = nullptr;
     FurAbstractListItemDelegate *addressLeasing = nullptr;
     TransactionTableModel* txModel = nullptr;
@@ -91,8 +99,10 @@ private:
     AddressTableModel* addressTableModel = nullptr;
     AddressFilterProxyModel *addressesFilter = nullptr;
     std::unique_ptr<LeasingModel> leasingModel;
-    std::unique_ptr<LeasingHolder> txHolder;
     CoinControlDialog *coinControlDialog = nullptr;
+    QAction *btnBoxSortType = nullptr;
+    QWidget * widgetBoxSortType = nullptr;
+    QListView *listViewBoxSortType = nullptr;
     QAction *btnOwnerContact = nullptr;
     QAction *btnUpOwnerContact = nullptr;
     std::unique_ptr<QSpacerItem> spacerDiv;
@@ -101,24 +111,24 @@ private:
     bool isLeasingAddressListVisible = false;
 
     ContactsDropdown *menuContacts = nullptr;
+    ContactsDropdown *menuOwner = nullptr;
     TooltipMenu* menu = nullptr;
     TooltipMenu* menuAddresses = nullptr;
     SendMultiRow* sendMultiRow;
     bool isShowingDialog = false;
     bool isChainSync = false;
 
-    bool isContactOwnerSelected;
     int64_t lastRefreshTime = 0;
     std::atomic<bool> isLoading;
-   SendCoinsRecipient recipient;
+    SendCoinsRecipient recipient;
 
     // Cached index
     QModelIndex index;
     QModelIndex addressIndex;
 
     int nDisplayUnit;
-   QSpacerItem* SpacerHistory = nullptr;
-   QSpacerItem* SpacerTop = nullptr;
+    QSpacerItem* SpacerHistory = nullptr;
+    QSpacerItem* SpacerTop = nullptr;
     // temp
       bool bShowHistory = false;
       void showHistory();

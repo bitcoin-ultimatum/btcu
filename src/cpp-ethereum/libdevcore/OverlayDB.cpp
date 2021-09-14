@@ -1,20 +1,6 @@
-/*
-    This file is part of cpp-ethereum.
-
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2014-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 #include <thread>
 #include <libdevcore/db.h>
 #include <libdevcore/Common.h>
@@ -81,15 +67,11 @@ void OverlayDB::commit()
             {
                 if (i == 9)
                 {
-#ifndef WIN32
                     cwarn << "Fail writing to state database. Bombing out.";
-#endif
                     exit(-1);
                 }
-#ifndef WIN32
                 cwarn << "Error writing to state database: " << boost::diagnostic_information(ex);
                 cwarn << "Sleeping for" << (i + 1) << "seconds, then retrying.";
-#endif
                 std::this_thread::sleep_for(std::chrono::seconds(i + 1));
             }
         }
@@ -112,10 +94,8 @@ bytes OverlayDB::lookupAux(h256 const& _h) const
     bytes b = _h.asBytes();
     b.push_back(255);   // for aux
     std::string const v = m_db->lookup(toSlice(b));
-#ifndef WIN32
     if (v.empty())
         cwarn << "Aux not found: " << _h;
-#endif
 
     return asBytes(v);
 }
@@ -146,7 +126,6 @@ bool OverlayDB::exists(h256 const& _h) const
 
 void OverlayDB::kill(h256 const& _h)
 {
-#if ETH_PARANOIA || 1
     if (!StateCacheDB::kill(_h))
     {
         if (m_db)
@@ -155,19 +134,14 @@ void OverlayDB::kill(h256 const& _h)
             {
                 // No point node ref decreasing for EmptyTrie since we never bother incrementing it
                 // in the first place for empty storage tries.
-#ifndef WIN32
                 if (_h != EmptyTrie)
                     cnote << "Decreasing DB node ref count below zero with no DB node. Probably "
                              "have a corrupt Trie."
                           << _h;
-#endif
                 // TODO: for 1.1: ref-counted triedb.
             }
         }
     }
-#else
-    StateCacheDB::kill(_h);
-#endif
 }
 
 }

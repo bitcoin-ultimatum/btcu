@@ -22,7 +22,7 @@ set(COPYRIGHT_YEAR 2021)
 
 option(CLIENT_VERSION_IS_RELEASE "Build a release version" OFF)
 
-if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+if(${CMAKE_SYSTEM_NAME} MATCHES "Windows" OR BUILD_STATIC)
     # turning off static libs for correct config tests
     set(BUILD_STATIC_LIBS OFF)
 endif()
@@ -538,14 +538,29 @@ if("${ATTR_NAME}" STREQUAL "${PTHREAD_CREATE_JOINABLE}")
 	set(PTHREAD_CREATE_JOINABLE "${ATTR_NAME}")
 endif()
 
-# check is the minimal qt platform exists
-find_package(Qt5Core)
-if(Qt5Core_FOUND)
-	# check are qt plugins static
-	get_target_property(QT_CORE_TYPE Qt5::Core TYPE)
-	if(QT_CORE_TYPE MATCHES STATIC)
-		set(QT_STATICPLUGIN 1)
-	endif()
+if(${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND BUILD_STATIC)
+		find_package(
+				Qt5Core
+			PATHS 
+				${qt5_ROOT_DIR}
+				${qt5_ROOT_DIR}/lib
+				${qt5_ROOT_DIR}/lib/cmake
+			PATH_SUFFIXES
+				Qt5Core
+			NO_SYSTEM_ENVIRONMENT_PATH
+			NO_DEFAULT_PATH
+			NO_CMAKE_PATH
+			NO_CMAKE_ENVIRONMENT_PATH
+			NO_CMAKE_SYSTEM_PATH
+			NO_CMAKE_FIND_ROOT_PATH
+		)
+else()
+	find_package(Qt5Core NO_SYSTEM_ENVIRONMENT_PATH)
+endif()
+# you can remove check for the Darwin if you'd build 
+# a static QT version by yourself
+if(BUILD_STATIC AND Qt5Core_FOUND AND NOT ${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+	set(QT_STATICPLUGIN 1)
 endif()
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
@@ -633,7 +648,7 @@ if(_HAVE_STD_SYSTEM OR _HAVE_WSYSTEM)
 	set(HAVE_SYSTEM 1)
 endif()
 
-if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+if(${CMAKE_SYSTEM_NAME} MATCHES "Windows" OR BUILD_STATIC)
     set(BUILD_STATIC_LIBS ON)
 endif()
 

@@ -1,10 +1,10 @@
 # EVMC: Ethereum Client-VM Connector API.
-# Copyright 2018 The EVMC Authors.
-# Licensed under the Apache License, Version 2.0. See the LICENSE file.
+# Copyright 2018-2019 The EVMC Authors.
+# Licensed under the Apache License, Version 2.0.
 
 # This example shows how to use evmc::instructions library from evmc CMake package.
 
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.5)
 
 project(use_instructions_in_cmake)
 

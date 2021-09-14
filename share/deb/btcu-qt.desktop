@@ -1,0 +1,15 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Encoding=UTF-8
+Terminal=false
+Type=Application
+Name=btcu-qt
+Name[en_US]=btcu-qt
+Exec=btcu-qt
+Version=1.0
+GenericName=Wallet Launcher
+Comment=GUI for BTCU Wallet
+Icon=btcu-qt
+Icon[en_US]=btcu-qt
+Categories=Network;
+StartupNotify=true

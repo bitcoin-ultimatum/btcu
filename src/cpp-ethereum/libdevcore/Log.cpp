@@ -1,24 +1,6 @@
-/*
-    This file is part of cpp-ethereum.
-
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file Log.cpp
- * @author Gav Wood <i@gavwood.com>
- * @date 2014
- */
-
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2013-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 #include "Log.h"
 
 #ifdef __APPLE__
@@ -50,7 +32,8 @@ using log_sink = boost::log::sinks::synchronous_sink<T>;
 namespace dev
 {
 BOOST_LOG_ATTRIBUTE_KEYWORD(channel, "Channel", std::string)
-BOOST_LOG_ATTRIBUTE_KEYWORD(context, "Context", std::string)
+BOOST_LOG_ATTRIBUTE_KEYWORD(prefix, "Prefix", std::string)
+BOOST_LOG_ATTRIBUTE_KEYWORD(suffix, "Suffix", std::string)
 BOOST_LOG_ATTRIBUTE_KEYWORD(severity, "Severity", int)
 BOOST_LOG_ATTRIBUTE_KEYWORD(threadName, "ThreadName", std::string)
 BOOST_LOG_ATTRIBUTE_KEYWORD(timestamp, "TimeStamp", boost::posix_time::ptime)
@@ -98,12 +81,16 @@ void formatter(boost::log::record_view const& _rec, boost::log::formatting_ostre
 
     _strm << EthNavy << std::setw(4) << std::left << _rec[threadName] << EthReset " ";
     _strm << std::setw(6) << std::left << _rec[channel] << " ";
-    if (boost::log::expressions::has_attr(context)(_rec))
-        _strm << EthNavy << _rec[context] << EthReset " ";
+    if (boost::log::expressions::has_attr(prefix)(_rec))
+        _strm << EthNavy << _rec[prefix] << EthReset " ";
 
     _strm << _rec[boost::log::expressions::smessage];
+
+    if (boost::log::expressions::has_attr(suffix)(_rec))
+        _strm << " " EthNavy << _rec[suffix] << EthReset;
 }
 
+std::atomic<bool> g_vmTraceEnabled{false};
 }  // namespace
 
 std::string getThreadName()
@@ -135,6 +122,9 @@ void setupLogging(LoggingOptions const& _options)
 
     boost::shared_ptr<std::ostream> stream{&std::cout, boost::null_deleter{}};
     sink->locked_backend()->add_stream(stream);
+    // Enable auto-flushing after each log record written
+    sink->locked_backend()->auto_flush(true);
+
     sink->set_filter([_options](boost::log::attribute_value_set const& _set) {
         if (_set[severity] > _options.verbosity)
             return false;
@@ -158,6 +148,13 @@ void setupLogging(LoggingOptions const& _options)
         boost::log::make_exception_handler<std::exception>([](std::exception const& _ex) {
         std::cerr << "Exception from the logging library: " << _ex.what() << '\n';
     }));
+
+    g_vmTraceEnabled = _options.vmTrace;
+}
+
+bool isVmTraceEnabled()
+{
+    return g_vmTraceEnabled;
 }
 
 }  // namespace dev
@@ -188,6 +185,11 @@ void simpleDebugOut(std::string const& _s, char const*)
 }
 
 std::function<void(std::string const&, char const*)> g_logPost = simpleDebugOut;
+
+bool isVmTraceEnabled()
+{
+    return VerbosityTrace < g_logVerbosity;
+}
 
 }  // namespace
 

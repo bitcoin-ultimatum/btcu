@@ -45,7 +45,7 @@ void TxRow::updateStatus(bool isLightTheme, bool isHover, bool isSelected){
     else
         ui->lblDivisory->setStyleSheet("background-color:rgba(0, 0, 0, 0)"/*#40ffffff"*/);
    this->setGraphicsEffect(0);
-   ui->rowContainer->setGraphicsEffect(shadowEffect);
+   //ui->rowContainer->setGraphicsEffect(shadowEffect);
 }
 
 void TxRow::setDate(QDateTime date){

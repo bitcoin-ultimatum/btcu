@@ -281,7 +281,7 @@ BOOST_AUTO_TEST_CASE(multisig_Solver1)
 
 BOOST_AUTO_TEST_CASE(multisig_Sign)
 {
-    // Test SignSignature() (and therefore the version of Solver() that signs transactions)
+    // Test SignSignature() (and therefore the version of SignStep() that signs transactions)
     CBasicKeyStore keystore;
     CKey key[4];
     for (int i = 0; i < 4; i++)

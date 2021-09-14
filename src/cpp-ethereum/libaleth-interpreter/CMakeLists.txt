@@ -20,11 +20,6 @@ if(ALETH_INTERPRETER_SHARED)
     add_library(cpp-ethereum-interpreter-shared SHARED ${sources})
     target_link_libraries(cpp-ethereum-interpreter-shared PRIVATE devcore cpp-ethereum-buildinfo evmc::evmc evmc::instructions)
     set_target_properties(cpp-ethereum-interpreter-shared PROPERTIES OUTPUT_NAME cpp-ethereum-interpreter)
-    install(TARGETS cpp-ethereum-interpreter-shared EXPORT alethTargets
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    )
 endif()
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)

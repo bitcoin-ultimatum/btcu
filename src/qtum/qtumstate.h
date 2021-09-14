@@ -1,4 +1,5 @@
 #pragma once
+//#define QTUM_BUILD
 
 #include <libethereum/State.h>
 #include <libevm/ExtVMFace.h>

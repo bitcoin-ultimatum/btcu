@@ -2,72 +2,29 @@
     "multiOwnedRemoveOwnerByNonOwner" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
-            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
+            "filling-rpc-server" : "Geth-1.9.6-unstable-63b18027-20190920",
+            "filling-tool-version" : "retesteth-0.0.1+commit.0ae18aef.Linux.g++",
+            "lllcversion" : "Version: 0.5.12-develop.2019.9.13+commit.2d601a4f.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stWalletTest/multiOwnedRemoveOwnerByNonOwnerFiller.json",
-            "sourceHash" : "b6122c7a2b8c66d1ec97fa600aa4f648dafecc255a02655142d76a168c2df3eb"
+            "sourceHash" : "751dc598ef3e96f43b1ea3ee06da33777af512ab73a9ba0c00aed99c21b68527"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
-            "currentDifficulty" : "0x20000",
-            "currentGasLimit" : "0x989680",
+            "currentDifficulty" : "0x020000",
+            "currentGasLimit" : "0x05f5e100",
             "currentNumber" : "0x01",
             "currentTimestamp" : "0x03e8",
             "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
         },
         "post" : {
-            "Byzantium" : [
+            "Istanbul" : [
                 {
-                    "hash" : "0xfa675da31c7250893f5a2e2aa7d89c0c3ad18b03d237c5c339ff8a4bd3c278ef",
                     "indexes" : {
                         "data" : 0,
                         "gas" : 0,
                         "value" : 0
                     },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "Constantinople" : [
-                {
-                    "hash" : "0xfa675da31c7250893f5a2e2aa7d89c0c3ad18b03d237c5c339ff8a4bd3c278ef",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "ConstantinopleFix" : [
-                {
-                    "hash" : "0xfa675da31c7250893f5a2e2aa7d89c0c3ad18b03d237c5c339ff8a4bd3c278ef",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "EIP150" : [
-                {
-                    "hash" : "0x6e6f58709e4b66c0df01499e6f7433dc54d7a6140f8f0a92b517b0babd036756",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "Homestead" : [
-                {
-                    "hash" : "0x70910649f40918bc471890021c07e53f3be6113d5ecbadf909d5d7515b9ba3fa",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
+                    "hash" : "0xbb1a84bf7e9ad605fe165d69568c3f8de4648f47e43c4d95d84d9a77d5f72485",
                     "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
                 }
             ]
@@ -75,7 +32,7 @@
         "pre" : {
             "0x3fb1cd2cd96c6d5c0b5eb3322d807b34482481d4" : {
                 "balance" : "0x0de0b6b3a75ef08f",
-                "code" : "",
+                "code" : "0x",
                 "nonce" : "0x01",
                 "storage" : {
                 }
@@ -93,7 +50,7 @@
             },
             "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
                 "balance" : "0x0de0b6b3a75ef08f",
-                "code" : "",
+                "code" : "0x",
                 "nonce" : "0x01",
                 "storage" : {
                 }

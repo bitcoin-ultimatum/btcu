@@ -43,7 +43,7 @@ ReceiveWidget::ReceiveWidget(BTCUGUI* parent) :
    ui->right->setVisible(false);
     // Title
     ui->labelTitle->setText(tr("Receive"));
-    ui->labelSubtitle1->setText(tr("scan QR code or copy the address to recieve PIV"));
+    ui->labelSubtitle1->setText(tr("scan QR code or copy the address to recieve BTCU"));
     setCssTitleScreen(ui->labelTitle);
     setCssSubtitleScreen(ui->labelSubtitle1);
 

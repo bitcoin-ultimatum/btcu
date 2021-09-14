@@ -1,0 +1,8 @@
+#!/bin/bash
+
+OSVersion=$(grep -oP 'VERSION_ID="\K[\d.]+' /etc/os-release)
+if [ $OSVersion  = "20.04" ]
+then
+    wget http://security.ubuntu.com/ubuntu/pool/main/i/icu/libicu60_60.2-3ubuntu3.1_amd64.deb
+    sudo apt-get --assume-yes --force-yes -y install ./libicu60_60.2-3ubuntu3.1_amd64.deb
+fi

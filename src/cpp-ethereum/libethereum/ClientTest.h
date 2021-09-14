@@ -1,23 +1,7 @@
-/*
-    This file is part of cpp-ethereum.
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2015-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file ClientTest.h
- * @author Kholhlov Dimitry <dimitry@ethdev.com>
- * @date 2016
- */
 
 #pragma once
 
@@ -48,11 +32,21 @@ public:
     bool mineBlocks(unsigned _count) noexcept;
     void modifyTimestamp(int64_t _timestamp);
     void rewindToBlock(unsigned _number);
+    /// Import block data
+    /// @returns hash of the imported block
+    /// @throws ImportBlockFailed if import failed. If block is rejected as invalid, exception
+    /// contains nested exception with exact validation error.
     h256 importRawBlock(std::string const& _blockRLP);
     bool completeSync();
 
-protected:
-    unsigned const m_singleBlockMaxMiningTimeInSeconds = 5;
+private:
+    void onBadBlock(Exception& _ex);
+    void addNestedBadBlockException(bytes const& _blockBytes, Exception& io_ex);
+
+    unsigned const m_singleBlockMaxMiningTimeInSeconds = 60;
+    boost::exception_ptr m_lastImportError;
+    bytes m_lastBadBlock;
+    Mutex m_badBlockMutex;
 };
 
 ClientTest& asClientTest(Interface& _c);

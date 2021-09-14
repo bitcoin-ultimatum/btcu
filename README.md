@@ -1,4 +1,4 @@
-Bitcoin Ultimatu BTCU Core Main Concepts
+Bitcoin Ultimatum BTCU Core Main Concepts
 =====================================
 
 The concept of BTCU is similar to the concept of the second cryptocurrency by capitalization - Ethereum. 

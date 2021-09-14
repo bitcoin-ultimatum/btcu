@@ -1,19 +1,6 @@
-/*
-    This file is part of cpp-ethereum.
-
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2013-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
 #pragma once
 
@@ -116,13 +103,11 @@ struct Change
     Address address;  ///< Changed account address.
     u256 value;       ///< Change value, e.g. balance, storage and nonce.
     u256 key;         ///< Storage key. Last because used only in one case.
-    bytes oldCode;    ///< Code overwritten by CREATE, empty except in case of address collision.
 
     /// Helper constructor to make change log update more readable.
     Change(Kind _kind, Address const& _addr, u256 const& _value = 0):
             kind(_kind), address(_addr), value(_value)
     {
-        assert(_kind != Code); // For this the special constructor needs to be used.
     }
 
     /// Helper constructor especially for storage change log.
@@ -133,11 +118,6 @@ struct Change
     /// Helper constructor for nonce change log.
     Change(Address const& _addr, u256 const& _value):
             kind(Nonce), address(_addr), value(_value)
-    {}
-
-    /// Helper constructor especially for new code change log.
-    Change(Address const& _addr, bytes const& _oldCode):
-            kind(Code), address(_addr), oldCode(_oldCode)
     {}
 };
 
@@ -213,7 +193,9 @@ public:
 
     /// Execute @a _txCount transactions of a given block.
     /// This will change the state accordingly.
+#ifndef QTUM_BUILD
     void executeBlockTransactions(Block const& _block, unsigned _txCount, LastBlockHashesFace const& _lastHashes, SealEngineFace const& _sealEngine);
+#endif
 
     /// Check if the address is in use.
     bool addressInUse(Address const& _address) const;
@@ -272,9 +254,9 @@ public:
     void createContract(Address const& _address);
 
     /// Sets the code of the account. Must only be called during / after contract creation.
-    void setCode(Address const& _address, bytes&& _code);
+    void setCode(Address const& _address, bytes&& _code, u256 const& _version);
 
-    /// Delete an account (used for processing suicides).
+    /// Delete an account (used for processing selfdestructs).
     virtual void kill(Address _a);
 
     /// Get the storage of an account.
@@ -295,6 +277,10 @@ public:
     /// Get the byte-size of the code of an account.
     /// @returns code(_contract).size(), but utilizes CodeSizeHash.
     size_t codeSize(Address const& _contract) const;
+
+    /// Get contract account's version.
+    /// @returns 0 if no account exists at that address.
+    u256 version(Address const& _contract) const;
 
     /// Increament the account nonce.
     void incNonce(Address const& _id);
@@ -320,6 +306,9 @@ public:
     u256 const& accountStartNonce() const { return m_accountStartNonce; }
     u256 const& requireAccountStartNonce() const;
     void noteAccountStartNonce(u256 const& _actual);
+
+    /// Mark account as touched and keep it touched even in case of rollback
+    void unrevertableTouch(Address const& _addr);
 
     /// Create a savepoint in the state changelog.
     /// @return The savepoint index that can be used in rollback() function.
@@ -366,6 +355,8 @@ protected:
     mutable std::set<Address> m_nonExistingAccountsCache;
     /// Tracks all addresses touched so far.
     AddressHash m_touched;
+    /// Tracks addresses that were touched and should stay touched in case of rollback
+    AddressHash m_unrevertablyTouched;
 
     u256 m_accountStartNonce;
 
@@ -375,7 +366,9 @@ protected:
 
 std::ostream& operator<<(std::ostream& _out, State const& _s);
 
+#ifndef QTUM_BUILD
 State& createIntermediateState(State& o_s, Block const& _block, unsigned _txIndex, BlockChain const& _bc);
+#endif
 
 template <class DB>
 AddressHash commit(AccountMap const& _cache, SecureTrieDB<Address, DB>& _state);

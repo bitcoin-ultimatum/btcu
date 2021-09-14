@@ -229,7 +229,7 @@ bool IsInitialBlockDownload();
 /** Format a string that describes several potential problems detected by the core */
 std::string GetWarnings(std::string strFor);
 /** Retrieve a transaction (from memory pool, or from disk, if possible) */
-bool GetTransaction(const uint256& hash, CTransaction& tx, uint256& hashBlock, bool fAllowSlow = false, CBlockIndex* blockIndex = nullptr);
+bool GetTransaction(const uint256& hash, CTransaction& tx, uint256& hashBlock, bool fAllowSlow = false, CBlockIndex* blockIndex = nullptr, bool fRawTrx = false);
 /** Retrieve an output (from memory pool, or from disk, if possible) */
 bool GetOutput(const uint256& hash, unsigned int index, CValidationState& state, CTxOut& out);
 /** Find the best known block, and make it the tip of the block chain */
@@ -443,5 +443,10 @@ extern CSporkDB* pSporkDB;
 extern uint256 g_hashChainstate;
 
 #define MN_ALIAS_NAME "MN"
+
+
+//Validator API
+boost::optional<std::pair<CTxIn, CKey>> GetGenesisVinKey();
+boost::optional<std::pair<CTxIn, CKey>> GetRegisteredValidatorVinKey();
 
 #endif // BITCOIN_MAIN_H

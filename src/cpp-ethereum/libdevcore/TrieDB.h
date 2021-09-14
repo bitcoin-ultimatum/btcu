@@ -1,23 +1,7 @@
-/*
-    This file is part of cpp-ethereum.
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2013-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file TrieDB.h
- * @author Gav Wood <i@gavwood.com>
- * @date 2014
- */
 
 #pragma once
 
@@ -553,17 +537,8 @@ template <class DB> void GenericTrieDB<DB>::iterator::next(NibbleSlice _key)
             }
             if (!rlp.isList() || (rlp.itemCount() != 2 && rlp.itemCount() != 17))
             {
-#if ETH_PARANOIA
-                cwarn << "BIG FAT ERROR. STATE TRIE CORRUPTED!!!!!";
-                cwarn << b.rlp.size() << toHex(b.rlp);
-                cwarn << rlp;
-                auto c = rlp.itemCount();
-                cwarn << c;
-                BOOST_THROW_EXCEPTION(InvalidTrie());
-#else
                 m_that = nullptr;
                 return;
-#endif
             }
             if (rlp.itemCount() == 2)
             {
@@ -681,24 +656,15 @@ template <class DB> void GenericTrieDB<DB>::iterator::next()
         if (m_trail.back().child == 255)
         {
             // Entering. Look for first...
-            if (rlp.isNull() || rlp.isEmpty())
+            if (rlp.isEmpty())
             {
                 m_trail.pop_back();
                 continue;
             }
             if (!(rlp.isList() && (rlp.itemCount() == 2 || rlp.itemCount() == 17)))
             {
-#if ETH_PARANOIA
-                cwarn << "BIG FAT ERROR. STATE TRIE CORRUPTED!!!!!";
-                cwarn << b.rlp.size() << toHex(b.rlp);
-                cwarn << rlp;
-                auto c = rlp.itemCount();
-                cwarn << c;
-                BOOST_THROW_EXCEPTION(InvalidTrie());
-#else
                 m_that = nullptr;
                 return;
-#endif
             }
             if (rlp.itemCount() == 2)
             {

@@ -1,10 +1,11 @@
 // Aleth: Ethereum C++ client, tools and libraries.
-// Copyright 2019 Aleth Authors.
+// Copyright 2014-2019 Aleth Authors.
 // Licensed under the GNU General Public License, Version 3.
 
 #pragma once
 
 #include "Common.h"
+#include "ENR.h"
 #include "Network.h"
 #include "NodeTable.h"
 #include "Peer.h"
@@ -88,8 +89,8 @@ private:
 struct NodeInfo
 {
     NodeInfo() = default;
-    NodeInfo(NodeID const& _id, std::string const& _address, unsigned _port, std::string const& _version):
-        id(_id), address(_address), port(_port), version(_version) {}
+    NodeInfo(NodeID const& _id, std::string const& _address, unsigned _port, std::string const& _version, std::string const& _enr):
+        id(_id), address(_address), port(_port), version(_version), enr(_enr) {}
 
     std::string enode() const { return "enode://" + id.hex() + "@" + address + ":" + toString(port); }
 
@@ -97,6 +98,7 @@ struct NodeInfo
     std::string address;
     unsigned port;
     std::string version;
+    std::string enr;
 };
 
 /**
@@ -123,17 +125,11 @@ public:
 
     /// Alternative constructor that allows providing the node key directly
     /// without restoring the network.
-    Host(
-        std::string const& _clientVersion,
-        KeyPair const& _alias,
-        NetworkConfig const& _n = NetworkConfig{}
-    );
+    Host(std::string const& _clientVersion, std::pair<Secret, ENR> const& _secretAndENR,
+        NetworkConfig const& _n = NetworkConfig{});
 
     /// Will block on network process events.
     virtual ~Host();
-
-    /// Default hosts for current version of client.
-    static std::unordered_map<Public, std::string> pocHosts();
 
     /// Register a host capability; all new peer connections will see this capability.
     void registerCapability(std::shared_ptr<CapabilityFace> const& _cap);
@@ -173,7 +169,7 @@ public:
     void setPeerStretch(unsigned _n) { m_stretchPeers = _n; }
     
     /// Get peer information.
-    PeerSessionInfos peerSessionInfo() const;
+    PeerSessionInfos peerSessionInfos() const;
 
     /// Get number of peers connected.
     size_t peerCount() const;
@@ -209,14 +205,14 @@ public:
     bool haveNetwork() const { return m_run; }
     
     /// Validates and starts peer session, taking ownership of _io. Disconnects and returns false upon error.
-    void startPeerSession(Public const& _id, RLP const& _hello, std::unique_ptr<RLPXFrameCoder>&& _io, std::shared_ptr<RLPXSocket> const& _s);
+    void startPeerSession(Public const& _id, RLP const& _hello,
+        std::unique_ptr<RLPXFrameCoder>&& _io, std::shared_ptr<RLPXSocket> const& _s);
 
     /// Get session by id
-    std::shared_ptr<SessionFace> peerSession(NodeID const& _id) const
-    {
-        RecursiveGuard l(x_sessions);
-        return m_sessions.count(_id) ? m_sessions[_id].lock() : std::shared_ptr<SessionFace>();
-    }
+    std::shared_ptr<SessionFace> peerSession(NodeID const& _id) const;
+
+    /// Set a handshake failure reason for a peer
+    void onHandshakeFailed(NodeID const& _n, HandshakeFailureReason _r);
 
     /// Get our current node ID.
     NodeID id() const { return m_alias.pub(); }
@@ -224,21 +220,62 @@ public:
     /// Get the public TCP endpoint.
     bi::tcp::endpoint const& tcpPublic() const { return m_tcpPublic; }
 
-    /// Get the public endpoint information.
-    std::string enode() const { return "enode://" + id().hex() + "@" + (networkConfig().publicIPAddress.empty() ? m_tcpPublic.address().to_string() : networkConfig().publicIPAddress) + ":" + toString(m_tcpPublic.port()); }
+    /// Get the endpoint information.
+    std::string enode() const
+    {
+        std::string address;
+        if (!m_netConfig.publicIPAddress.empty())
+            address = m_netConfig.publicIPAddress;
+        else if (!m_tcpPublic.address().is_unspecified())
+            address = m_tcpPublic.address().to_string();
+        else
+            address = c_localhostIp;
+
+        std::string port;
+        if (m_tcpPublic.port())
+            port = toString(m_tcpPublic.port());
+        else
+            port = toString(m_netConfig.listenPort);
+
+        return "enode://" + id().hex() + "@" + address + ":" + port;
+    }
 
     /// Get the node information.
-    p2p::NodeInfo nodeInfo() const { return NodeInfo(id(), (networkConfig().publicIPAddress.empty() ? m_tcpPublic.address().to_string() : networkConfig().publicIPAddress), m_tcpPublic.port(), m_clientVersion); }
+    p2p::NodeInfo nodeInfo() const
+    { 
+        auto const e = enr();
+        return NodeInfo(id(),
+            (networkConfig().publicIPAddress.empty() ? m_tcpPublic.address().to_string() :
+                                                        networkConfig().publicIPAddress),
+            m_tcpPublic.port(), m_clientVersion, e.textEncoding());
+    }
+
+    /// Get Ethereum Node Record of the host
+    ENR enr() const
+    {
+        Guard l(x_nodeTable);
+        return m_nodeTable ? m_nodeTable->hostENR() : m_restoredENR;
+    }
 
     /// Apply function to each session
     void forEachPeer(
         std::string const& _capabilityName, std::function<bool(NodeID const&)> _f) const;
 
-    void scheduleExecution(int _delayMs, std::function<void()> _f);
+    /// Execute work on the network thread
+    void postWork(std::function<void()> _f) { post(m_ioContext, std::move(_f)); }
 
     std::shared_ptr<CapabilityHostFace> capabilityHost() const { return m_capabilityHost; }
 
 protected:
+    /*
+     * Used by the host to run a capability's background work loop
+     */
+    struct CapabilityRuntime
+    {
+        std::shared_ptr<CapabilityFace> capability;
+        std::shared_ptr<ba::steady_timer> backgroundWorkTimer;
+    };
+
     void onNodeTableEvent(NodeID const& _n, NodeTableEventType const& _e);
 
     /// Deserialise the data and populate the set of known peers.
@@ -251,8 +288,13 @@ private:
     
     bool havePeerSession(NodeID const& _id) { return !!peerSession(_id); }
 
-    /// Determines and sets m_tcpPublic to publicly advertised address.
-    void determinePublic();
+    bool isHandshaking(NodeID const& _id) const;
+
+    /// Determines publicly advertised address.
+    bi::tcp::endpoint determinePublic() const;
+
+    ENR updateENR(
+        ENR const& _restoredENR, bi::tcp::endpoint const& _tcpPublic, uint16_t const& _listenPort);
 
     void connect(std::shared_ptr<Peer> const& _p);
 
@@ -261,6 +303,9 @@ private:
     
     /// Ping the peers to update the latency information and disconnect peers which have timed out.
     void keepAlivePeers();
+
+    /// Log count of active peers and information about each peer
+    void logActivePeers();
 
     /// Disconnect peers which didn't respond to keepAlivePeers ping prior to c_keepAliveTimeOut.
     void disconnectLatePeers();
@@ -279,8 +324,8 @@ private:
     /// Shutdown network. Not thread-safe; to be called only by worker.
     virtual void doneWorking();
 
-    /// Get or create host identifier (KeyPair).
-    static KeyPair networkAlias(bytesConstRef _b);
+    /// Get or create host's Ethereum Node record.
+    std::pair<Secret, ENR> restoreENR(bytesConstRef _b, NetworkConfig const& _networkConfig);
 
     bool nodeTableHasNode(Public const& _id) const;
     Node nodeFromNodeTable(Public const& _id) const;
@@ -296,6 +341,17 @@ private:
         return dev::p2p::isAllowedEndpoint(m_netConfig.allowLocalDiscovery, _endpointToCheck);
     }
 
+    /// Start registered capabilities, typically done on network start
+    void startCapabilities();
+
+    /// Schedule's a capability's work loop on the network thread
+    void scheduleCapabilityWorkLoop(CapabilityFace& _cap, std::shared_ptr<ba::steady_timer> _timer);
+
+    /// Stop registered capabilities, typically done when the network is being shut down.
+    void stopCapabilities();
+
+    std::shared_ptr<Peer> peer(NodeID const& _n) const;
+
     bytes m_restoreNetwork;										///< Set by constructor and used to set Host key and restore network peers & nodes.
 
     std::atomic<bool> m_run{false};													///< Whether network is running.
@@ -309,18 +365,19 @@ private:
 
     std::atomic<int> m_listenPort{-1};												///< What port are we listening on. -1 means binding failed or acceptor hasn't been initialized.
 
-    io::io_service m_ioService;											///< IOService for network stuff.
+    io::io_context m_ioContext;
     bi::tcp::acceptor m_tcp4Acceptor;										///< Listening acceptor.
 
     /// Timer which, when network is running, calls run() every c_timerInterval ms.
-    io::deadline_timer m_timer;
-
-    static constexpr unsigned c_timerInterval = 100;							///< Interval which m_timer is run when network is connected.
+    ba::steady_timer m_runTimer;
 
     std::set<Peer*> m_pendingPeerConns;									/// Used only by connect(Peer&) to limit concurrently connecting to same node. See connect(shared_ptr<Peer>const&).
 
     bi::tcp::endpoint m_tcpPublic;											///< Our public listening endpoint.
-    KeyPair m_alias;															///< Alias for network communication. Network address is k*G. k is key material. TODO: Replace KeyPair.
+    /// Alias for network communication.
+    KeyPair m_alias;
+    /// Host's Ethereum Node Record restored from network.rlp
+    ENR const m_restoredENR;
     std::shared_ptr<NodeTable> m_nodeTable;									///< Node table (uses kademlia-like discovery).
     mutable std::mutex x_nodeTable;
     std::shared_ptr<NodeTable> nodeTable() const { Guard l(x_nodeTable); return m_nodeTable; }
@@ -337,18 +394,17 @@ private:
     mutable std::unordered_map<NodeID, std::weak_ptr<SessionFace>> m_sessions;
     mutable RecursiveMutex x_sessions;
 
-    std::list<std::weak_ptr<RLPXHandshake>> m_connecting;               ///< Pending connections.
-    Mutex x_connecting;													///< Mutex for m_connecting.
+    /// Pending connections. Completed handshakes are garbage-collected in run() (a handshake is
+    /// complete when there are no more shared_ptrs in handlers)
+    std::list<std::weak_ptr<RLPXHandshake>> m_connecting;
+    mutable Mutex x_connecting;													///< Mutex for m_connecting.
 
     unsigned m_idealPeerCount = 11;										///< Ideal number of peers to be connected to.
     unsigned m_stretchPeers = 7;										///< Accepted connection multiplier (max peers = ideal*stretch).
 
-    /// Each of the capabilities we support.
-    std::map<CapDesc, std::shared_ptr<CapabilityFace>> m_capabilities;
-
-    /// Deadline timers used for isolated network events. GC'd by run.
-    std::list<std::unique_ptr<io::deadline_timer>> m_timers;
-    Mutex x_timers;
+    /// Each of the capabilities we support. CapabilityRuntime is used to run a capability's
+    /// background work loop
+    std::map<CapDesc, CapabilityRuntime> m_capabilities;
 
     std::chrono::steady_clock::time_point m_lastPing;						///< Time we sent the last ping to all peers.
     bool m_accepting = false;
@@ -357,7 +413,13 @@ private:
 
     std::shared_ptr<CapabilityHostFace> m_capabilityHost;
 
-    Logger m_logger{createLogger(VerbosityDebug, "net")};
+    /// When the last "active peers" message was logged - used to throttle
+    /// logging to once every c_logActivePeersInterval seconds
+    std::chrono::steady_clock::time_point m_lastPeerLogMessage;
+
+    mutable Logger m_logger{createLogger(VerbosityDebug, "net")};
+    Logger m_detailsLogger{createLogger(VerbosityTrace, "net")};
+    Logger m_infoLogger{createLogger(VerbosityInfo, "net")};
 };
 
 }

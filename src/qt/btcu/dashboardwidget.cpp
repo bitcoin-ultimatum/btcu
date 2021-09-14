@@ -168,8 +168,8 @@ DashboardWidget::DashboardWidget(BTCUGUI* parent) :
 
     // Sync Warning
     ui->layoutWarning->setVisible(true);
-   ui->lblWarning->setVisible(false);
-   ui->imgWarning->setVisible(false);
+    ui->lblWarning->setVisible(true);
+    ui->imgWarning->setVisible(false);
     ui->lblWarning->setText(tr("Please wait until the wallet is fully synced to see your correct balance"));
     setCssProperty(ui->lblWarning, "text-warning");
     setCssProperty(ui->imgWarning, "ic-warning");

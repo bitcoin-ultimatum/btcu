@@ -2,61 +2,29 @@
     "createJS_NoCollision" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
-            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
+            "filling-rpc-server" : "Geth-1.9.6-unstable-63b18027-20190920",
+            "filling-tool-version" : "retesteth-0.0.1+commit.0ae18aef.Linux.g++",
+            "lllcversion" : "Version: 0.5.12-develop.2019.9.13+commit.2d601a4f.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stCallCreateCallCodeTest/createJS_NoCollisionFiller.json",
-            "sourceHash" : "65c80aa08a609a511eac10d15280e0374af95f08a2e4c4a82669041464edf4db"
+            "sourceHash" : "4302afdb6bb9eff60f96342225fe3734a1133a0b682daef857957f2a19680520"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
-            "currentDifficulty" : "0x20000",
+            "currentDifficulty" : "0x020000",
             "currentGasLimit" : "0x0f4240",
             "currentNumber" : "0x01",
             "currentTimestamp" : "0x03e8",
             "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
         },
         "post" : {
-            "Byzantium" : [
+            "Istanbul" : [
                 {
-                    "hash" : "0x8711293c80aa5a2ca90b9771b3ee453ec25a0c0799fa6aabcc09b427802880cc",
                     "indexes" : {
                         "data" : 0,
                         "gas" : 0,
                         "value" : 0
                     },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "Constantinople" : [
-                {
-                    "hash" : "0x6e2e7de661d1ed66ebc213c59023fa0a7dbe6fac5126c449bde871c363824001",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "ConstantinopleFix" : [
-                {
-                    "hash" : "0x8711293c80aa5a2ca90b9771b3ee453ec25a0c0799fa6aabcc09b427802880cc",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "Frontier" : [
-                {
-                    "hash" : "0xe0974185f0c4317e900da502eddb5d6e5c5accbb8b98f7cb9e223cb054423b60",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
+                    "hash" : "0xe8a69bad69b01fe4617b0a791acd459585d27988d571c59cae6bf37d65b4f97a",
                     "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
                 }
             ]
@@ -64,7 +32,7 @@
         "pre" : {
             "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
                 "balance" : "0x09184e72a000",
-                "code" : "",
+                "code" : "0x",
                 "nonce" : "0x00",
                 "storage" : {
                 }

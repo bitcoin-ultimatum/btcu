@@ -1,47 +1,31 @@
 # EVMC: Ethereum Client-VM Connector API.
-# Copyright 2018 The EVMC Authors.
-# Licensed under the Apache License, Version 2.0. See the LICENSE file.
+# Copyright 2018-2019 The EVMC Authors.
+# Licensed under the Apache License, Version 2.0.
 
-include(GNUInstallDirs)
+include(EVMC)
 
-find_package(CLI11)
+set(prefix ${PROJECT_NAME}/vmtester)
 
-add_executable(evmc-vmtester vmtester.hpp vmtester.cpp tests.cpp)
-set_target_properties(evmc-vmtester PROPERTIES RUNTIME_OUTPUT_DIRECTORY ..)
-target_link_libraries(evmc-vmtester PRIVATE evmc loader evmc-example-host CLI11::CLI11)
-if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-    target_link_libraries(evmc-vmtester
-        PRIVATE 
-            GTest::GTest 
-            )
-else()
-    target_link_libraries(evmc-vmtester
-        PRIVATE 
-            GTest::gtest 
-            )
-endif()
+evmc_add_vm_test(NAME ${prefix}/examplevm TARGET example-vm)
+evmc_add_vm_test(NAME ${prefix}/example_precompiles_vm TARGET example-precompiles-vm)
 
-install(TARGETS evmc-vmtester RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+add_test(NAME ${prefix}/help COMMAND evmc::evmc-vmtester --version --help)
+set_tests_properties(${prefix}/help PROPERTIES PASS_REGULAR_EXPRESSION "Usage:")
 
-add_test(NAME vmtester-help
-    COMMAND evmc-vmtester --help
-)
-set_tests_properties(vmtester-help PROPERTIES
-    PASS_REGULAR_EXPRESSION "Options:"
-)
+add_test(NAME ${prefix}/nonexistingvm COMMAND evmc::evmc-vmtester nonexistingvm)
+set_tests_properties(${prefix}/nonexistingvm PROPERTIES PASS_REGULAR_EXPRESSION "[Cc]annot open")
 
-add_test(NAME vmtester-nonexistingvm
-    COMMAND evmc-vmtester nonexistingvm
-)
-set_tests_properties(vmtester-nonexistingvm PROPERTIES
-    WILL_FAIL TRUE
-    FAIL_REGULAR_EXPRESSION "no such file"
-)
+add_test(NAME ${prefix}/noarg COMMAND evmc::evmc-vmtester)
+set_tests_properties(${prefix}/noarg PROPERTIES PASS_REGULAR_EXPRESSION "is required")
 
-add_test(NAME vmtester-novm
-    COMMAND evmc-vmtester
-)
-set_tests_properties(vmtester-novm PROPERTIES
-    WILL_FAIL TRUE
-    FAIL_REGULAR_EXPRESSION "required but missing"
-)
+add_test(NAME ${prefix}/too-many-args COMMAND evmc::evmc-vmtester a b)
+set_tests_properties(${prefix}/too-many-args PROPERTIES PASS_REGULAR_EXPRESSION "Unexpected")
+
+add_test(NAME ${prefix}/version COMMAND evmc::evmc-vmtester --version)
+set_tests_properties(${prefix}/version PROPERTIES PASS_REGULAR_EXPRESSION ${PROJECT_VERSION})
+
+add_test(NAME ${prefix}/unknown-option COMMAND evmc::evmc-vmtester --verbose)
+set_tests_properties(${prefix}/unknown-option PROPERTIES PASS_REGULAR_EXPRESSION "Unknown")
+
+add_test(NAME ${prefix}/option-long-prefix COMMAND evmc::evmc-vmtester ---)
+set_tests_properties(${prefix}/option-long-prefix PROPERTIES PASS_REGULAR_EXPRESSION "Unknown")

@@ -1,23 +1,7 @@
-/*
-	This file is part of cpp-ethereum.
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2013-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
-	cpp-ethereum is free software: you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation, either version 3 of the License, or
-	(at your option) any later version.
-
-	cpp-ethereum is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file Common.cpp
- * @author Gav Wood <i@gavwood.com>
- * @date 2014
- */
 
 #include "Common.h"
 #include <libdevcore/Base64.h>
@@ -39,11 +23,11 @@ namespace eth
 
 const unsigned c_protocolVersion = 63;
 #if ETH_FATDB
-const unsigned c_minorProtocolVersion = 3;
+const unsigned c_databaseMinorVersion = 4;
 const unsigned c_databaseBaseVersion = 9;
 const unsigned c_databaseVersionModifier = 1;
 #else
-const unsigned c_minorProtocolVersion = 2;
+const unsigned c_databaseMinorVersion = 3;
 const unsigned c_databaseBaseVersion = 9;
 const unsigned c_databaseVersionModifier = 0;
 #endif
@@ -135,9 +119,7 @@ static void badBlockInfo(BlockHeader const& _bi, string const& _err)
 	ss << c_border + ("                     Bad Block #" + string(max<int>(0, 8 - bin.size()), '0') + bin + "." + _bi.hash().abridged() + "                    ") + c_border << "\n";
 	ss << c_space << "\n";
 	ss << c_line;
-#ifndef WIN32
-    cwarn << "\n" + ss.str();
-#endif
+	cwarn << "\n" + ss.str();
 }
 
 void badBlock(bytesConstRef _block, string const& _err)

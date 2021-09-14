@@ -2,104 +2,47 @@
     "create2collisionCode" : {
         "_info" : {
             "comment" : "create2 generates an account that already exists and has not empty code",
-            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
-            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
+            "filling-rpc-server" : "Geth-1.9.6-unstable-63b18027-20190920",
+            "filling-tool-version" : "retesteth-0.0.1+commit.0ae18aef.Linux.g++",
+            "lllcversion" : "Version: 0.5.12-develop.2019.9.13+commit.2d601a4f.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stCreate2/create2collisionCodeFiller.json",
-            "sourceHash" : "ac97b22869a175a152445b7ef81ff533ce1cae02290edc229331b4648eacb352"
+            "sourceHash" : "652b1604d69fc15be2bd72641e5ca4e71794ad34ac0d6bab20e1398bf927ee67"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
-            "currentDifficulty" : "0x20000",
+            "currentDifficulty" : "0x020000",
             "currentGasLimit" : "0x0f4240",
             "currentNumber" : "0x01",
             "currentTimestamp" : "0x03e8",
             "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
         },
         "post" : {
-            "Byzantium" : [
+            "Istanbul" : [
                 {
-                    "hash" : "0x0fd160ce4d4b77a18350c3de0121cee9a6b1c1ac25e9789840f12fc723159054",
                     "indexes" : {
                         "data" : 0,
                         "gas" : 0,
                         "value" : 0
                     },
+                    "hash" : "0xe4b20c46bd87dd29dc60410cab99f6808b244cd9c19a91c11bb97d20bd05ca04",
                     "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
                 },
                 {
-                    "hash" : "0x0fd160ce4d4b77a18350c3de0121cee9a6b1c1ac25e9789840f12fc723159054",
                     "indexes" : {
                         "data" : 1,
                         "gas" : 0,
                         "value" : 0
                     },
+                    "hash" : "0xc66a37a84d9bcc1c91e4cb4a6ca4e1fdda9cd453c34406168ecf80a02eb73f49",
                     "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
                 },
                 {
-                    "hash" : "0x0fd160ce4d4b77a18350c3de0121cee9a6b1c1ac25e9789840f12fc723159054",
                     "indexes" : {
                         "data" : 2,
                         "gas" : 0,
                         "value" : 0
                     },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "Constantinople" : [
-                {
-                    "hash" : "0x72761ce2124ae982e88a5df41c464119c592355ad9c41c9c5b8435d69ab52103",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                },
-                {
-                    "hash" : "0x9feab867ac14d2dd0d61befa8486adf4c9b70c13d47453d66f382f0a20202da6",
-                    "indexes" : {
-                        "data" : 1,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                },
-                {
-                    "hash" : "0xee7e793da89342c335e3c6dba89d64ea1068cb9ee6d56276a0f351e079beba83",
-                    "indexes" : {
-                        "data" : 2,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "ConstantinopleFix" : [
-                {
-                    "hash" : "0x72761ce2124ae982e88a5df41c464119c592355ad9c41c9c5b8435d69ab52103",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                },
-                {
-                    "hash" : "0x9feab867ac14d2dd0d61befa8486adf4c9b70c13d47453d66f382f0a20202da6",
-                    "indexes" : {
-                        "data" : 1,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                },
-                {
-                    "hash" : "0xee7e793da89342c335e3c6dba89d64ea1068cb9ee6d56276a0f351e079beba83",
-                    "indexes" : {
-                        "data" : 2,
-                        "gas" : 0,
-                        "value" : 0
-                    },
+                    "hash" : "0x033358af7e3a77b7622cc02f44d1430e9acacb9f37b32237b02245752d432a99",
                     "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
                 }
             ]
@@ -107,7 +50,7 @@
         "pre" : {
             "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
                 "balance" : "0x0de0b6b3a7640000",
-                "code" : "",
+                "code" : "0x",
                 "nonce" : "0x00",
                 "storage" : {
                 }
@@ -136,9 +79,9 @@
         },
         "transaction" : {
             "data" : [
-                "0x6000600060006000f5",
-                "0x64600160015560005260006005601b6000f5",
-                "0x6d6460016001556000526005601bf36000526000600e60126000f5"
+                "0x6000600060006000f500",
+                "0x64600160015560005260006005601b6000f500",
+                "0x6d6460016001556000526005601bf36000526000600e60126000f500"
             ],
             "gasLimit" : [
                 "0x061a80"

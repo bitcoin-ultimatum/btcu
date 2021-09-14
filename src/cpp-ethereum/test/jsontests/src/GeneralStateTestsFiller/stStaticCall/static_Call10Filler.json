@@ -15,7 +15,7 @@
                     "gas" : -1,
                     "value" : -1
                 },
-                "network" : ["Byzantium", ">=ConstantinopleFix"],
+                "network" : [ ">=Istanbul"],
                 "result" : {
                     "bbbf5374fce5edbc8e2a8697c15331677e6ebf0b" : {
                         "storage" : {
@@ -26,29 +26,7 @@
 		    "1000000000000000000000000000000000000000" : {
 		        "storage" : {
 			    "0x00" : "0x01",
-			    "0x01" : "0x7ffffffffffdadb4"
-		        }
-		    }
-                }
-            },
-	    {
-                "indexes" : {
-                    "data" : 0,
-                    "gas" : -1,
-                    "value" : -1
-                },
-                "network" : ["Constantinople"],
-                "result" : {
-                    "bbbf5374fce5edbc8e2a8697c15331677e6ebf0b" : {
-                        "storage" : {
-                            "0x00" : "0x01",
-                            "0x01" : "0x0a"
-                        }
-                    },
-		    "1000000000000000000000000000000000000000" : {
-		        "storage" : {
-			    "0x00" : "0x01",
-			    "0x01" : "0x7ffffffffffe5674"
+			    "0x01" : "0x7fdffffffffe457d"
 		        }
 		    }
                 }
@@ -59,7 +37,7 @@
                     "gas" : -1,
                     "value" : -1
                 },
-                "network" : [">=Byzantium"],
+                "network" : [">=Istanbul"],
                 "result" : {
                     "bbbf5374fce5edbc8e2a8697c15331677e6ebf0b" : {
                         "storage" : {
@@ -70,7 +48,7 @@
 		    "1000000000000000000000000000000000000000" : {
 		        "storage" : {
 			    "0x00" : "0x01",
-			    "0x01" : "0x7ffffffffffef99b"
+			    "0x01" : "0x7fdffffffffefdbc"
 		        }
 		    }
                 }
@@ -116,10 +94,10 @@
         "transaction" : {
             "data" : [
                 "0x000000000000000000000000bbbf5374fce5edbc8e2a8697c15331677e6ebf0b",
-		"0x000000000000000000000000cbbf5374fce5edbc8e2a8697c15331677e6ebf0b"
+        		"0x000000000000000000000000cbbf5374fce5edbc8e2a8697c15331677e6ebf0b"
             ],
             "gasLimit" : [
-                "0x7ffffffffffffff0"
+                "9214364837600034817"
             ],
             "gasPrice" : "1",
             "nonce" : "",

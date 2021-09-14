@@ -10,6 +10,7 @@
 
 #include <boost/filesystem.hpp>
 #include <boost/thread.hpp>
+#include "contract.h"
 
 extern uint256 insecure_rand_seed;
 extern FastRandomContext insecure_rand_ctx;

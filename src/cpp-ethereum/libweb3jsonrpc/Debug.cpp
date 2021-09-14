@@ -1,11 +1,12 @@
+#include "Debug.h"
+#include "JsonHelper.h"
 #include <jsonrpccpp/common/exception.h>
 #include <libdevcore/CommonIO.h>
 #include <libdevcore/CommonJS.h>
 #include <libethcore/CommonJS.h>
 #include <libethereum/Client.h>
 #include <libethereum/Executive.h>
-#include "Debug.h"
-#include "JsonHelper.h"
+#include <libethereum/StandardTrace.h>
 using namespace std;
 using namespace dev;
 using namespace dev::rpc;
@@ -60,21 +61,22 @@ State Debug::stateAt(std::string const& _blockHashOrNumber, int _txIndex) const
         // the final state of block (after applying rewards)
         state = block.state();
     else
-        throw jsonrpc::JsonRpcException("Transaction index " + toString(_txIndex) + " out of range for block " + _blockHashOrNumber);
+        throw jsonrpc::JsonRpcException("Transaction index " + toString(_txIndex) + " out of range (" + toString(txCount) + ") for block " + _blockHashOrNumber);
 
     return state;
 }
 
 Json::Value Debug::traceTransaction(Executive& _e, Transaction const& _t, Json::Value const& _json)
 {
-    StandardTrace st;
+    Json::Value traceJson{Json::arrayValue};
+    StandardTrace st{traceJson};
     st.setShowMnemonics();
     st.setOptions(debugOptions(_json));
     _e.initialize(_t);
     if (!_e.execute())
         _e.go(st.onOp());
     _e.finalize();
-    return st.jsonValue();
+    return traceJson;
 }
 
 Json::Value Debug::traceBlock(Block const& _block, Json::Value const& _json)
@@ -88,8 +90,9 @@ Json::Value Debug::traceBlock(Block const& _block, Json::Value const& _json)
         Transaction t = _block.pending()[k];
 
         u256 const gasUsed = k ? _block.receipt(k - 1).cumulativeGasUsed() : 0;
-        EnvInfo envInfo(_block.info(), m_eth.blockChain().lastBlockHashes(), gasUsed);
-        Executive e(s, envInfo, *m_eth.blockChain().sealEngine());
+        auto const& bc = m_eth.blockChain();
+        EnvInfo envInfo(_block.info(), bc.lastBlockHashes(), gasUsed, bc.chainID());
+        Executive e(s, envInfo, *bc.sealEngine());
 
         eth::ExecutionResult er;
         e.setResultRecipient(er);
@@ -144,7 +147,7 @@ Json::Value Debug::debug_traceBlockByNumber(int _blockNumber, Json::Value const&
     return ret;
 }
 
-Json::Value Debug::debug_accountRangeAt(
+Json::Value Debug::debug_accountRange(
     string const& _blockHashOrNumber, int _txIndex, string const& _addressHash, int _maxResults)
 {
     Json::Value ret(Json::objectValue);
@@ -160,10 +163,10 @@ Json::Value Debug::debug_accountRangeAt(
 
         Json::Value addressList(Json::objectValue);
         for (auto const& record : addressMap.first)
-            addressList[toString(record.first)] = toString(record.second);
+            addressList[toHexPrefixed(record.first)] = toHexPrefixed(record.second);
 
         ret["addressMap"] = addressList;
-        ret["nextKey"] = toString(addressMap.second);
+        ret["nextKey"] = toHexPrefixed(addressMap.second);
     }
     catch (Exception const& _e)
     {

@@ -2,10 +2,11 @@
     "deleagateCallAfterValueTransfer" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
-            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
+            "filling-rpc-server" : "Geth-1.9.6-unstable-63b18027-20190920",
+            "filling-tool-version" : "retesteth-0.0.1+commit.0ae18aef.Linux.g++",
+            "lllcversion" : "Version: 0.5.12-develop.2019.9.13+commit.2d601a4f.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stDelegatecallTestHomestead/deleagateCallAfterValueTransferFiller.json",
-            "sourceHash" : "af09887b93fdb8d05cbfc8a9c00f5f4c99c7c631ff5939d26864ea8cebf43f9e"
+            "sourceHash" : "b37d274657a1f3e4c5dc2d2ceb33b32033591d1d37ed7251b1d4fe841d036e66"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -16,47 +17,14 @@
             "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
         },
         "post" : {
-            "Byzantium" : [
+            "Istanbul" : [
                 {
-                    "hash" : "0x34eee42d18251585d6f194c31dd0a32fce9ce11d401b461283fa59cd2e4a908f",
                     "indexes" : {
                         "data" : 0,
                         "gas" : 0,
                         "value" : 0
                     },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "Constantinople" : [
-                {
-                    "hash" : "0x94feaf12cc4144933e61cc046d3528689d6123a1cc96e47aaaff39907d87fbd2",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "ConstantinopleFix" : [
-                {
-                    "hash" : "0x34eee42d18251585d6f194c31dd0a32fce9ce11d401b461283fa59cd2e4a908f",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "Homestead" : [
-                {
-                    "hash" : "0xa1e359f8d476209f735120764824acf4f05313fa0763cb17b6fcbd828f54e4eb",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
+                    "hash" : "0xbd6aa558da05e359d09bc2ff461b38cc3b3677f391ad41ab8588cdca75be0f52",
                     "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
                 }
             ]
@@ -64,21 +32,21 @@
         "pre" : {
             "0x1000000000000000000000000000000000000000" : {
                 "balance" : "0x10c8e0",
-                "code" : "0x60016000526040600060406000731000000000000000000000000000000000000001620186a0f4",
+                "code" : "0x60016000526040600060406000731000000000000000000000000000000000000001620186a0f400",
                 "nonce" : "0x00",
                 "storage" : {
                 }
             },
             "0x1000000000000000000000000000000000000001" : {
                 "balance" : "0x00",
-                "code" : "0x3460005533600155600035600255",
+                "code" : "0x346000553360015560003560025500",
                 "nonce" : "0x00",
                 "storage" : {
                 }
             },
             "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
                 "balance" : "0x2386f26fc10000",
-                "code" : "",
+                "code" : "0x",
                 "nonce" : "0x00",
                 "storage" : {
                 }

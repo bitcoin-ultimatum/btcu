@@ -154,7 +154,7 @@ public:
     bool isLeasingNetworkelyEnabled() const;
     CAmount getMinLeasingAmount() const;
 
-    CAmount getBalance(const CCoinControl* coinControl = NULL) const;
+    CAmount getBalance(const CCoinControl* coinControl = NULL, bool fIncludeLeased = true) const;
     CAmount getUnconfirmedBalance() const;
     CAmount getImmatureBalance() const;
     CAmount getLockedBalance() const;
@@ -168,6 +168,9 @@ public:
 
     CAmount getDelegatedBalance() const;
     CAmount getColdStakedBalance() const;
+
+    CAmount getInLeasing();
+    CAmount getLeasingProfit();
 
     bool isColdStaking() const;
     bool isLeasing() const;
@@ -329,6 +332,8 @@ private:
     CAmount cachedWatchImmatureBalance;
     CAmount cachedDelegatedBalance;
     CAmount cachedColdStakedBalance;
+    CAmount cachedInLeasingBalance;
+    CAmount cachedLeasingProfitBalance;
 
     EncryptionStatus cachedEncryptionStatus;
     int cachedNumBlocks;
@@ -345,7 +350,7 @@ Q_SIGNALS:
     void balanceChanged(const CAmount& balance, const CAmount& unconfirmedBalance, const CAmount& immatureBalance,
                         const CAmount& zerocoinBalance, const CAmount& unconfirmedZerocoinBalance, const CAmount& immatureZerocoinBalance,
                         const CAmount& watchOnlyBalance, const CAmount& watchUnconfBalance, const CAmount& watchImmatureBalance,
-                        const CAmount& delegatedBalance, const CAmount& coldStakingBalance);
+                        const CAmount& delegatedBalance, const CAmount& coldStakingBalance, const CAmount& inLeasing, const CAmount& leasingProfit);
 
     // Encryption status of wallet changed
     void encryptionStatusChanged(int status);

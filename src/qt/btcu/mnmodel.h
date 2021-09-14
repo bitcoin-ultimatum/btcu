@@ -42,6 +42,13 @@ public:
     bool addMn(CMasternodeConfig::CMasternodeEntry* entry);
     void updateMNList();
 
+    QString getPubKey(QString MNname);
+    QString getIP(QString MNname);
+    QString getTxId(QString MNname);
+    QString getOutputIndex(QString MNname);
+    QString getStatus(QString MNname);
+    QString getPrivKey(QString MNname);
+    bool isCollateralAccepted(QString MNname);
 
     bool isMNsNetworkSynced();
     // Returns the MN activeState field.

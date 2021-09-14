@@ -1,23 +1,6 @@
-/*
-    This file is part of cpp-ethereum.
-
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file BlockChain.cpp
- * @author Gav Wood <i@gavwood.com>
- * @date 2014
- */
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2014-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
 #include "BlockChain.h"
 
@@ -34,6 +17,7 @@
 #include <libdevcore/TrieHash.h>
 #include <libethcore/BlockHeader.h>
 #include <libethcore/Exceptions.h>
+#include <libethereum/DatabasePaths.h>
 
 #include <boost/exception/errinfo_nested_exception.hpp>
 #include <boost/filesystem.hpp>
@@ -66,10 +50,8 @@ std::ostream& dev::eth::operator<<(std::ostream& _out, BlockChain const& _bc)
             }
             catch (...)
             {
-#ifndef WIN32
                 cwarn << "Invalid DB entry:" << toHex(key) << " -> "
                       << toHex(bytesConstRef(_value));
-#endif
             }
         }
         return true;
@@ -172,8 +154,7 @@ static const unsigned c_minCacheSize = 1024 * 1024 * 32;
 
 
 BlockChain::BlockChain(ChainParams const& _p, fs::path const& _dbPath, WithExisting _we, ProgressCallback const& _pc):
-    m_lastBlockHashes(new LastBlockHashes(*this)),
-    m_dbPath(_dbPath)
+    m_lastBlockHashes(new LastBlockHashes(*this))
 {
     init(_p);
     open(_dbPath, _we, _pc);
@@ -211,115 +192,127 @@ void BlockChain::init(ChainParams const& _p)
     genesis();
 }
 
-unsigned BlockChain::open(fs::path const& _path, WithExisting _we)
+bool BlockChain::open(fs::path const& _path, WithExisting _we)
 {
-    fs::path path = _path.empty() ? db::databasePath() : _path;
-    fs::path chainPath = path / fs::path(toHex(m_genesisHash.ref().cropped(0, 4)));
-    fs::path extrasPath = chainPath / fs::path(toString(c_databaseVersion));
-    unsigned lastMinor = c_minorProtocolVersion;
+    unsigned lastMinor = c_databaseMinorVersion;
+    bool rebuildNeeded = false;
 
     if (db::isDiskDatabase())
     {
-        fs::create_directories(extrasPath);
-        DEV_IGNORE_EXCEPTIONS(fs::permissions(extrasPath, fs::owner_all));
-
-        bytes status = contents(extrasPath / fs::path("minor"));
-        if (!status.empty())
-            DEV_IGNORE_EXCEPTIONS(lastMinor = (unsigned)RLP(status));
-        if (c_minorProtocolVersion != lastMinor)
-        {
-#ifndef WIN32
-            cnote << "Killing extras database (DB minor version:" << lastMinor
-                  << " != our miner version: " << c_minorProtocolVersion << ").";
-#endif
-            DEV_IGNORE_EXCEPTIONS(fs::remove_all(extrasPath / fs::path("details.old")));
-            fs::rename(extrasPath / fs::path("extras"), extrasPath / fs::path("extras.old"));
-            fs::remove_all(extrasPath / fs::path("state"));
-            writeFile(extrasPath / fs::path("minor"), rlp(c_minorProtocolVersion));
-            lastMinor = (unsigned)RLP(status);
-        }
+        if (!m_dbPaths || m_dbPaths->rootPath() != _path)
+            m_dbPaths = make_unique<DatabasePaths>(_path, m_genesisHash);
 
         if (_we == WithExisting::Kill)
         {
-#ifndef WIN32
-            cnote << "Killing blockchain & extras database (WithExisting::Kill).";
-#endif
-            fs::remove_all(chainPath / fs::path("blocks"));
-            fs::remove_all(extrasPath / fs::path("extras"));
+            LOG(m_loggerInfo)
+                << "Deleting chain databases. This will require a resync from genesis.";
+            fs::remove_all(m_dbPaths->blocksPath());
+            fs::remove_all(m_dbPaths->extrasPath());
+            fs::remove_all(m_dbPaths->extrasTemporaryPath());
+        }
+
+        bytes const minorVersionBytes = contents(m_dbPaths->extrasMinorVersionPath());
+        if (!minorVersionBytes.empty())
+        {
+            DEV_IGNORE_EXCEPTIONS(lastMinor = (unsigned)RLP(minorVersionBytes));
+            if (c_databaseMinorVersion != lastMinor)
+            {
+                rebuildNeeded = true;
+                LOG(m_loggerInfo) << "Database minor version change detected, the extras and state "
+                                     "databases will be rebuilt.";
+                LOG(m_loggerInfo) << "Version from " << m_dbPaths->extrasMinorVersionPath()
+                                  << " (" << lastMinor << ") != Aleth's version ("
+                                  << c_databaseMinorVersion << ")";
+            }
+        }
+        else if (fs::exists(m_dbPaths->extrasPath()))
+        {
+            LOG(m_loggerInfo) << "Database minor version file not found ("
+                              << m_dbPaths->extrasMinorVersionPath()
+                              << ") but extras database exists (" << m_dbPaths->extrasPath()
+                              << "), assuming extras database needs to be upgraded.";
+            rebuildNeeded = true;
+        }
+        else
+        {
+            // First launch with new database
+            LOG(m_loggerDetail) << "Creating database minor version file: "
+                                << m_dbPaths->extrasMinorVersionPath()
+                                << " (minor version: " << c_databaseMinorVersion << ")";
+            writeFile(m_dbPaths->extrasMinorVersionPath(), rlp(c_databaseMinorVersion));
         }
     }
 
     try
     {
-        m_blocksDB = db::DBFactory::create(chainPath / fs::path("blocks"));
-        m_extrasDB = db::DBFactory::create(extrasPath / fs::path("extras"));
+        m_blocksDB = db::DBFactory::create(m_dbPaths->blocksPath());
+        m_extrasDB = db::DBFactory::create(m_dbPaths->extrasPath());
     }
     catch (db::DatabaseError const& ex)
     {
-        // Check the exact reason of errror, in case of IOError we can display user-friendly message
-        if (*boost::get_error_info<db::errinfo_dbStatusCode>(ex) != db::DatabaseStatus::IOError)
-            throw;
-
+        // Determine which database open call failed
+        auto const dbPath =
+            !m_blocksDB.get() ? m_dbPaths->blocksPath() : m_dbPaths->extrasPath();
         if (db::isDiskDatabase())
         {
-            if (fs::space(chainPath / fs::path("blocks")).available < 1024)
+            LOG(m_loggerError) << "Error occurred when opening database: " << dbPath;
+            db::DatabaseStatus const dbStatus = *boost::get_error_info<db::errinfo_dbStatusCode>(ex);
+            if (fs::space(m_dbPaths->rootPath()).available < 1024)
             {
-#ifndef WIN32
-                cwarn << "Not enough available space found on hard drive. Please free some up and "
-                         "then re-run. Bailing.";
-#endif
+                LOG(m_loggerError)
+                    << "Not enough available space found on hard drive. Please free some up and "
+                       "re-run.";
                 BOOST_THROW_EXCEPTION(NotEnoughAvailableSpace());
             }
-            else
+            else if (dbStatus == db::DatabaseStatus::Corruption)
             {
-#ifndef WIN32
-                cwarn << "Database " << (chainPath / fs::path("blocks")) << "or "
-                      << (extrasPath / fs::path("extras"))
-                      << "already open. You appear to have another instance of ethereum running. "
-                         "Bailing.";
-#endif
+                LOG(m_loggerError)
+                    << "Database corruption detected. Please see the exception for corruption "
+                       "details. Exception: "
+                    << ex.what();
+                BOOST_THROW_EXCEPTION(DatabaseCorruption());
+            }
+            else if (dbStatus == db::DatabaseStatus::IOError)
+            {
+                LOG(m_loggerError) << "Database already open. You appear to have another instance "
+                                      "of Aleth running.";
                 BOOST_THROW_EXCEPTION(DatabaseAlreadyOpen());
             }
         }
-        else
-        {
-#ifndef WIN32
-            cwarn << "Unknown database error occurred during in-memory database creation";
-#endif
-            throw;
-        }
+
+        LOG(m_loggerError) << "Unknown error occurred when opening database. Exception details: "
+                           << ex.what();
+        throw;
     }
 
-    if (_we != WithExisting::Verify && !details(m_genesisHash))
+    if (_we != WithExisting::Verify && !rebuildNeeded && !details(m_genesisHash))
     {
-        BlockHeader gb(m_params.genesisBlock());
+        bytes const genesisBlockBytes = m_params.genesisBlock();
+        BlockHeader const genesisHeader{genesisBlockBytes};
         // Insert details of genesis block.
-        m_details[m_genesisHash] = BlockDetails(0, gb.difficulty(), h256(), {});
-        auto r = m_details[m_genesisHash].rlp();
-        m_extrasDB->insert(toSlice(m_genesisHash, ExtraDetails), (db::Slice)dev::ref(r));
-        assert(isKnown(gb.hash()));
+        m_details[m_genesisHash] = BlockDetails{0 /* number */, genesisHeader.difficulty(),
+            h256{} /* parent */, {} /* children */, genesisBlockBytes.size()};
+        auto const genesisDetailsRlp = m_details[m_genesisHash].rlp();
+        m_extrasDB->insert(
+            toSlice(m_genesisHash, ExtraDetails), (db::Slice)dev::ref(genesisDetailsRlp));
+        assert(isKnown(genesisHeader.hash()));
     }
-
-#if ETH_PARANOIA
-    checkConsistency();
-#endif
 
     // TODO: Implement ability to rebuild details map from DB.
     auto const l = m_extrasDB->lookup(db::Slice("best"));
     m_lastBlockHash = l.empty() ? m_genesisHash : h256(l, h256::FromBinary);
+    // We need to retrieve the block number from the blocks database rather than from the extras
+    // database because the extras database format may have changed
+    m_lastBlockNumber = info(m_lastBlockHash).number();
 
-    m_lastBlockNumber = number(m_lastBlockHash);
-#ifndef WIN32
-    ctrace << "Opened blockchain DB. Latest: " << currentHash()
-           << (lastMinor == c_minorProtocolVersion ? "(rebuild not needed)" :
-                                                     "*** REBUILD NEEDED ***");
-#endif
-    return lastMinor;
+    LOG(m_loggerInfo) << "Opened blockchain database. Latest block hash: " << currentHash()
+                      << (!rebuildNeeded ? "(rebuild not needed)" : "*** REBUILD NEEDED ***");
+    return rebuildNeeded;
 }
 
 void BlockChain::open(fs::path const& _path, WithExisting _we, ProgressCallback const& _pc)
 {
-    if (open(_path, _we) != c_minorProtocolVersion || _we == WithExisting::Verify)
+    if (open(_path, _we) || _we == WithExisting::Verify)
         rebuild(_path, _pc);
 }
 
@@ -327,14 +320,12 @@ void BlockChain::reopen(ChainParams const& _p, WithExisting _we, ProgressCallbac
 {
     close();
     init(_p);
-    open(m_dbPath, _we, _pc);
+    open(m_dbPaths->rootPath(), _we, _pc);
 }
 
 void BlockChain::close()
 {
-#ifndef WIN32
     ctrace << "Closing blockchain DB";
-#endif
     // Not thread safe...
     m_extrasDB.reset();
     m_blocksDB.reset();
@@ -355,37 +346,47 @@ void BlockChain::close()
     m_lastBlockHashes->clear();
 }
 
-void BlockChain::rebuild(fs::path const& _path, std::function<void(unsigned, unsigned)> const& _progress)
+void BlockChain::rebuild(
+    fs::path const& _path, std::function<void(unsigned, unsigned)> const& _progress)
 {
     if (!db::isDiskDatabase())
     {
-#ifndef WIN32
-        cwarn << "In-memory database detected, skipping rebuild (since there's no existing "
-                 "database to rebuild)";
-#endif
+        LOG(m_loggerWarn) << "In-memory database detected, skipping rebuild (since there's no "
+                             "existing database to rebuild)";
         return;
     }
 
-    fs::path path = _path.empty() ? db::databasePath() : _path;
-    fs::path chainPath = path / fs::path(toHex(m_genesisHash.ref().cropped(0, 4)));
-    fs::path extrasPath = chainPath / fs::path(toString(c_databaseVersion));
+    if (!m_dbPaths || m_dbPaths->rootPath() != _path)
+        m_dbPaths = make_unique<DatabasePaths>(_path, m_genesisHash);
 
-    unsigned originalNumber = m_lastBlockNumber;
+    unsigned const originalNumber = m_lastBlockNumber;
 
     ///////////////////////////////
-    // TODO
     // - KILL ALL STATE/CHAIN
     // - REINSERT ALL BLOCKS
     ///////////////////////////////
 
     // Keep extras DB around, but under a temp name
     m_extrasDB.reset();
-    fs::rename(extrasPath / fs::path("extras"), extrasPath / fs::path("extras.old"));
-    std::unique_ptr<db::DatabaseFace> oldExtrasDB(db::DBFactory::create(extrasPath / fs::path("extras.old")));
-    m_extrasDB = db::DBFactory::create(extrasPath / fs::path("extras"));
+    LOG(m_loggerInfo) << "Renaming extras path " << m_dbPaths->extrasPath() << " to "
+                      << m_dbPaths->extrasTemporaryPath();
+    if (fs::exists(m_dbPaths->extrasTemporaryPath()))
+    {
+        LOG(m_loggerError)
+            << "Temporary extras path " << m_dbPaths->extrasTemporaryPath()
+            << " already exists (this usually happens because an in-progress rebuild was "
+               "prematurely terminated).";
+        LOG(m_loggerError) << "Please re-run Aleth the --kill option to delete all databases. This "
+                              "will remove all chain data and require you to resync from genesis.";
+        BOOST_THROW_EXCEPTION(DatabaseExists());
+    }
+    fs::rename(m_dbPaths->extrasPath(), m_dbPaths->extrasTemporaryPath());
+    std::unique_ptr<db::DatabaseFace> oldExtrasDB{
+        db::DBFactory::create(m_dbPaths->extrasTemporaryPath())};
+    m_extrasDB = db::DBFactory::create(m_dbPaths->extrasPath());
 
     // Open a fresh state DB
-    Block s = genesisBlock(State::openDB(path.string(), m_genesisHash, WithExisting::Kill));
+    Block s = genesisBlock(State::openDB(m_dbPaths->rootPath(), m_genesisHash, WithExisting::Kill));
 
     // Clear all memos ready for replay.
     m_details.clear();
@@ -403,16 +404,27 @@ void BlockChain::rebuild(fs::path const& _path, std::function<void(unsigned, uns
     m_extrasDB->insert(toSlice(m_lastBlockHash, ExtraDetails),
         (db::Slice)dev::ref(m_details[m_lastBlockHash].rlp()));
 
+    // Manually insert the genesis block details so that they're available during import of the
+    // first block.
+    auto const genesisDetails = BlockDetails{0 /* block number */, s.info().difficulty(),
+        h256{} /* parent */, {} /* children */, m_params.genesisBlock().size()};
+    m_details[m_genesisHash] = genesisDetails;
+    auto const genesisDetailsRlp = genesisDetails.rlp();
+    m_extrasDB->insert(
+        toSlice(m_genesisHash, ExtraDetails), (db::Slice)dev::ref(genesisDetailsRlp));
+
+    LOG(m_loggerInfo) << "Rebuilding the extras and state databases by reimporting blocks 0 -> "
+                      << originalNumber << ", this will probably take a while";
     h256 lastHash = m_lastBlockHash;
     Timer t;
+    bool rebuildFailed = false;
+    string exceptionInfo;
     for (unsigned d = 1; d <= originalNumber; ++d)
     {
         if (!(d % 1000))
         {
-#ifndef WIN32
-            cerr << "\n1000 blocks in " << t.elapsed() << "s = " << (1000.0 / t.elapsed()) << "b/s"
-                 << endl;
-#endif
+            LOG(m_loggerInfo) << "\n1000 blocks in " << t.elapsed()
+                              << "s = " << (1000.0 / t.elapsed()) << "b/s" << endl;
             t.restart();
         }
         try
@@ -425,26 +437,40 @@ void BlockChain::rebuild(fs::path const& _path, std::function<void(unsigned, uns
 
             if (bi.parentHash() != lastHash)
             {
-#ifndef WIN32
-                cwarn << "DISJOINT CHAIN DETECTED; " << bi.hash() << "#" << d << " -> parent is"
-                      << bi.parentHash() << "; expected" << lastHash << "#" << (d - 1);
-#endif
-                return;
+                LOG(m_loggerError)
+                    << "DISJOINT CHAIN DETECTED; " << bi.hash() << "#" << d << " -> parent is"
+                    << bi.parentHash() << "; expected" << lastHash << "#" << (d - 1);
+                BOOST_THROW_EXCEPTION(DisjointChain());
             }
             lastHash = bi.hash();
             import(b, s.db(), 0);
         }
         catch (...)
         {
-            // Failed to import - stop here.
+            rebuildFailed = true;
+            exceptionInfo = boost::current_exception_diagnostic_information();
             break;
         }
 
         if (_progress)
             _progress(d, originalNumber);
     }
-
-    fs::remove_all(path / fs::path("extras.old"));
+    LOG(m_loggerInfo) << "Removing old extras database: " << m_dbPaths->extrasTemporaryPath();
+    oldExtrasDB.reset();
+    fs::remove_all(m_dbPaths->extrasTemporaryPath());
+    if (!rebuildFailed)
+    {
+        LOG(m_loggerInfo) << "Rebuild complete! Reimported " << originalNumber << " blocks!";
+        writeFile(m_dbPaths->extrasMinorVersionPath(), rlp(c_databaseMinorVersion));
+    }
+    else
+    {
+        LOG(m_loggerError) << "Rebuild failed with error: " << exceptionInfo;
+        LOG(m_loggerError)
+            << "Please re-run Aleth with the --kill option to delete all databases. This will "
+               "remove all local chain data and require you to resync from genesis.";
+        BOOST_THROW_EXCEPTION(DatabaseRebuildFailed());
+    }
 }
 
 string BlockChain::dumpDatabase() const
@@ -466,19 +492,28 @@ string BlockChain::dumpDatabase() const
     return oss.str();
 }
 
-tuple<ImportRoute, bool, unsigned> BlockChain::sync(BlockQueue& _bq, OverlayDB const& _stateDB, unsigned _max)
+tuple<ImportRoute, bool, unsigned> BlockChain::sync(
+    BlockQueue& _bq, OverlayDB const& _stateDB, unsigned _max)
 {
-//  _bq.tick(*this);
+    //  _bq.tick(*this);
 
     VerifiedBlocks blocks;
     _bq.drain(blocks, _max);
 
+    std::tuple<ImportRoute, h256s, unsigned> const importResult = sync(blocks, _stateDB);
+    bool const moreBlocks = _bq.doneDrain(std::get<1>(importResult));
+    return {std::get<0>(importResult), moreBlocks, std::get<2>(importResult)};
+}
+
+tuple<ImportRoute, h256s, unsigned> BlockChain::sync(
+    VerifiedBlocks const& _blocks, OverlayDB const& _stateDB)
+{
     h256s fresh;
     h256s dead;
-    h256s badBlocks;
     Transactions goodTransactions;
     unsigned count = 0;
-    for (VerifiedBlock const& block: blocks)
+    h256s badBlockHashes;
+    for (VerifiedBlock const& block : _blocks)
     {
         do {
             try
@@ -489,34 +524,25 @@ tuple<ImportRoute, bool, unsigned> BlockChain::sync(BlockQueue& _bq, OverlayDB c
                     r = import(block.verified, _stateDB, (ImportRequirements::Everything & ~ImportRequirements::ValidSeal & ~ImportRequirements::CheckUncles) != 0);
                 fresh += r.liveBlocks;
                 dead += r.deadBlocks;
-                goodTransactions.reserve(goodTransactions.size() + r.goodTranactions.size());
-                std::move(std::begin(r.goodTranactions), std::end(r.goodTranactions), std::back_inserter(goodTransactions));
+                goodTransactions.reserve(goodTransactions.size() + r.goodTransactions.size());
+                std::move(std::begin(r.goodTransactions), std::end(r.goodTransactions), std::back_inserter(goodTransactions));
                 ++count;
             }
             catch (dev::eth::AlreadyHaveBlock const&)
             {
-#ifndef WIN32
                 cwarn << "ODD: Import queue contains already imported block";
-#endif
                 continue;
             }
             catch (dev::eth::UnknownParent const&)
             {
-#ifndef WIN32
-                cwarn
-                    << "ODD: Import queue contains block with unknown parent.";  // << LogTag::Error
-                                                                                 // <<
-                                                                                 // boost::current_exception_diagnostic_information();
-#endif
+                cwarn << "ODD: Import queue contains block with unknown parent.";// << LogTag::Error << boost::current_exception_diagnostic_information();
                 // NOTE: don't reimport since the queue should guarantee everything in the right order.
                 // Can't continue - chain bad.
-                badBlocks.push_back(block.verified.info.hash());
+                badBlockHashes.push_back(block.verified.info.hash());
             }
             catch (dev::eth::FutureTime const&)
             {
-#ifndef WIN32
                 cwarn << "ODD: Import queue contains a block with future time.";
-#endif
                 this_thread::sleep_for(chrono::seconds(1));
                 continue;
             }
@@ -527,16 +553,16 @@ tuple<ImportRoute, bool, unsigned> BlockChain::sync(BlockQueue& _bq, OverlayDB c
             }
             catch (Exception& ex)
             {
-//              cnote << "Exception while importing block. Someone (Jeff? That you?) seems to be giving us dodgy blocks!";// << LogTag::Error << diagnostic_information(ex);
+                // cnote << "Exception while importing block. Someone (Jeff? That you?) seems to be giving us dodgy blocks!";// << LogTag::Error << diagnostic_information(ex);
                 if (m_onBad)
                     m_onBad(ex);
                 // NOTE: don't reimport since the queue should guarantee everything in the right order.
                 // Can't continue - chain  bad.
-                badBlocks.push_back(block.verified.info.hash());
+                badBlockHashes.push_back(block.verified.info.hash());
             }
         } while (false);
     }
-    return make_tuple(ImportRoute{dead, fresh, goodTransactions}, _bq.doneDrain(badBlocks), count);
+    return {ImportRoute{dead, fresh, goodTransactions}, badBlockHashes, count};
 }
 
 pair<ImportResult, ImportRoute> BlockChain::attemptImport(bytes const& _block, OverlayDB const& _stateDB, bool _mustBeNew) noexcept
@@ -588,9 +614,7 @@ void BlockChain::insert(VerifiedBlockRef _block, bytesConstRef _receipts, bool _
     // Work out its number as the parent's number + 1
     if (!isKnown(_block.info.parentHash(), false))
     {
-#ifndef WIN32
         LOG(m_logger) << _block.info.hash() << " : Unknown parent " << _block.info.parentHash();
-#endif
         // We don't know the parent (yet) - discard for now. It'll get resent to us if we find out about its ancestry later on.
         BOOST_THROW_EXCEPTION(UnknownParent());
     }
@@ -602,10 +626,8 @@ void BlockChain::insert(VerifiedBlockRef _block, bytesConstRef _receipts, bool _
     h256 receiptsRoot = orderedTrieRoot(receipts);
     if (_block.info.receiptsRoot() != receiptsRoot)
     {
-#ifndef WIN32
         LOG(m_logger) << _block.info.hash() << " : Invalid receipts root "
                       << _block.info.receiptsRoot() << " not " << receiptsRoot;
-#endif
         // We don't know the parent (yet) - discard for now. It'll get resent to us if we find out about its ancestry later on.
         BOOST_THROW_EXCEPTION(InvalidReceiptsStateRoot());
     }
@@ -614,18 +636,14 @@ void BlockChain::insert(VerifiedBlockRef _block, bytesConstRef _receipts, bool _
     if (!pd)
     {
         auto pdata = pd.rlp();
-#ifndef WIN32
         LOG(m_loggerError) << "Details is returning false despite block known: " << RLP(pdata);
-#endif
         auto parentBlock = block(_block.info.parentHash());
-#ifndef WIN32
         LOG(m_loggerError) << "isKnown: " << isKnown(_block.info.parentHash());
         LOG(m_loggerError) << "last/number: " << m_lastBlockNumber << " " << m_lastBlockHash << " "
                            << _block.info.number();
         LOG(m_loggerError) << "Block: " << BlockHeader(&parentBlock);
         LOG(m_loggerError) << "RLP: " << RLP(parentBlock);
         LOG(m_loggerError) << "DATABASE CORRUPTION: CRITICAL FAILURE";
-#endif
         exit(-1);
     }
 
@@ -651,8 +669,8 @@ void BlockChain::insert(VerifiedBlockRef _block, bytesConstRef _receipts, bool _
     details(_block.info.parentHash());
     DEV_WRITE_GUARDED(x_details)
     {
-        if (!dev::contains(m_details[_block.info.parentHash()].children, _block.info.hash()))
-            m_details[_block.info.parentHash()].children.push_back(_block.info.hash());
+        if (!dev::contains(m_details[_block.info.parentHash()].childHashes, _block.info.hash()))
+            m_details[_block.info.parentHash()].childHashes.push_back(_block.info.hash());
     }
 
     blocksWriteBatch->insert(toSlice(_block.info.hash()), db::Slice(_block.block));
@@ -660,7 +678,9 @@ void BlockChain::insert(VerifiedBlockRef _block, bytesConstRef _receipts, bool _
     extrasWriteBatch->insert(toSlice(_block.info.parentHash(), ExtraDetails),
         (db::Slice)dev::ref(m_details[_block.info.parentHash()].rlp()));
 
-    BlockDetails bd((unsigned)pd.number + 1, pd.totalDifficulty + _block.info.difficulty(), _block.info.parentHash(), {});
+    BlockDetails bd{static_cast<unsigned>(pd.number + 1),
+        pd.totalDifficulty + _block.info.difficulty(), _block.info.parentHash(), {} /* children */,
+        _block.block.size()};
     extrasWriteBatch->insert(
         toSlice(_block.info.hash(), ExtraDetails), (db::Slice)dev::ref(bd.rlp()));
     extrasWriteBatch->insert(
@@ -673,10 +693,8 @@ void BlockChain::insert(VerifiedBlockRef _block, bytesConstRef _receipts, bool _
     }
     catch (boost::exception const& ex)
     {
-#ifndef WIN32
         cwarn << "Error writing to blockchain database: " << boost::diagnostic_information(ex);
         cwarn << "Fail writing to blockchain database. Bombing out.";
-#endif
         exit(-1);
     }
 
@@ -686,10 +704,8 @@ void BlockChain::insert(VerifiedBlockRef _block, bytesConstRef _receipts, bool _
     }
     catch (boost::exception const& ex)
     {
-#ifndef WIN32
         cwarn << "Error writing to extras database: " << boost::diagnostic_information(ex);
         cwarn << "Fail writing to extras database. Bombing out.";
-#endif
         exit(-1);
     }
 }
@@ -707,9 +723,7 @@ ImportRoute BlockChain::import(VerifiedBlockRef const& _block, OverlayDB const& 
     // Work out its number as the parent's number + 1
     if (!isKnown(_block.info.parentHash(), false))  // doesn't have to be current.
     {
-#ifndef WIN32
         LOG(m_logger) << _block.info.hash() << " : Unknown parent " << _block.info.parentHash();
-#endif
         // We don't know the parent (yet) - discard for now. It'll get resent to us if we find out about its ancestry later on.
         BOOST_THROW_EXCEPTION(UnknownParent() << errinfo_hash256(_block.info.parentHash()));
     }
@@ -718,18 +732,14 @@ ImportRoute BlockChain::import(VerifiedBlockRef const& _block, OverlayDB const& 
     if (!pd)
     {
         auto pdata = pd.rlp();
-#ifndef WIN32
         LOG(m_loggerError) << "Details is returning false despite block known: " << RLP(pdata);
-#endif
         auto parentBlock = block(_block.info.parentHash());
-#ifndef WIN32
         LOG(m_loggerError) << "isKnown: " << isKnown(_block.info.parentHash());
         LOG(m_loggerError) << "last/number: " << m_lastBlockNumber << " " << m_lastBlockHash << " "
                            << _block.info.number();
         LOG(m_loggerError) << "Block: " << BlockHeader(&parentBlock);
         LOG(m_loggerError) << "RLP: " << RLP(parentBlock);
         LOG(m_loggerError) << "DATABASE CORRUPTION: CRITICAL FAILURE";
-#endif
         exit(-1);
     }
 
@@ -738,9 +748,8 @@ ImportRoute BlockChain::import(VerifiedBlockRef const& _block, OverlayDB const& 
     // Verify parent-critical parts
     verifyBlock(_block.block, m_onBad, ImportRequirements::InOrderChecks);
 
-#ifndef WIN32
-    LOG(m_loggerDetail) << "Attempting import of " << _block.info.hash() << " ...";
-#endif
+    LOG(m_loggerDetail) << "Attempting import of block " << _block.info.hash() << " (#"
+                        << _block.info.number() << ") ...";
 
     performanceLogger.onStageFinished("preliminaryChecks");
 
@@ -761,18 +770,12 @@ ImportRoute BlockChain::import(VerifiedBlockRef const& _block, OverlayDB const& 
         td = pd.totalDifficulty + tdIncrease;
 
         performanceLogger.onStageFinished("enactment");
-
-#if ETH_PARANOIA
-        checkConsistency();
-#endif // ETH_PARANOIA
     }
     catch (BadRoot& ex)
     {
-#ifndef WIN32
         cwarn << "*** BadRoot error! Trying to import" << _block.info.hash() << "needed root"
               << *boost::get_error_info<errinfo_hash256>(ex);
         cwarn << _block.info;
-#endif
         // Attempt in import later.
         BOOST_THROW_EXCEPTION(TransientError());
     }
@@ -804,9 +807,7 @@ void BlockChain::checkBlockIsNew(VerifiedBlockRef const& _block) const
 {
     if (isKnown(_block.info.hash()))
     {
-#ifndef WIN32
         LOG(m_logger) << _block.info.hash() << " : Not new.";
-#endif
         BOOST_THROW_EXCEPTION(AlreadyHaveBlock() << errinfo_block(_block.block.toBytes()));
     }
 }
@@ -816,10 +817,8 @@ void BlockChain::checkBlockTimestamp(BlockHeader const& _header) const
     // Check it's not crazy
     if (_header.timestamp() > utcTime() && !m_params.allowFutureBlocks)
     {
-#ifndef WIN32
         LOG(m_loggerDetail) << _header.hash() << " : Future time " << _header.timestamp()
                             << " (now at " << utcTime() << ")";
-#endif
         // Block has a timestamp in the future. This is no good.
         BOOST_THROW_EXCEPTION(FutureTime());
     }
@@ -841,7 +840,7 @@ ImportRoute BlockChain::insertBlockAndExtras(VerifiedBlockRef const& _block, byt
         // done here.
         details(_block.info.parentHash());
         DEV_WRITE_GUARDED(x_details)
-            m_details[_block.info.parentHash()].children.push_back(_block.info.hash());
+            m_details[_block.info.parentHash()].childHashes.push_back(_block.info.hash());
 
         _performanceLogger.onStageFinished("collation");
 
@@ -850,7 +849,8 @@ ImportRoute BlockChain::insertBlockAndExtras(VerifiedBlockRef const& _block, byt
         extrasWriteBatch->insert(toSlice(_block.info.parentHash(), ExtraDetails),
             (db::Slice)dev::ref(m_details[_block.info.parentHash()].rlp()));
 
-        BlockDetails const details((unsigned)_block.info.number(), _totalDifficulty, _block.info.parentHash(), {});
+        BlockDetails const details{static_cast<unsigned>(_block.info.number()), _totalDifficulty,
+            _block.info.parentHash(), {} /* children */, _block.block.size()};
         extrasWriteBatch->insert(
             toSlice(_block.info.hash(), ExtraDetails), (db::Slice)dev::ref(details.rlp()));
 
@@ -949,7 +949,7 @@ ImportRoute BlockChain::insertBlockAndExtras(VerifiedBlockRef const& _block, byt
 
         LOG(m_logger) << "   Imported and best " << _totalDifficulty << " (#"
                       << _block.info.number() << "). Has "
-                      << (details(_block.info.parentHash()).children.size() - 1)
+                      << (details(_block.info.parentHash()).childHashes.size() - 1)
                       << " siblings. Route: " << route;
     }
     else
@@ -965,10 +965,8 @@ ImportRoute BlockChain::insertBlockAndExtras(VerifiedBlockRef const& _block, byt
     }
     catch (boost::exception& ex)
     {
-#ifndef WIN32
         cwarn << "Error writing to blockchain database: " << boost::diagnostic_information(ex);
         cwarn << "Fail writing to blockchain database. Bombing out.";
-#endif
         exit(-1);
     }
 
@@ -978,36 +976,10 @@ ImportRoute BlockChain::insertBlockAndExtras(VerifiedBlockRef const& _block, byt
     }
     catch (boost::exception& ex)
     {
-#ifndef WIN32
         cwarn << "Error writing to extras database: " << boost::diagnostic_information(ex);
         cwarn << "Fail writing to extras database. Bombing out.";
-#endif
         exit(-1);
     }
-
-#if ETH_PARANOIA
-    if (isKnown(_block.info.hash()) && !details(_block.info.hash()))
-    {
-        LOG(m_loggerError) << "Known block just inserted has no details.";
-        LOG(m_loggerError) << "Block: " << _block.info;
-        LOG(m_loggerError) << "DATABASE CORRUPTION: CRITICAL FAILURE";
-        exit(-1);
-    }
-
-    try
-    {
-        State canary(_db, BaseState::Empty);
-        canary.populateFromChain(*this, _block.info.hash());
-    }
-    catch (...)
-    {
-        LOG(m_loggerError) << "Failed to initialise State object form imported block.";
-        LOG(m_loggerError) << "Block: " << _block.info;
-        LOG(m_loggerError) << "DATABASE CORRUPTION: CRITICAL FAILURE";
-        exit(-1);
-    }
-#endif // ETH_PARANOIA
-
     if (m_lastBlockHash != newLastBlockHash)
         DEV_WRITE_GUARDED(x_lastBlockHash)
         {
@@ -1019,19 +991,13 @@ ImportRoute BlockChain::insertBlockAndExtras(VerifiedBlockRef const& _block, byt
             }
             catch (boost::exception const& ex)
             {
-#ifndef WIN32
                 cwarn << "Error writing to extras database: " << boost::diagnostic_information(ex);
                 cout << "Put" << toHex(bytesConstRef(db::Slice("best"))) << "=>"
                      << toHex(bytesConstRef(db::Slice((char const*)&m_lastBlockHash, 32)));
                 cwarn << "Fail writing to extras database. Bombing out.";
-#endif
                 exit(-1);
             }
         }
-
-#if ETH_PARANOIA
-    checkConsistency();
-#endif // ETH_PARANOIA
 
     _performanceLogger.onStageFinished("checkBest");
 
@@ -1170,14 +1136,10 @@ void BlockChain::rewind(unsigned _newHead)
         }
         catch (boost::exception const& ex)
         {
-#ifndef WIN32
             cwarn << "Error writing to extras database: " << boost::diagnostic_information(ex);
-#endif
             cout << "Put" << toHex(bytesConstRef(db::Slice("best"))) << "=>"
                  << toHex(bytesConstRef(db::Slice((char const*)&m_lastBlockHash, 32)));
-#ifndef WIN32
             cwarn << "Fail writing to extras database. Bombing out.";
-#endif
             exit(-1);
         }
         noteCanonChanged();
@@ -1203,7 +1165,7 @@ tuple<h256s, h256, unsigned> BlockChain::treeRoute(h256 const& _from, h256 const
     {
         if (_pre)
             ret.push_back(from);
-        from = details(from).parent;
+        from = details(from).parentHash;
         fn--;
     }
 
@@ -1213,10 +1175,10 @@ tuple<h256s, h256, unsigned> BlockChain::treeRoute(h256 const& _from, h256 const
     {
         if (_post)
             back.push_back(to);
-        to = details(to).parent;
+        to = details(to).parentHash;
         tn--;
     }
-    for (;; from = details(from).parent, to = details(to).parent)
+    for (;; from = details(from).parentHash, to = details(to).parentHash)
     {
         if (_pre && (from != to || _common))
             ret.push_back(from);
@@ -1354,20 +1316,18 @@ void BlockChain::checkConsistency()
         {
             h256 h((byte const*)_key.data(), h256::ConstructFromPointer);
             auto dh = details(h);
-            auto p = dh.parent;
+            auto p = dh.parentHash;
             if (p != h256() && p != m_genesisHash)  // TODO: for some reason the genesis details
                                                     // with the children get squished. not sure
                                                     // why.
             {
                 auto dp = details(p);
-#ifndef WIN32
-                if (asserts(contains(dp.children, h)))
+                if (asserts(contains(dp.childHashes, h)))
                     cnote << "Apparently the database is corrupt. Not much we can do at this "
                              "stage...";
                 if (assertsEqual(dp.number, dh.number - 1))
                     cnote << "Apparently the database is corrupt. Not much we can do at this "
                              "stage...";
-#endif
             }
         }
         return true;
@@ -1464,9 +1424,9 @@ h256Hash BlockChain::allKinFrom(h256 const& _parent, unsigned _generations) cons
     h256 p = _parent;
     h256Hash ret = { p };
     // p and (details(p).parent: i == 5) is likely to be overkill, but can't hurt to be cautious.
-    for (unsigned i = 0; i < _generations && p != m_genesisHash; ++i, p = details(p).parent)
+    for (unsigned i = 0; i < _generations && p != m_genesisHash; ++i, p = details(p).parentHash)
     {
-        ret.insert(details(p).parent);
+        ret.insert(details(p).parentHash);
         auto b = block(p);
         for (auto i: RLP(b)[2])
             ret.insert(sha3(i.data()));
@@ -1508,9 +1468,7 @@ bytes BlockChain::block(h256 const& _hash) const
     string const d = m_blocksDB->lookup(toSlice(_hash));
     if (d.empty())
     {
-#ifndef WIN32
         cwarn << "Couldn't find requested block:" << _hash;
-#endif
         return bytes();
     }
 
@@ -1538,9 +1496,7 @@ bytes BlockChain::headerData(h256 const& _hash) const
     string const d = m_blocksDB->lookup(toSlice(_hash));
     if (d.empty())
     {
-#ifndef WIN32
         cwarn << "Couldn't find requested block:" << _hash;
-#endif
         return bytes();
     }
 
@@ -1564,10 +1520,8 @@ Block BlockChain::genesisBlock(OverlayDB const& _db) const
         ret.mutableState().db().commit();                                           // have to use this db() since it's the one that has been altered with the above commit.
         if (ret.mutableState().rootHash() != r)
         {
-#ifndef WIN32
             cwarn << "Hinted genesis block's state root hash is incorrect!";
             cwarn << "Hinted" << r << ", computed" << ret.mutableState().rootHash();
-#endif
             // TODO: maybe try to fix it by altering the m_params's genesis block?
             exit(-1);
         }
@@ -1663,6 +1617,22 @@ VerifiedBlockRef BlockChain::verifyBlock(bytesConstRef _block, std::function<voi
     return res;
 }
 
+template <class T>
+inline
+boost::exception_ptr
+boost_copy_exception( T const & e )
+{
+    try
+    {
+        throw boost::enable_current_exception(e);
+    }
+    catch(
+    ... )
+    {
+        return boost::current_exception();
+    }
+}
+
 void BlockChain::setChainStartBlockNumber(unsigned _number)
 {
     h256 const hash = numberHash(_number);
@@ -1678,7 +1648,7 @@ void BlockChain::setChainStartBlockNumber(unsigned _number)
     {
         BOOST_THROW_EXCEPTION(FailedToWriteChainStart()
                               << errinfo_hash256(hash)
-                              << boost::errinfo_nested_exception(boost::copy_exception(ex)));
+                              << boost::errinfo_nested_exception(boost_copy_exception(ex)));
     }
 }
 

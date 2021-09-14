@@ -179,7 +179,7 @@ UniValue getrawtransaction(const UniValue& params, bool fHelp)
 
     CTransaction tx;
     uint256 hash_block;
-    if (!GetTransaction(hash, tx, hash_block, true, blockindex)) {
+    if (!GetTransaction(hash, tx, hash_block, true, blockindex, true)) {
         std::string errmsg;
         if (blockindex) {
             if (!(blockindex->nStatus & BLOCK_HAVE_DATA)) {
@@ -610,10 +610,10 @@ UniValue signrawtransaction(const UniValue& params, bool fHelp)
     LOCK(cs_main);
 #endif
     RPCTypeCheck(params, boost::assign::list_of(UniValue::VSTR)(UniValue::VARR)(UniValue::VARR)(UniValue::VSTR)(UniValue::VBOOL), true);
-
+#ifndef TEST_BTCU
     if (!pwalletMain->IsCrypted() && !Params().IsRegTestNet())
         throw JSONRPCError(RPC_WALLET_WRONG_ENC_STATE, "Error: running with an not encrypted wallet. Run encryptwallet first");
-
+#endif
     std::vector<unsigned char> txData(ParseHexV(params[0], "argument 1"));
     CDataStream ssData(txData, SER_NETWORK, PROTOCOL_VERSION);
     std::vector<CMutableTransaction> txVariants;
@@ -804,7 +804,8 @@ UniValue signrawtransaction(const UniValue& params, bool fHelp)
             txin.scriptSig = CombineSignatures(prevPubKey, mergedTx, i, txin.scriptSig, txv.vin[i].scriptSig);
         }
         ScriptError serror = SCRIPT_ERR_OK;
-        if (!VerifyScript(txin.scriptSig, prevPubKey, STANDARD_SCRIPT_VERIFY_FLAGS, MutableTransactionSignatureChecker(&mergedTx, i), &serror)) {
+        CScriptWitness witness;
+        if (!BTC::VerifyScript(txin.scriptSig, prevPubKey, &witness, STANDARD_SCRIPT_VERIFY_FLAGS, MutableTransactionSignatureChecker(&mergedTx, i), &serror)) {
             TxInErrorToJSON(txin, vErrors, ScriptErrorString(serror));
         }
     }

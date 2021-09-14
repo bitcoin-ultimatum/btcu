@@ -66,19 +66,6 @@ target_include_directories(
   ${GMP_INCLUDE_DIR}
 )
 
-install(
-  DIRECTORY "" DESTINATION "include/libff"
-  FILES_MATCHING
-  PATTERN "*.hpp"
-  PATTERN "*.tcc"
-  PATTERN "tests" EXCLUDE
-  PATTERN "examples" EXCLUDE
-)
-
-install(
-  TARGETS ff DESTINATION lib
-)
-
 # Tests
 if ("${IS_LIBFF_PARENT}")
   add_executable(

@@ -59,10 +59,6 @@ class SendToContractTest(BtcuTestFramework):
         assert('txid' in ret)
         assert('sender' in ret)
         assert('hash160' in ret)
-        try:
-            self.node.generate(1)
-        except:
-            print("Generation")
         self.node.generate(1)
         
         ret = self.node.getaccountinfo(self.contract_address)
@@ -79,17 +75,13 @@ class SendToContractTest(BtcuTestFramework):
         assert('txid' in ret)
         assert('sender' in ret)
         assert('hash160' in ret)
-        try:
-            self.node.generate(1)
-        except:
-            print("Generation")
+
         self.node.generate(1)
         
         ret = self.node.getaccountinfo(self.contract_address)
-        #print(ret)
         assert_equal(ret['address'], self.contract_address)
         assert_equal(ret['balance'], 200)
-        #assert_equal(ret['storage']['290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e563']['0000000000000000000000000000000000000000000000000000000000000000'], '0000000000000000000000009999999999999999999999999999999999999999')
+        assert_equal(ret['storage']['290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e563']['0000000000000000000000000000000000000000000000000000000000000000'], '0000000000000000000000009999999999999999999999999999999999999999')
         assert_equal(ret['code'], '60606040526000357c0100000000000000000000000000000000000000000000000000000000900463ffffffff16806313af40351461005c5780632bcf51b41461008a5780635e01eb5a14610094578063893d20e8146100e6575bfe5b610088600480803573ffffffffffffffffffffffffffffffffffffffff16906020019091905050610138565b005b61009261017d565b005b341561009c57fe5b6100a46101c1565b604051808273ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200191505060405180910390f35b34156100ee57fe5b6100f66101ca565b604051808273ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200191505060405180910390f35b80600060006101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff1602179055505b50565b33600060006101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff1602179055505b565b60003390505b90565b6000600060009054906101000a900473ffffffffffffffffffffffffffffffffffffffff1690505b905600a165627a7a72305820791895230daae0ed58cc374ad5b639044408f1942d7b85689a616caee50dc42e0029')
 
 
@@ -115,17 +107,13 @@ class SendToContractTest(BtcuTestFramework):
         ret = self.node.getaccountinfo(self.contract_address)
         assert(ret['address'] == self.contract_address)
         assert(ret['balance'] == 20000000000)
-        #assert('290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e563' in ret['storage'])
-        #assert('0000000000000000000000000000000000000000000000000000000000000000' in ret['storage']['290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e563'])
-        #assert(ret['storage']['290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e563']['0000000000000000000000000000000000000000000000000000000000000000'] == "000000000000000000000000baede766c1a4844efea1326fffc5cd8c1c3e42ae")
+        assert('290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e563' in ret['storage'])
+        assert('0000000000000000000000000000000000000000000000000000000000000000' in ret['storage']['290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e563'])
+        assert(ret['storage']['290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e563']['0000000000000000000000000000000000000000000000000000000000000000'] == "000000000000000000000000baede766c1a4844efea1326fffc5cd8c1c3e42ae")
         assert(ret['code'] == '60606040526000357c0100000000000000000000000000000000000000000000000000000000900463ffffffff16806313af40351461005c5780632bcf51b41461008a5780635e01eb5a14610094578063893d20e8146100e6575bfe5b610088600480803573ffffffffffffffffffffffffffffffffffffffff16906020019091905050610138565b005b61009261017d565b005b341561009c57fe5b6100a46101c1565b604051808273ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200191505060405180910390f35b34156100ee57fe5b6100f66101ca565b604051808273ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200191505060405180910390f35b80600060006101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff1602179055505b50565b33600060006101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff1602179055505b565b60003390505b90565b6000600060009054906101000a900473ffffffffffffffffffffffffffffffffffffffff1690505b905600a165627a7a72305820791895230daae0ed58cc374ad5b639044408f1942d7b85689a616caee50dc42e0029')
 
     def sendtocontract_no_broadcast(self):
         self.node.sendtoaddress("mgSvvYtnX9JhcXmUqfK2SrGFBfjqC7sQ8e", 0.1)
-        try:
-            self.node.generate(1)
-        except:
-            print("Generation")
         self.node.generate(1)
         # call setSenderAsOwner with 100 qtum
         ret = self.node.sendtocontract(self.contract_address, "2bcf51b4", 100, 1000000, 40, "qabmqZk3re5b9UpUcznxDkCnCsnKdmPktT", False)
@@ -144,8 +132,8 @@ class SendToContractTest(BtcuTestFramework):
         self.setup_contract()
         self.sendtocontract_verify_storage_test()
         self.sendtocontract_verify_storage_and_balance_test()
-        #self.sendtocontract_specify_sender_test()
-        #self.sendtocontract_no_broadcast()
+        self.sendtocontract_specify_sender_test()
+        self.sendtocontract_no_broadcast()
 
 if __name__ == '__main__':
     SendToContractTest().main()

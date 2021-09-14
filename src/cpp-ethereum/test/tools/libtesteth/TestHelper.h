@@ -1,23 +1,9 @@
-/*
-	This file is part of cpp-ethereum.
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2013-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
-	cpp-ethereum is free software: you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation, either version 3 of the License, or
-	(at your option) any later version.
-
-	cpp-ethereum is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file
- * Helper functions to work with json::spirit and test files
- */
-
+/// @file
+/// Helper functions to work with json::spirit and test files
 #pragma once
 
 #include <thread>
@@ -26,7 +12,6 @@
 #include <functional>
 #include <boost/test/unit_test.hpp>
 #include <boost/filesystem.hpp>
-#include <boost/progress.hpp>
 
 #include <libethashseal/Ethash.h>
 #include <libethereum/State.h>
@@ -73,11 +58,9 @@ protected:
 // helping functions
 std::string prepareVersionString();
 std::string prepareLLLCVersionString();
-std::string prepareBinaryenVersionString();
 std::vector<boost::filesystem::path> getFiles(boost::filesystem::path const& _dirPath, std::set<std::string> _extentionMask, std::string const& _particularFile = {});
 std::string netIdToString(eth::Network _netId);
 eth::Network stringToNetId(std::string const& _netname);
-bool isDisabledNetwork(eth::Network _net);
 std::set<eth::Network> const& getNetworks();
 
 /// translate network names in expect section field
@@ -106,6 +89,7 @@ bytes importByteArray(std::string const& _str);
 void requireJsonFields(json_spirit::mObject const& _o, std::string const& _section,
     std::map<std::string, json_spirit::Value_type> const& _validationMap);
 void checkHexHasEvenLength(std::string const&);
+size_t levenshteinDistance(char const* _s, size_t _n, char const* _t, size_t _m);
 void copyFile(boost::filesystem::path const& _source, boost::filesystem::path const& _destination);
 eth::LogEntries importLog(json_spirit::mArray const& _o);
 std::string exportLog(eth::LogEntries const& _logs);
@@ -132,6 +116,8 @@ json_spirit::mObject fillJsonWithStateChange(eth::State const& _stateOrig, eth::
 json_spirit::mObject fillJsonWithState(eth::State const& _state);
 json_spirit::mObject fillJsonWithState(eth::State const& _state, eth::AccountMaskMap const& _map);
 json_spirit::mObject fillJsonWithTransaction(eth::Transaction const& _txn);
+std::vector<std::string> testSuggestions(
+    std::vector<std::string> const& _testList, std::string const& _sMinusTArg);
 
 //Fill Test Functions
 bool createRandomTest();	//returns true if succeed, false if there was an error;

@@ -3,7 +3,7 @@
         "env" : {
             "currentCoinbase" : "2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
             "currentDifficulty" : "0x020000",
-            "currentGasLimit" : "10000000",
+            "currentGasLimit" : "100000000",
             "currentNumber" : "1",
             "currentTimestamp" : "1000",
             "previousHash" : "5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
@@ -15,11 +15,11 @@
                     "gas" : 0,
                     "value" : -1
                 },
-                "network" : ["Byzantium", ">=ConstantinopleFix"],
+                "network" : [ ">=Istanbul"],
                 "result" : {
 		    "1000000000000000000000000000000000000000" : {
 		        "storage" : {
-		            "0x01" : "0x024d79"
+		            "0x01" : "0x025de1"
 		        }
 		    }
                 }
@@ -30,41 +30,11 @@
                     "gas" : 1,
                     "value" : -1
                 },
-                "network" : ["Byzantium", ">=ConstantinopleFix"],
+                "network" : [ ">=Istanbul"],
                 "result" : {
 		    "1000000000000000000000000000000000000000" : {
 		        "storage" : {
-		            "0x01" : "0x021070"
-		        }
-		    }
-                }
-            },
-	    {
-                "indexes" : {
-                    "data" : -1,
-                    "gas" : 0,
-                    "value" : -1
-                },
-                "network" : ["Constantinople"],
-                "result" : {
-		    "1000000000000000000000000000000000000000" : {
-		        "storage" : {
-		            "0x01" : "0x026039"
-		        }
-		    }
-                }
-            },
-	    {
-                "indexes" : {
-                    "data" : -1,
-                    "gas" : 1,
-                    "value" : -1
-                },
-                "network" : ["Constantinople"],
-                "result" : {
-		    "1000000000000000000000000000000000000000" : {
-		        "storage" : {
-		            "0x01" : "0x022330"
+		            "0x01" : "0x0220d8"
 		        }
 		    }
                 }

@@ -28,11 +28,15 @@ void ContractStateInit()
     dev::eth::BaseState existsQtumstate = fStatus ? dev::eth::BaseState::PreExisting : dev::eth::BaseState::Empty;
     globalState = std::unique_ptr<QtumState>(new QtumState(dev::u256(0), QtumState::openDB(dirQtum, hashDB, dev::WithExisting::Trust), dirQtum, existsQtumstate));
     auto geni = chainparams.EVMGenesisInfo(dev::eth::Network::qtumMainNetwork);
-    dev::eth::ChainParams cp((geni));
+    dev::eth::ChainParams cp(geni);
     globalSealEngine = std::unique_ptr<dev::eth::SealEngineFace>(cp.createSealEngine());
 
     if(chainActive.Tip() != nullptr){
-        auto hash = uintToh256(chainActive.Tip()->hashStateRoot);
+        auto hashStRoot = uintToh256(chainActive.Tip()->hashStateRoot);
+        auto hashUTXORoot = uintToh256(chainActive.Tip()->hashUTXORoot);
+        LogPrint("sc", "%s: chainActive.Tip()->hashStateRoot: %s, chainActive.Tip()->hashUTXORoot: %s\n", __func__, hashStRoot.hex().c_str(), hashUTXORoot.hex().c_str());
+
+        //globalState->setRoot(dev::sha3(dev::rlp("")));
         globalState->setRoot(uintToh256(chainActive.Tip()->hashStateRoot));
         globalState->setRootUTXO(uintToh256(chainActive.Tip()->hashUTXORoot));
     } else {
@@ -47,6 +51,12 @@ void ContractStateInit()
 
 void ContractStateShutdown()
 {
+   if(chainActive.Tip() != nullptr)
+   {
+      auto hashStRoot = uintToh256(chainActive.Tip()->hashStateRoot);
+      auto hashUTXORoot = uintToh256(chainActive.Tip()->hashUTXORoot);
+   }
+
     globalState.reset();
 }
 
@@ -79,9 +89,22 @@ bool CheckOpSender(const CTransaction& tx, const CChainParams& chainparams, int 
 
 bool CheckSenderScript(const CCoinsViewCache& view, const CTransaction& tx){
     // Check for the sender that pays the coins
-    CScript script = view.AccessCoins(tx.vin[0].prevout.hash)->vout[tx.vin[0].prevout.n].scriptPubKey;
-    if(!script.IsPayToPubkeyHash() && !script.IsPayToPubkey()){
+    if (tx.vout.size() < 2) {
         return false;
+    }
+
+    auto coins =  view.AccessCoins(tx.vin[0].prevout.hash);
+    if (coins && coins->vout.size() > 0) {
+
+        //CScript script = view.AccessCoins(tx.vin[0].prevout.hash)->vout[tx.vin[0].prevout.n].scriptPubKey;
+        // First try finding the previous transaction in database
+        CTransaction txPrev; uint256 hashBlock;
+        if (!GetTransaction(tx.vin[0].prevout.hash, txPrev, hashBlock, true))
+           return false;
+        CScript script = txPrev.vout[tx.vin[0].prevout.n].scriptPubKey;
+        if(!script.IsPayToPubkeyHash() && !script.IsPayToPubkey()){
+            return false;
+        }
     }
 
     // Check for additional VM sender
@@ -89,11 +112,10 @@ bool CheckSenderScript(const CCoinsViewCache& view, const CTransaction& tx){
         return true;
 
     // Check for the VM sender that is encoded into the output
-    for (const CTxOut& txout : tx.vout)
-    {
-        if(txout.scriptPubKey.HasOpSender())
-        {
+    for (const CTxOut& txout : tx.vout){
+        if(txout.scriptPubKey.HasOpSender()){
             // Extract the sender data
+            
             CScript senderPubKey, senderSig;
             if(!ExtractSenderData(txout.scriptPubKey, &senderPubKey, &senderSig))
                 return false;
@@ -104,16 +126,11 @@ bool CheckSenderScript(const CCoinsViewCache& view, const CTransaction& tx){
 
             // Get the signature stack
             std::vector <std::vector<unsigned char> > stack;
-            if (!EvalScript(stack, senderSig, SCRIPT_VERIFY_NONE, BaseSignatureChecker()))
-                return false;
-
-            // Check that the signature script contains only signature and public key (2 items)
-            if(stack.size() != STANDARD_SENDER_STACK_ITEMS)
+            if (!BTC::EvalScript(stack, senderSig, SCRIPT_VERIFY_NONE, BaseSignatureChecker(), SigVersion::BASE, nullptr))
                 return false;
 
             // Check that the items size is no more than 80 bytes
-            for(size_t i=0; i < stack.size(); i++)
-            {
+            for(size_t i=0; i < stack.size(); i++){
                 if(stack[i].size() > MAX_STANDARD_SENDER_STACK_ITEM_SIZE)
                     return false;
             }
@@ -241,7 +258,7 @@ bool CheckReward(const CBlock& block, CValidationState& state, int nHeight, cons
    return true;
 }
 */
-valtype GetSenderAddress(const CTransaction& tx, const CCoinsViewCache* coinsView, const std::vector<CTransactionRef>* blockTxs, int nOut = -1){
+valtype GetSenderAddress(const CTransaction& tx, const CCoinsViewCache* coinsView, const std::vector<CTransactionRef>* blockTxs, int nOut){
     CScript script;
     bool scriptFilled=false; //can't use script.empty() because an empty script is technically valid
 
@@ -260,9 +277,11 @@ valtype GetSenderAddress(const CTransaction& tx, const CCoinsViewCache* coinsVie
         }
     }
     if(!scriptFilled && coinsView){
-        script = coinsView->AccessCoins(tx.vin[0].prevout.hash)->vout[tx.vin[0].prevout.n].scriptPubKey;
-        //script = coinsView->AccessCoin(tx.vin[0].prevout).out.scriptPubKey;
-        scriptFilled = true;
+        auto coins = coinsView->AccessCoins(tx.vin[0].prevout.hash);
+        if (coins && coins->vout.size() > 0) {
+            script = coins->vout[tx.vin[0].prevout.n].scriptPubKey;
+            scriptFilled = true;
+        }
     }
     if(!scriptFilled)
     {
@@ -463,7 +482,7 @@ dev::eth::EnvInfo ByteCodeExec::BuildEVMEnvironment(){
         header.setAuthor(EthAddrFromScript(block.vtx[0].vout[0].scriptPubKey));
     }
     dev::u256 gasUsed;
-    dev::eth::EnvInfo env(header, lastHashes, gasUsed);
+    dev::eth::EnvInfo env(header, lastHashes, gasUsed, globalSealEngine->chainParams().chainID);
     return env;
 }
 
@@ -511,7 +530,7 @@ bool QtumTxConverter::extractionQtumTransactions(ExtractQtumTX& qtumtx){
 bool QtumTxConverter::receiveStack(const CScript& scriptPubKey){
     sender = false;
     // FIX: hardcoded flag value
-    EvalScript(stack, scriptPubKey, 1610612736, BaseSignatureChecker(), nullptr);
+    BTC::EvalScript(stack, scriptPubKey, 1610612736, BaseSignatureChecker(), SigVersion::BASE, nullptr);
     if (stack.empty())
         return false;
 

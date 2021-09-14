@@ -14,21 +14,7 @@
                    "gas" : -1,
                    "value" : -1
                 },
-                "network" : ["Frontier", "Homestead", "EIP150", "EIP158"],
-                "result" : {
-                    "0x6295ee1b4f6dd65047762f924ecd367c17eabf8f" : {
-                        "storage" : {
-                            "0x00" : "0x01"
-                        }
-                    }
-                }
-            },
-            {   "indexes" : {
-                   "data" : -1,
-                   "gas" : -1,
-                   "value" : -1
-                },
-                "network" : [">=Byzantium"],
+                "network" : [">=Istanbul"],
                 "result" : {
                   "0x6295ee1b4f6dd65047762f924ecd367c17eabf8f" : {
                      "storage" : {
@@ -61,7 +47,7 @@
                 "{ (seq (address) (CREATE 0 0 (lll (seq (mstore 0 0x112233) (revert 0 32)) 0)) (SSTORE 0 (RETURNDATASIZE)) (returndatacopy 0 0 32) (sstore 1 (mload 0)) (STOP) ) }"
             ],
             "gasLimit" : [
-                "0x0a00000000"
+                "42907729921"
             ],
             "gasPrice" : "0x01",
             "nonce" : "0x00",

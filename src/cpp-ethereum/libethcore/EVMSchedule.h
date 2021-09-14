@@ -1,45 +1,41 @@
-/*
-    This file is part of cpp-ethereum.
-
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2014-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
 #pragma once
 
-#include <array>
+#include <libdevcore/Common.h>
+#include <libethcore/Common.h>
 #include <boost/optional.hpp>
+#include <array>
 
 namespace dev
 {
 namespace eth
 {
+struct AdditionalEIPs;
 
 struct EVMSchedule
 {
     EVMSchedule(): tierStepGas(std::array<unsigned, 8>{{0, 2, 3, 5, 8, 10, 20, 0}}) {}
     EVMSchedule(bool _efcd, bool _hdc, unsigned const& _txCreateGas): exceptionalFailedCodeDeposit(_efcd), haveDelegateCall(_hdc), tierStepGas(std::array<unsigned, 8>{{0, 2, 3, 5, 8, 10, 20, 0}}), txCreateGas(_txCreateGas) {}
+    // construct schedule with additional EIPs on top
+    EVMSchedule(EVMSchedule const& _schedule, AdditionalEIPs const& _eips);
+    unsigned accountVersion = 0;
     bool exceptionalFailedCodeDeposit = true;
     bool haveDelegateCall = true;
-    bool eip150Mode = false;
-    bool eip158Mode = false;
-    bool eip1283Mode = false;
-    bool haveBitwiseShifting = false;
-    bool haveRevert = false;
-    bool haveReturnData = false;
-    bool haveStaticCall = false;
-    bool haveCreate2 = false;
-    bool haveExtcodehash = false;
+    bool eip150Mode = true;
+    bool eip158Mode = true;
+    bool eip1283Mode = true;
+    bool eip2200Mode = true;
+    bool haveBitwiseShifting = true;
+    bool haveRevert = true;
+    bool haveReturnData = true;
+    bool haveStaticCall = true;
+    bool haveCreate2 = true;
+    bool haveExtcodehash = true;
+    bool haveChainID = true;
+    bool haveSelfbalance = true;
     std::array<unsigned, 8> tierStepGas;
     unsigned expGas = 10;
     unsigned expByteGas = 10;
@@ -50,17 +46,18 @@ struct EVMSchedule
     unsigned sstoreResetGas = 5000;
     unsigned sstoreUnchangedGas = 200;
     unsigned sstoreRefundGas = 15000;
-    unsigned sstoreRefundNonzeroGas = 4800;
     unsigned jumpdestGas = 1;
     unsigned logGas = 375;
     unsigned logDataGas = 8;
     unsigned logTopicGas = 375;
     unsigned createGas = 32000;
     unsigned callGas = 40;
+    unsigned precompileStaticCallGas = 700;
+    unsigned callSelfGas = 40;
     unsigned callStipend = 2300;
     unsigned callValueTransferGas = 9000;
     unsigned callNewAccountGas = 25000;
-    unsigned suicideRefundGas = 24000;
+    unsigned selfdestructRefundGas = 24000;
     unsigned memoryGas = 3;
     unsigned quadCoeffDiv = 512;
     unsigned createDataGas = 200;
@@ -74,16 +71,17 @@ struct EVMSchedule
     unsigned extcodecopyGas = 20;
     unsigned extcodehashGas = 400;
     unsigned balanceGas = 20;
-    unsigned suicideGas = 0;
+    unsigned selfdestructGas = 0;
     unsigned blockhashGas = 20;
     unsigned maxCodeSize = unsigned(-1);
 
     boost::optional<u256> blockRewardOverwrite;
 
     bool staticCallDepthLimit() const { return !eip150Mode; }
-    bool suicideChargesNewAccountGas() const { return eip150Mode; }
     bool emptinessIsNonexistence() const { return eip158Mode; }
     bool zeroValueTransferChargesNewAccountGas() const { return !eip158Mode; }
+    bool sstoreNetGasMetering() const { return eip1283Mode || eip2200Mode; }
+    bool sstoreThrowsIfGasBelowCallStipend() const { return eip2200Mode; }
 };
 
 static const EVMSchedule DefaultSchedule = EVMSchedule();
@@ -99,7 +97,8 @@ static const EVMSchedule EIP150Schedule = []
     schedule.balanceGas = 400;
     schedule.sloadGas = 200;
     schedule.callGas = 700;
-    schedule.suicideGas = 5000;
+    schedule.callSelfGas = 700;
+    schedule.selfdestructGas = 5000;
     return schedule;
 }();
 
@@ -146,10 +145,46 @@ static const EVMSchedule ConstantinopleFixSchedule = [] {
     return schedule;
 }();
 
+static const EVMSchedule IstanbulSchedule = [] {
+    EVMSchedule schedule = ConstantinopleFixSchedule;
+    schedule.txDataNonZeroGas = 16;
+    schedule.sloadGas = 800;
+    schedule.balanceGas = 700;
+    schedule.extcodehashGas = 700;
+    schedule.haveChainID = true;
+    schedule.haveSelfbalance = true;
+    schedule.eip2200Mode = true;
+    schedule.sstoreUnchangedGas = 800;
+    return schedule;
+}();
+
+static const EVMSchedule& MuirGlacierSchedule = IstanbulSchedule;
+
+static const EVMSchedule BerlinSchedule = [] {
+    EVMSchedule schedule = MuirGlacierSchedule;
+    return schedule;
+}();
+
 static const EVMSchedule ExperimentalSchedule = [] {
-    EVMSchedule schedule = ConstantinopleSchedule;
+    EVMSchedule schedule = BerlinSchedule;
+    schedule.accountVersion = 1;
     schedule.blockhashGas = 800;
     return schedule;
 }();
+
+inline EVMSchedule const& latestScheduleForAccountVersion(u256 const& _version)
+{
+    if (_version == 0)
+        return IstanbulSchedule;
+    else if (_version == ExperimentalSchedule.accountVersion)
+        return ExperimentalSchedule;
+    else
+    {
+        // This should not happen, as all existing accounts
+        // are created either with version 0 or with one of fork's versions
+        assert(false);
+        return DefaultSchedule;
+    }
+}
 }
 }

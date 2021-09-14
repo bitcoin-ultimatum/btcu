@@ -7,7 +7,6 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 else()
     find_package(GTest CONFIG REQUIRED)
 endif()
-include_directories(${Boost_INCLUDE_DIRS})
 
 add_executable(
     ethash-test
@@ -22,20 +21,16 @@ add_executable(
     test_progpow.cpp
 )
 
-target_link_libraries(ethash-test 
-    PRIVATE 
+target_link_libraries(ethash-test PRIVATE
         ethash 
-        ${Boost_LIBRARIES}
         )
 if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-    target_link_libraries(ethash-test 
-        PRIVATE 
+    target_link_libraries(ethash-test PRIVATE
             GTest::GTest 
             GTest::Main
             )
 else()
-    target_link_libraries(ethash-test 
-        PRIVATE 
+    target_link_libraries(ethash-test PRIVATE
             GTest::gtest 
             GTest::gtest_main
             )

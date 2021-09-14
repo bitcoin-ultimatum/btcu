@@ -2,6 +2,7 @@
 #include <libdevcore/CommonData.h>
 #include <pubkey.h>
 #include <util/convert.h>
+#include <main.h>
 
 using namespace dev;
 
@@ -20,12 +21,11 @@ bool qtumutils::btc_ecrecover(const dev::h256 &hash, const dev::u256 &v, const d
     vchSig.push_back((unsigned char)v);
     vchSig += r.asBytes();
     vchSig += s.asBytes();
-    uint256 mesage = h256Touint(hash);
-
+    uint256 message = uint256(h256Touint(hash).ToStringReverseEndian());
     // Recover public key from compact signature (65 bytes)
     // The public key can be compressed (33 bytes) or uncompressed (65 bytes)
     // Pubkeyhash is RIPEMD160 hash of the public key, handled both types
-    if(pubKey.RecoverCompact(mesage, vchSig))
+    if(pubKey.RecoverCompact(message, vchSig))
     {
         // Get the pubkeyhash
         CKeyID id = pubKey.GetID();
@@ -36,4 +36,15 @@ bool qtumutils::btc_ecrecover(const dev::h256 &hash, const dev::u256 &v, const d
     }
 
     return false;
+}
+
+h256 qtumutils::btc_strhash2sha256(bytesConstRef _input) noexcept
+{
+   std::string str_hex = dev::toHex(_input).substr(0,64);
+   CHashWriter ss(SER_GETHASH, 0);
+   ss << strMessageMagic;
+   ss << str_hex;
+   uint256 msgHash = uint256(ss.GetHash().ToStringReverseEndian());
+   h256 hash = uintToh256(msgHash);
+   return hash;
 }

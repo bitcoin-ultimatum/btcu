@@ -1,0 +1,15 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Encoding=UTF-8
+Terminal=true
+Type=Application
+Name=btcu-tx
+Name[en_US]=btcu-tx
+Exec=btcu-tx
+Version=1.0
+GenericName=TX Launcher
+Comment=Transaction Tools for BTCU Node Management
+Icon=btcu-cli
+Icon[en_US]=btcu-cli
+Categories=Utility;
+StartupNotify=true

@@ -267,9 +267,9 @@ UniValue importwallet(const UniValue& params, bool fHelp)
     int64_t nFilesize = std::max((int64_t)1, (int64_t)file.tellg());
     file.seekg(0, file.beg);
 
-    pwalletMain->ShowProgress(_("Importing keys and scripts..."), 0); // show progress dialog in GUI
+    pwalletMain->getNode()->showProgress(_("Importing keys and scripts..."), 0); // show progress dialog in GUI
     while (file.good()) {
-        pwalletMain->ShowProgress("Importing keys and scripts...", std::max(1, std::min(99, (int) (((double) file.tellg() / (double) nFilesize) * 100))));
+        pwalletMain->getNode()->showProgress(_("Importing keys and scripts..."), std::max(1, std::min(99, (int) (((double) file.tellg() / (double) nFilesize) * 100))));
         std::string line;
         std::getline(file, line);
         if (line.empty() || line[0] == '#')
@@ -326,6 +326,7 @@ UniValue importwallet(const UniValue& params, bool fHelp)
         }
     }
     file.close();
+    pwalletMain->getNode()->showProgress(_("Importing keys and scripts..."), 100);
 
     if (fFullRescan) {
         pwalletMain->ScanForWalletTransactions(pcoinsTip->SeekToFirst(), chainActive.Tip());

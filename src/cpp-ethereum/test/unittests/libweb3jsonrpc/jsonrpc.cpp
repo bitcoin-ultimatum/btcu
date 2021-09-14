@@ -1,19 +1,6 @@
-/*
-    This file is part of cpp-ethereum.
-
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2014-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
 #pragma GCC diagnostic ignored "-Wdeprecated"
 
@@ -67,10 +54,6 @@ static std::string const c_genesisConfigString = R"(
         "mixHash" : "0x00"
     },
     "accounts": {
-        "0000000000000000000000000000000000000001": { "precompiled": { "name": "ecrecover", "linear": { "base": 3000, "word": 0 } } },
-        "0000000000000000000000000000000000000002": { "precompiled": { "name": "sha256", "linear": { "base": 60, "word": 12 } } },
-        "0000000000000000000000000000000000000003": { "precompiled": { "name": "ripemd160", "linear": { "base": 600, "word": 120 } } },
-        "0000000000000000000000000000000000000004": { "precompiled": { "name": "identity", "linear": { "base": 15, "word": 3 } } },
         "0x095e7baea6a6c7c4c2dfeb977efac326af552d87" : {
             "balance" : "0x0de0b6b3a7640000",
             "code" : "0x6001600101600055",
@@ -197,7 +180,7 @@ string fromAscii(string _s)
     bytes b = asBytes(_s);
     return toHexPrefixed(b);
 }
-}
+}  // namespace
 
 BOOST_FIXTURE_TEST_SUITE(JsonRpcSuite, JsonRpcFixture)
 
@@ -221,13 +204,13 @@ BOOST_AUTO_TEST_CASE(jsonrpc_isListening)
 
 BOOST_AUTO_TEST_CASE(jsonrpc_accounts)
 {
-    std::vector <dev::KeyPair> keys = {KeyPair::create(), KeyPair::create()};
+    std::vector<dev::KeyPair> keys = {KeyPair::create(), KeyPair::create()};
     accountHolder->setAccounts(keys);
     Json::Value k = rpcClient->eth_accounts();
     accountHolder->setAccounts({});
     BOOST_CHECK_EQUAL(k.isArray(), true);
-    BOOST_CHECK_EQUAL(k.size(),  keys.size());
-    for (auto &i:k)
+    BOOST_CHECK_EQUAL(k.size(), keys.size());
+    for (auto& i : k)
     {
         auto it = std::find_if(keys.begin(), keys.end(), [i](dev::KeyPair const& keyPair) {
             return jsToAddress(i.asString()) == keyPair.address();
@@ -280,6 +263,7 @@ BOOST_AUTO_TEST_CASE(eth_sendTransaction)
     auto address = coinbase.address();
     auto countAt = jsToU256(rpcClient->eth_getTransactionCount(toJS(address), "latest"));
 
+    // Verify initial account state
     BOOST_CHECK_EQUAL(countAt, web3->ethereum()->countAt(address));
     BOOST_CHECK_EQUAL(countAt, 0);
     auto balance = web3->ethereum()->balanceAt(address, 0);
@@ -316,8 +300,7 @@ BOOST_AUTO_TEST_CASE(eth_sendTransaction)
     accountHolder->setAccounts({});
     dev::eth::mine(*(web3->ethereum()), 1);
 
-    countAt = jsToU256(
-        rpcClient->eth_getTransactionCount(toJS(address), "latest"));
+    countAt = jsToU256(rpcClient->eth_getTransactionCount(toJS(address), "latest"));
     auto balance2 = web3->ethereum()->balanceAt(receiver.address());
     string balanceString2 = rpcClient->eth_getBalance(toJS(receiver.address()), "latest");
 
@@ -327,6 +310,65 @@ BOOST_AUTO_TEST_CASE(eth_sendTransaction)
     BOOST_CHECK_EQUAL(jsToU256(balanceString2), txAmount);
     BOOST_CHECK_EQUAL(txAmount, balance2);
 }
+
+BOOST_AUTO_TEST_CASE(eth_sendMultipleTransactions)
+{
+    // Send multiple transactions from the same account before mining a block, should succeed
+    auto const senderAddress = coinbase.address();
+    auto countAt = jsToU256(rpcClient->eth_getTransactionCount(toJS(senderAddress), "latest"));
+
+    // Verify initial account state
+    BOOST_CHECK_EQUAL(countAt, web3->ethereum()->countAt(senderAddress));
+    BOOST_CHECK_EQUAL(countAt, 0);
+    auto senderBalance = web3->ethereum()->balanceAt(senderAddress, 0);
+    string senderBalanceString = rpcClient->eth_getBalance(toJS(senderAddress), "latest");
+    BOOST_CHECK_EQUAL(toJS(senderBalance), senderBalanceString);
+    BOOST_CHECK_EQUAL(jsToDecimal(senderBalanceString), "0");
+
+    // Mine a block and verify balance changes
+    dev::eth::mine(*(web3->ethereum()), 1);
+    BOOST_CHECK_EQUAL(web3->ethereum()->blockByNumber(LatestBlock).author(), senderAddress);
+    senderBalance = web3->ethereum()->balanceAt(senderAddress, LatestBlock);
+    senderBalanceString = rpcClient->eth_getBalance(toJS(senderAddress), "latest");
+
+    BOOST_REQUIRE_GT(senderBalance, 0);
+    BOOST_CHECK_EQUAL(toJS(senderBalance), senderBalanceString);
+
+    // Create and send a tx
+    auto const txAmount = senderBalance / 3u;
+    auto const gasPrice = 10 * dev::eth::szabo;
+    auto const gas = EVMSchedule().txGas;
+    auto const receiver = KeyPair::create();
+
+    Json::Value t;
+    t["from"] = toJS(senderAddress);
+    t["value"] = jsToDecimal(toJS(txAmount));
+    t["to"] = toJS(receiver.address());
+    t["data"] = toJS(bytes());
+    t["gas"] = toJS(gas);
+    t["gasPrice"] = toJS(gasPrice);
+
+    std::string txHash = rpcClient->eth_sendTransaction(t);
+    BOOST_REQUIRE(!txHash.empty());
+
+    // Send the tx again
+    txHash = rpcClient->eth_sendTransaction(t);
+
+    accountHolder->setAccounts({});
+    dev::eth::mine(*(web3->ethereum()), 1);
+
+    countAt = jsToU256(rpcClient->eth_getTransactionCount(toJS(senderAddress), "latest"));
+    auto const receiverBalance = web3->ethereum()->balanceAt(receiver.address());
+    string const receiverBalanceString =
+        rpcClient->eth_getBalance(toJS(receiver.address()), "latest");
+
+    BOOST_CHECK_EQUAL(countAt, web3->ethereum()->countAt(senderAddress));
+    BOOST_CHECK_EQUAL(countAt, 2);
+    BOOST_CHECK_EQUAL(toJS(receiverBalance), receiverBalanceString);
+    BOOST_CHECK_EQUAL(jsToU256(receiverBalanceString), 2 * txAmount);
+    BOOST_CHECK_EQUAL(txAmount * 2, receiverBalance);
+}
+
 
 BOOST_AUTO_TEST_CASE(eth_sendRawTransaction_validTransaction)
 {
@@ -364,11 +406,12 @@ BOOST_AUTO_TEST_CASE(eth_sendRawTransaction_errorZeroBalance)
     t["from"] = toJS(senderAddress);
     t["to"] = toJS(receiver.address());
     t["value"] = jsToDecimal(toJS(10000 * dev::eth::szabo));
-    
+
     auto signedTx = rpcClient->eth_signTransaction(t);
     BOOST_REQUIRE(signedTx["raw"]);
 
-    BOOST_CHECK_EQUAL(sendingRawShouldFail(signedTx["raw"].asString()), "Account balance is too low (balance < value + gas * gas price).");
+    BOOST_CHECK_EQUAL(sendingRawShouldFail(signedTx["raw"].asString()),
+        "Account balance is too low (balance < value + gas * gas price).");
 }
 
 BOOST_AUTO_TEST_CASE(eth_sendRawTransaction_errorInvalidNonce)
@@ -394,14 +437,16 @@ BOOST_AUTO_TEST_CASE(eth_sendRawTransaction_errorInvalidNonce)
     auto txHash = rpcClient->eth_sendRawTransaction(signedTx["raw"].asString());
     BOOST_REQUIRE(!txHash.empty());
 
-    auto invalidNonce = jsToU256(rpcClient->eth_getTransactionCount(toJS(senderAddress), "latest")) - 1;
+    dev::eth::mine(*(web3->ethereum()), 1);
+
+    auto invalidNonce = 0;
     t["nonce"] = jsToDecimal(toJS(invalidNonce));
-    
+
     signedTx = rpcClient->eth_signTransaction(t);
     BOOST_REQUIRE(!signedTx["raw"].empty());
 
-    BOOST_CHECK_EQUAL(sendingRawShouldFail(signedTx["raw"].asString()), "Invalid transaction nonce.");
-
+    BOOST_CHECK_EQUAL(
+        sendingRawShouldFail(signedTx["raw"].asString()), "Invalid transaction nonce.");
 }
 
 BOOST_AUTO_TEST_CASE(eth_sendRawTransaction_errorInsufficientGas)
@@ -423,43 +468,12 @@ BOOST_AUTO_TEST_CASE(eth_sendRawTransaction_errorInsufficientGas)
 
     const int minGasForValueTransferTx = 21000;
     t["gas"] = jsToDecimal(toJS(minGasForValueTransferTx - 1));
-    
-    auto signedTx = rpcClient->eth_signTransaction(t);
-    BOOST_REQUIRE(!signedTx["raw"].empty());
-
-    BOOST_CHECK_EQUAL(sendingRawShouldFail(signedTx["raw"].asString()), "Transaction gas amount is less than the intrinsic gas amount for this transaction type.");
-}
-
-BOOST_AUTO_TEST_CASE(eth_sendRawTransaction_errorDuplicateTransaction)
-{
-    auto senderAddress = coinbase.address();
-    auto receiver = KeyPair::create();
-
-    // Mine to generate a non-zero account balance
-    const int blocksToMine = 1;
-    const int blockNumber = 1;
-    const u256 blockReward = 5 * dev::eth::ether;
-    dev::eth::mine(*(web3->ethereum()), blocksToMine);
-    BOOST_CHECK_EQUAL(blockReward, web3->ethereum()->balanceAt(senderAddress, blockNumber));
-
-    Json::Value t;
-    t["from"] = toJS(senderAddress);
-    t["to"] = toJS(receiver.address());
-    t["value"] = jsToDecimal(toJS(10000 * dev::eth::szabo));
 
     auto signedTx = rpcClient->eth_signTransaction(t);
     BOOST_REQUIRE(!signedTx["raw"].empty());
 
-    auto txHash = rpcClient->eth_sendRawTransaction(signedTx["raw"].asString());
-    BOOST_REQUIRE(!txHash.empty());
-    
-    auto txNonce = jsToU256(rpcClient->eth_getTransactionCount(toJS(senderAddress), "latest"));
-    t["nonce"] = jsToDecimal(toJS(txNonce));
-    
-    signedTx = rpcClient->eth_signTransaction(t);
-    BOOST_REQUIRE(!signedTx["raw"].empty());
-    
-    BOOST_CHECK_EQUAL(sendingRawShouldFail(signedTx["raw"].asString()), "Same transaction already exists in the pending transaction queue.");
+    BOOST_CHECK_EQUAL(sendingRawShouldFail(signedTx["raw"].asString()),
+        "Transaction gas amount is less than the intrinsic gas amount for this transaction type.");
 }
 
 BOOST_AUTO_TEST_CASE(eth_signTransaction)
@@ -472,7 +486,7 @@ BOOST_AUTO_TEST_CASE(eth_signTransaction)
     t["from"] = toJS(address);
     t["value"] = jsToDecimal(toJS(1));
     t["to"] = toJS(receiver.address());
-    
+
     Json::Value res = rpcClient->eth_signTransaction(t);
     BOOST_REQUIRE(res["raw"]);
     BOOST_REQUIRE(res["tx"]);
@@ -480,9 +494,8 @@ BOOST_AUTO_TEST_CASE(eth_signTransaction)
     accountHolder->setAccounts({});
     dev::eth::mine(*(web3->ethereum()), 1);
 
-    auto countAtAfterSign = jsToU256(
-        rpcClient->eth_getTransactionCount(toJS(address), "latest"));
-    
+    auto countAtAfterSign = jsToU256(rpcClient->eth_getTransactionCount(toJS(address), "latest"));
+
     BOOST_CHECK_EQUAL(countAtBeforeSign, countAtAfterSign);
 }
 
@@ -527,17 +540,17 @@ BOOST_AUTO_TEST_CASE(contract_storage)
     dev::eth::mine(*(web3->ethereum()), 1);
 
 
-     // pragma solidity ^0.4.22;
-        
-     // contract test
-     // {
-     //     uint hello;
-     //     function writeHello(uint value) returns(bool d)
-     //     {
-     //       hello = value;
-     //       return true;
-     //     }
-     // }
+    // pragma solidity ^0.4.22;
+
+    // contract test
+    // {
+    //     uint hello;
+    //     function writeHello(uint value) returns(bool d)
+    //     {
+    //       hello = value;
+    //       return true;
+    //     }
+    // }
 
 
     const string compiled =
@@ -559,7 +572,7 @@ BOOST_AUTO_TEST_CASE(contract_storage)
 
     Json::Value receipt = rpcClient->eth_getTransactionReceipt(txHash);
     string contractAddress = receipt["contractAddress"].asString();
-    
+
     Json::Value transact;
     transact["to"] = contractAddress;
     transact["data"] = "0x15b2eec30000000000000000000000000000000000000000000000000000000000000003";
@@ -567,7 +580,8 @@ BOOST_AUTO_TEST_CASE(contract_storage)
     dev::eth::mine(*(web3->ethereum()), 1);
 
     string storage = rpcClient->eth_getStorageAt(contractAddress, "0", "latest");
-    BOOST_CHECK_EQUAL(storage, "0x0000000000000000000000000000000000000000000000000000000000000003");
+    BOOST_CHECK_EQUAL(
+        storage, "0x0000000000000000000000000000000000000000000000000000000000000003");
 
     auto code = rpcClient->eth_getCode(contractAddress, "latest");
     BOOST_CHECK_EQUAL(code, "0x" + runtimeCode);
@@ -593,7 +607,7 @@ BOOST_AUTO_TEST_CASE(web3_sha3)
     BOOST_CHECK_EQUAL("0xc6888fa159d67f77c2f3d7a402e199802766bd7e8d4d1ecd2274fc920265d56a", result);
 }
 
-BOOST_AUTO_TEST_CASE(debugAccountRangeAtFinalBlockState)
+BOOST_AUTO_TEST_CASE(debugAccountRangeFinalBlockState)
 {
     // mine to get some balance at coinbase
     dev::eth::mine(*(web3->ethereum()), 1);
@@ -611,16 +625,16 @@ BOOST_AUTO_TEST_CASE(debugAccountRangeAtFinalBlockState)
 
     dev::eth::mine(*(web3->ethereum()), 1);
 
-    string receiverHash = toString(sha3(receiver));
+    string const receiverHash = toHexPrefixed(sha3(receiver));
 
     // receiver doesn't exist in the beginning of the 2nd block
-    Json::Value result = rpcClient->debug_accountRangeAt("2", 0, "0", 100);
+    Json::Value result = rpcClient->debug_accountRange("2", 0, "0", 100);
     BOOST_CHECK(!result["addressMap"].isMember(receiverHash));
 
     // receiver exists in the end of the 2nd block
-    result = rpcClient->debug_accountRangeAt("2", 1, "0", 100);
+    result = rpcClient->debug_accountRange("2", 1, "0", 100);
     BOOST_CHECK(result["addressMap"].isMember(receiverHash));
-    BOOST_CHECK_EQUAL(result["addressMap"][receiverHash], toString(receiver));
+    BOOST_CHECK_EQUAL(result["addressMap"][receiverHash], toHexPrefixed(receiver));
 }
 
 BOOST_AUTO_TEST_CASE(debugStorageRangeAtFinalBlockState)
@@ -628,8 +642,8 @@ BOOST_AUTO_TEST_CASE(debugStorageRangeAtFinalBlockState)
     // mine to get some balance at coinbase
     dev::eth::mine(*(web3->ethereum()), 1);
 
-    //pragma solidity ^0.4.22;
-    //contract test
+    // pragma solidity ^0.4.22;
+    // contract test
     //{
     //    uint hello = 7;
     //}
@@ -726,7 +740,33 @@ BOOST_AUTO_TEST_CASE(test_importRawBlock)
     Json::Value ret;
     Json::Reader().parse(c_genesisConfigString, ret);
     rpcClient->test_setChainParams(ret);
+
     string blockHash = rpcClient->test_importRawBlock(
+        "0xf90213f9020ea0c92211c9cd49036c37568feedb8e518a24a77e9f6ca959931a19dcf186a8e1e6a01dcc4de8"
+        "dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347942adc25665018aa1fe0e6bc666dac8fc2"
+        "697ff9baa04b4b7a0d58a2388c0e6b3b048c3c27edd6febc6f04171167ed15a77ab2e60b16a056e81f171bcc55"
+        "a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e0"
+        "1b996cadc001622fb5e363b421b901000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "00008302000001830f460f80845d1ca87c97d68094312e372e302b2b63346336646c696e7578636c61a0000000"
+        "0000000000000000000000000000000000000000000000000000000000880000000000000000c0c0");
+    BOOST_CHECK_EQUAL(
+        blockHash, "0x0ef84365e15a50e7440286de7e9c1ca47f17af98b2c8d3d97503045d8f5a128b");
+
+    BOOST_CHECK_EQUAL(web3->ethereum()->number(), 1);
+}
+
+BOOST_AUTO_TEST_CASE(test_importRawBlockFailsForInvalidHeader)
+{
+    Json::Value ret;
+    Json::Reader().parse(c_genesisConfigString, ret);
+    rpcClient->test_setChainParams(ret);
+    // invalid difficulty (below minimum)
+    std::string block =
         "0xf90279f9020ea0c92211c9cd49036c37568feedb8e518a24a77e9f6ca959931a19dcf186a8e1e6a01dcc4de8"
         "dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347942adc25665018aa1fe0e6bc666dac8fc2"
         "697ff9baa0328f16ca7b0259d7617b3ddf711c107efe6d5785cbeb11a8ed1614b484a6bc3aa093ca2a18d52e7c"
@@ -737,13 +777,106 @@ BOOST_AUTO_TEST_CASE(test_importRawBlock)
         "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
         "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
         "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-        "00008304000001830f460f82a0348203e897d68094312e342e302b2b62383163726c696e7578676e75a08e2042"
+        "00008301000001830f460f82a0348203e897d68094312e342e302b2b62383163726c696e7578676e75a08e2042"
         "e00086a18e2f095bc997dc11d1c93fcf34d0540a428ee95869a4a62264883f8fd3f43a3567c3f865f863800183"
         "061a8094095e7baea6a6c7c4c2dfeb977efac326af552d87830186a0801ca0e94818d1f3b0c69eb37720145a5e"
         "ad7fbf6f8d80139dd53953b4a782301050a3a01fcf46908c01576715411be0857e30027d6be3250a3653f049b3"
-        "ff8d74d2540cc0");
+        "ff8d74d2540cc0";
+    BOOST_CHECK_THROW(rpcClient->test_importRawBlock(block), jsonrpc::JsonRpcException);
+
+    // invalid difficulty (above minimum but incorrect value)
+    block =
+        "0xf90279f9020ea0c92211c9cd49036c37568feedb8e518a24a77e9f6ca959931a19dcf186a8e1e6a01dcc4de8"
+        "dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347942adc25665018aa1fe0e6bc666dac8fc2"
+        "697ff9baa0328f16ca7b0259d7617b3ddf711c107efe6d5785cbeb11a8ed1614b484a6bc3aa093ca2a18d52e7c"
+        "1846f7b104e2fc1e5fdc71ebe38187248f9437d39e74f43aaba0e151c94b824bded58346fa03fc91fa275bd0cf"
+        "94caac0ea4ebb9c8d32a574644b901000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "00008303000001830f460f82a0348203e897d68094312e342e302b2b62383163726c696e7578676e75a08e2042"
+        "e00086a18e2f095bc997dc11d1c93fcf34d0540a428ee95869a4a62264883f8fd3f43a3567c3f865f863800183"
+        "061a8094095e7baea6a6c7c4c2dfeb977efac326af552d87830186a0801ca0e94818d1f3b0c69eb37720145a5e"
+        "ad7fbf6f8d80139dd53953b4a782301050a3a01fcf46908c01576715411be0857e30027d6be3250a3653f049b3"
+        "ff8d74d2540cc0";
+    BOOST_CHECK_THROW(rpcClient->test_importRawBlock(block), jsonrpc::JsonRpcException);
+}
+
+BOOST_AUTO_TEST_CASE(test_importRawBlockFailsForInvalidBlockBody)
+{
+    Json::Value ret;
+    Json::Reader().parse(c_genesisConfigString, ret);
+    rpcClient->test_setChainParams(ret);
+
+    // incorrect receipts root
+    string block =
+        "0xf90213f9020ea0c92211c9cd49036c37568feedb8e518a24a77e9f6ca959931a19dcf186a8e1e6a01dcc4de8"
+        "dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347942adc25665018aa1fe0e6bc666dac8fc2"
+        "697ff9baa04b4b7a0d58a2388c0e6b3b048c3c27edd6febc6f04171167ed15a77ab2e60b16a056e81f171bcc55"
+        "a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e0"
+        "1b996cadc001622fb5e363baaab901000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "00008302000001830f460f80845d1ca87c97d68094312e372e302b2b63346336646c696e7578636c61a0000000"
+        "0000000000000000000000000000000000000000000000000000000000880000000000000000c0c0";
+
+    BOOST_CHECK_THROW(rpcClient->test_importRawBlock(block), jsonrpc::JsonRpcException);
+}
+
+BOOST_AUTO_TEST_CASE(call_from_parameter)
+{
+    dev::eth::mine(*(web3->ethereum()), 1);
+
+
+    //    pragma solidity ^0.5.1;
+
+    //    contract Test
+    //    {
+    //        function whoAmI() public view returns (address) {
+    //            return msg.sender;
+    //        }
+    //    }
+
+
+    string compiled =
+        "608060405234801561001057600080fd5b5060c68061001f6000396000f"
+        "3fe6080604052600436106039576000357c010000000000000000000000"
+        "000000000000000000000000000000000090048063da91254c14603e575"
+        "b600080fd5b348015604957600080fd5b5060506092565b604051808273"
+        "ffffffffffffffffffffffffffffffffffffffff1673fffffffffffffff"
+        "fffffffffffffffffffffffff16815260200191505060405180910390f3"
+        "5b60003390509056fea165627a7a72305820abfa953fead48d8f657bca6"
+        "57713501650734d40342585cafcf156a3fe1f41d20029";
+
+    Json::Value create;
+    create["code"] = compiled;
+    create["gas"] = "180000";
+    string txHash = rpcClient->eth_sendTransaction(create);
+    dev::eth::mine(*(web3->ethereum()), 1);
+
+    Json::Value receipt = rpcClient->eth_getTransactionReceipt(txHash);
+    string contractAddress = receipt["contractAddress"].asString();
+
+    Json::Value transactionCallObject;
+    transactionCallObject["to"] = contractAddress;
+    transactionCallObject["data"] = "0xda91254c";
+
+    accountHolder->setAccounts(vector<dev::KeyPair>());
+
+    string responseString = rpcClient->eth_call(transactionCallObject, "latest");
     BOOST_CHECK_EQUAL(
-        blockHash, "0xedef94eddd6002ae14803b91aa5138932f948026310144fc615d52d7d5ff29c7");
+        responseString, "0x0000000000000000000000000000000000000000000000000000000000000000");
+
+    transactionCallObject["from"] = "0x112233445566778899aabbccddeeff0011223344";
+
+    responseString = rpcClient->eth_call(transactionCallObject, "latest");
+    BOOST_CHECK_EQUAL(
+        responseString, "0x000000000000000000000000112233445566778899aabbccddeeff0011223344");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

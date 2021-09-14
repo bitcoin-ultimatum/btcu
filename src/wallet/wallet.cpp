@@ -1288,9 +1288,9 @@ CAmount CWalletTx::GetImmatureCredit(bool fUseCache, const isminefilter& filter)
     return 0;
 }
 
-CAmount CWalletTx::GetAvailableCredit(bool fUseCache) const
+CAmount CWalletTx::GetAvailableCredit(bool fUseCache, int filter) const
 {
-    return GetUnspentCredit(ISMINE_SPENDABLE_ALL);
+    return GetUnspentCredit(filter);
 }
 
 CAmount CWalletTx::GetColdStakingCredit(bool fUseCache) const
@@ -1579,9 +1579,9 @@ int CWallet::ScanBitcoinStateForWalletTransactions(std::unique_ptr<CCoinsViewIte
         wtx.nIndex = ret;
     };
 
-    LogPrintf("Scanning the Bitcoin state for wallet transactions ...\n");
+    LogPrintf("Scanning chainstate for wallet transactions ...\n");
     LogPrintf("[0%%]..."); /* Continued */
-    ShowProgress(_("Rescanning the Bitcoin state..."), 0);
+    m_node->showProgress(_("Rescanning the chainstate state..."), 0);
 
     for (; pCursor->Valid(); pCursor->Next()) {
         if (fromStartup && ShutdownRequested()) {
@@ -1596,7 +1596,7 @@ int CWallet::ScanBitcoinStateForWalletTransactions(std::unique_ptr<CCoinsViewIte
                 uint32_t high = 0x100 * *trxHash.begin() + *(trxHash.begin() + 1);
                 int pctDone = (int) (high * 100.0 / 65536.0 + 0.5);
                 if (pctDone != prevPctDone) {
-                    ShowProgress(_("Rescanning the Bitcoin state..."), pctDone);
+                    m_node->showProgress(_("Rescanning the chainstate state..."), pctDone);
                     prevPctDone = pctDone;
                 }
                 if (reportDone < pctDone / 10) {
@@ -1607,10 +1607,9 @@ int CWallet::ScanBitcoinStateForWalletTransactions(std::unique_ptr<CCoinsViewIte
             }
 
             pCursor->GetCoins(coins, true);
-            if (coins.nVersion != CTransaction::BITCOIN_VERSION) {
+            if (coins.nVersion != CTransaction::BITCOIN_VERSION && coins.nVersion != CTransaction::BTCU_START_VERSION) {
                 continue;
             }
-
             if (AddToWalletIfInvolvingMe(CTransaction(trxHash, coins), nullptr, merkleClb, fUpdate)) {
                 ++ret;
             }
@@ -1654,7 +1653,7 @@ int CWallet::ScanForWalletTransactions(std::unique_ptr<CCoinsViewIterator> pCoin
         LogPrintf("Scanning blocks for wallet transactions ...\n");
         LogPrintf("[0%%]..."); /* Continued */
 
-        ShowProgress(_("Rescanning blocks..."), 0); // show rescan progress in GUI as dialog or on splashscreen, if -rescan on startup
+        m_node->showProgress(_("Scanning blocks for wallet transactions..."), 0); // show rescan progress in GUI as dialog or on splashscreen, if -rescan on startup
         double dProgressStart = Checkpoints::GuessVerificationProgress(pindex, false);
         double dProgressTip = Checkpoints::GuessVerificationProgress(chainActive.Tip(), false);
         std::set<uint256> setAddedToWallet;
@@ -1662,7 +1661,7 @@ int CWallet::ScanForWalletTransactions(std::unique_ptr<CCoinsViewIterator> pCoin
             if (pindex->nHeight % 100 == 0 && dProgressTip - dProgressStart > 0.0) {
                 int nProgress = std::max(1, std::min(99, (int)((Checkpoints::GuessVerificationProgress(pindex, false) - dProgressStart) / (dProgressTip - dProgressStart) * 100)));
                 if (prevPctDone != nProgress) {
-                    ShowProgress(_("Rescanning blocks..."), nProgress);
+                    m_node->showProgress(_("Scanning blocks for wallet transactions..."), nProgress);
                     prevPctDone = nProgress;
                 }
                 if (nProgress / 10 > nPrevProgress) {
@@ -1732,7 +1731,7 @@ int CWallet::ScanForWalletTransactions(std::unique_ptr<CCoinsViewIterator> pCoin
 
             pindex = chainActive.Next(pindex);
         }
-        ShowProgress("", 100); // hide progress dialog in GUI
+        m_node->showProgress("Scanning blocks for wallet transactions...", 100); // hide progress dialog in GUI
         LogPrintf("[DONE].\n");
     }
     return ret;
@@ -1865,11 +1864,11 @@ CAmount CWallet::loopTxsBalance(std::function<void(const uint256&, const CWallet
     return nTotal;
 }
 
-CAmount CWallet::GetBalance() const
+CAmount CWallet::GetBalance(int filter) const
 {
-    return loopTxsBalance([](const uint256& id, const CWalletTx& pcoin, CAmount& nTotal){
+    return loopTxsBalance([&filter](const uint256& id, const CWalletTx& pcoin, CAmount& nTotal){
         if (pcoin.IsTrusted())
-            nTotal += pcoin.GetAvailableCredit();
+            nTotal += pcoin.GetAvailableCredit(true, filter);
     });
 }
 
@@ -2559,9 +2558,8 @@ bool CWallet::GetBudgetFinalizationCollateralTX(CWalletTx& tx, uint256 hash, boo
     return true;
 }
 
-
 bool CWallet::CreateTransaction(const std::vector<std::pair<CScript,
-        CAmount> >& vecSend,
+                                    CAmount> >& vecSend,
     CWalletTx& wtxNew,
     CReserveKey& reservekey,
     CAmount& nFeeRet,
@@ -2574,8 +2572,8 @@ bool CWallet::CreateTransaction(const std::vector<std::pair<CScript,
     bool fIncludeLeased,
     bool sign,
     const CTxDestination& signSenderAddress,
-    const std::vector<CValidatorRegister> &validatorRegister,
-    const std::vector<CValidatorVote> &validatorVote)
+    const std::vector<CValidatorRegister>& validatorRegister,
+    const std::vector<CValidatorVote>& validatorVote)
 {
     if (useIX && nFeePay < CENT) nFeePay = CENT;
 
@@ -2592,15 +2590,14 @@ bool CWallet::CreateTransaction(const std::vector<std::pair<CScript,
         strFailReason = _("Transaction amounts must be positive");
         return false;
     }
-    if(!validatorRegister.empty() && !validatorVote.empty())
-    {
+    if (!validatorRegister.empty() && !validatorVote.empty()) {
         strFailReason = _("Transaction can't be for registration and for voting simultaneously");
         return false;
     }
-    
+
     wtxNew.fTimeReceivedIsTxTime = true;
     wtxNew.BindWallet(this);
-    
+
     CMutableTransaction txNew;
     txNew.validatorRegister = validatorRegister;
     txNew.validatorVote = validatorVote;
@@ -2622,7 +2619,7 @@ bool CWallet::CreateTransaction(const std::vector<std::pair<CScript,
                 if (coinControl && !coinControl->fSplitBlock) {
                     for (const PAIRTYPE(CScript, CAmount) & s : vecSend) {
                         CTxOut txout(s.second, s.first);
-                        if (txout.IsDust(::minRelayTxFee)) {
+                        if (txout.IsDust(::minRelayTxFee) && !txout.scriptPubKey.HasOpCreate() && !txout.scriptPubKey.HasOpCall()) {
                             strFailReason = _("Transaction amount too small");
                             return false;
                         }
@@ -2673,7 +2670,7 @@ bool CWallet::CreateTransaction(const std::vector<std::pair<CScript,
 
 
                 for (PAIRTYPE(const CWalletTx*, unsigned int) pcoin : setCoins) {
-                    if(pcoin.first->vout[pcoin.second].scriptPubKey.IsPayToColdStaking())
+                    if (pcoin.first->vout[pcoin.second].scriptPubKey.IsPayToColdStaking())
                         wtxNew.fStakeDelegationVoided = true;
                     CAmount nCredit = pcoin.first->vout[pcoin.second].nValue;
                     //The coin age after the next block (depth+1) is used instead of the current,
@@ -2760,25 +2757,20 @@ bool CWallet::CreateTransaction(const std::vector<std::pair<CScript,
                 for (const PAIRTYPE(const CWalletTx*, unsigned int) & coin : setCoins)
                     txNew.vin.push_back(CTxIn(coin.first->GetHash(), coin.second));
 
-                if (sign)
-                {
+                if (sign) {
                     // Signing transaction outputs
                     int nOut = 0;
-                    for (const auto& output : txNew.vout)
-                    {
-                        if(output.scriptPubKey.HasOpSender())
-                        {
+                    for (const auto& output : txNew.vout) {
+                        if (output.scriptPubKey.HasOpSender()) {
                             const CScript& scriptPubKey = GetScriptForDestination(signSenderAddress);
                             //SignatureData sigdata;
 
-                            if ( !SignSignature(*pwalletMain,scriptPubKey,txNew,nOut,SIGHASH_ALL, false))
+                            if (!SignSignature(*pwalletMain, scriptPubKey, txNew, nOut, SIGHASH_ALL, false))
                             //if (!ProduceSignature(*pwalletMain, MutableTransactionSignatureOutputCreator(&txNew, nOut, output.nValue, SIGHASH_ALL), scriptPubKey, sigdata))
                             {
                                 strFailReason = _("Signing transaction output failed");
                                 return false;
-                            }
-                            else
-                            {
+                            } else {
                                 /*
                                 if(!UpdateOutput(txNew.vout.at(nOut), sigdata))
                                 {
@@ -2788,7 +2780,6 @@ bool CWallet::CreateTransaction(const std::vector<std::pair<CScript,
                             }
                             nOut++;
                         }
-
                     }
                 }
                 // Sign
@@ -4263,6 +4254,8 @@ void CWallet::SetNull()
     //Auto Combine Dust
     fCombineDust = false;
     nAutoCombineThreshold = 0;
+
+    m_node = new Node();
 }
 
 bool CWallet::isMultiSendEnabled()

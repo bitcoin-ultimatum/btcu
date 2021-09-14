@@ -3,10 +3,10 @@ set(
     main.cpp
 )
 
-add_executable(cpp-ethereum-bootnode ${sources})
+add_executable(aleth-bootnode ${sources})
 target_link_libraries(
-    cpp-ethereum-bootnode
+    aleth-bootnode
     PRIVATE p2p devcore Boost::program_options
 )
 
-install(TARGETS cpp-ethereum-bootnode DESTINATION bin)
+install(TARGETS aleth-bootnode DESTINATION bin)

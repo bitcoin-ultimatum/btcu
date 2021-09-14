@@ -1,5 +1,5 @@
 /* EVMC: Ethereum Client-VM Connector API.
- * Copyright 2019 The EVMC Authors.
+ * Copyright 2018-2019 The EVMC Authors.
  * Licensed under the Apache License, Version 2.0.
  */
 
@@ -9,5 +9,5 @@
 
 int main()
 {
-    return evmc_get_instruction_metrics_table(EVMC_BYZANTIUM)[OP_STOP].num_stack_returned_items;
+    return evmc_get_instruction_metrics_table(EVMC_BYZANTIUM)[OP_STOP].gas_cost;
 }

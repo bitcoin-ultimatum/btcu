@@ -1,19 +1,6 @@
-/*
-    This file is part of cpp-ethereum.
-
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2014-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
 #include "SealEngine.h"
 #include "TransactionBase.h"
@@ -29,6 +16,11 @@ SealEngineRegistrar* SealEngineRegistrar::s_this = nullptr;
 void NoProof::init()
 {
     ETH_REGISTER_SEAL_ENGINE(NoProof);
+}
+
+void NoReward::init()
+{
+    ETH_REGISTER_SEAL_ENGINE(NoReward);
 }
 
 void NoProof::populateFromParent(BlockHeader& _bi, BlockHeader const& _parent) const
@@ -220,8 +212,16 @@ u256 calculateEthashDifficulty(
     bigint o = target;
     unsigned exponentialIceAgeBlockNumber = unsigned(_parent.number() + 1);
 
+    // EIP-2384 Istanbul/Berlin Difficulty Bomb Delay
+    if (_bi.number() >= _chainParams.muirGlacierForkBlock)
+    {
+        if (exponentialIceAgeBlockNumber >= 9000000)
+            exponentialIceAgeBlockNumber -= 9000000;
+        else
+            exponentialIceAgeBlockNumber = 0;
+    }
     // EIP-1234 Constantinople Ice Age delay
-    if (_bi.number() >= _chainParams.constantinopleForkBlock)
+    else if (_bi.number() >= _chainParams.constantinopleForkBlock)
     {
         if (exponentialIceAgeBlockNumber >= 5000000)
             exponentialIceAgeBlockNumber -= 5000000;

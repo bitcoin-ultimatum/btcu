@@ -1,16 +1,15 @@
 // Aleth: Ethereum C++ client, tools and libraries.
-// Copyright 2018 Aleth Authors.
+// Copyright 2013-2019 Aleth Authors.
 // Licensed under the GNU General Public License, Version 3.
 
 /** @file
  * Stub for generating main boost.test module.
  * Original code taken from boost sources.
  */
-
-
 #define BOOST_TEST_MODULE EthereumTests
 #define BOOST_TEST_NO_MAIN
 
+#include <AllTestNames.h>
 #include <test/tools/jsontests/BlockChainTests.h>
 #include <test/tools/jsontests/StateTests.h>
 #include <test/tools/jsontests/TransactionTests.h>
@@ -27,6 +26,7 @@ using namespace boost::unit_test;
 static std::ostringstream strCout;
 std::streambuf* oldCoutStreamBuf;
 std::streambuf* oldCerrStreamBuf;
+void printTestSuiteSuggestions(string const& _sMinusTArg);
 
 void customTestSuite()
 {
@@ -44,9 +44,9 @@ void customTestSuite()
     }
 
     // if running a singletest
-    if (opt.singleTestFile.is_initialized())
+    if (!opt.singleTestFile.empty())
     {
-        boost::filesystem::path file(opt.singleTestFile.get());
+        boost::filesystem::path const file(opt.singleTestFile);
         if (opt.rCurrentTestSuite.find("GeneralStateTests") != std::string::npos)
         {
             dev::test::StateTestSuite suite;
@@ -54,7 +54,7 @@ void customTestSuite()
         }
         else if (opt.rCurrentTestSuite.find("BlockchainTests") != std::string::npos)
         {
-            dev::test::BlockchainTestSuite suite;
+            dev::test::BlockchainValidTestSuite suite;
             suite.runTestWithoutFiller(file);
         }
         else if (opt.rCurrentTestSuite.find("TransitionTests") != std::string::npos)
@@ -93,7 +93,7 @@ int main(int argc, const char* argv[])
     }
 
     dev::test::Options const& opt = dev::test::Options::get();
-    if (opt.createRandomTest || opt.singleTestFile.is_initialized())
+    if (opt.createRandomTest || !opt.singleTestFile.empty())
     {
         bool testSuiteFound = false;
         for (int i = 0; i < argc; i++)
@@ -114,7 +114,7 @@ int main(int argc, const char* argv[])
             std::cerr << "createRandomTest requires a test suite to be set -t <TestSuite>\n";
             return -1;
         }
-        if (!testSuiteFound && opt.singleTestFile.is_initialized())
+        if (!testSuiteFound && !opt.singleTestFile.empty())
         {
             std::cerr
                 << "singletest <file> <testname>  requires a test suite to be set -t <TestSuite>\n";
@@ -133,10 +133,39 @@ int main(int argc, const char* argv[])
         framework::master_test_suite().add(ts1);
     }
 
+    string sMinusTArg;
+    // unit_test_main delete this option from _argv
+    for (int i = 0; i < argc; i++)  // find -t boost arg
+    {
+        std::string const arg = std::string{argv[i]};
+        if (arg == "-t" && i + 1 < argc)
+        {
+            sMinusTArg = std::string{argv[i + 1]};
+            break;
+        }
+    }
+
+    // Print suggestions of a test case if test suite not found
+    if (!sMinusTArg.empty() && !dev::test::inArray(c_allTestNames, sMinusTArg) &&
+        sMinusTArg != "customTestSuite")
+    {
+        std::cerr << "Error: '" + sMinusTArg + "' suite not found! \n";
+        printTestSuiteSuggestions(sMinusTArg);
+        return -1;
+    }
+
     std::cout << "Running tests using path: " << test::getTestPath() << std::endl;
-    int result = 0;
     auto fakeInit = [](int, char* []) -> boost::unit_test::test_suite* { return nullptr; };
-    result = unit_test_main(fakeInit, argc, const_cast<char**>(argv));
+
+    auto result = unit_test_main(fakeInit, argc, const_cast<char**>(argv));
     dev::test::TestOutputHelper::get().printTestExecStats();
     return result;
+}
+
+void printTestSuiteSuggestions(string const& _sMinusTArg)
+{
+    auto const testList = test::testSuggestions(c_allTestNames, _sMinusTArg);
+    std::cerr << "Did you mean: \n";
+    for (auto const& element : testList)
+        std::cerr << "-t " << element << "\n";
 }

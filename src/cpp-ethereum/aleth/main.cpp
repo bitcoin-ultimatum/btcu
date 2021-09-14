@@ -1,5 +1,5 @@
 // Aleth: Ethereum C++ client, tools and libraries.
-// Copyright 2019 Aleth Authors.
+// Copyright 2015-2019 Aleth Authors.
 // Licensed under the GNU General Public License, Version 3.
 
 #include <thread>
@@ -59,7 +59,7 @@ constexpr const char* c_networkConfigFileName = "network.rlp";
 void version()
 {
     const auto* buildinfo = aleth_get_buildinfo();
-    cout << "cpp-ethereum " << buildinfo->project_version << "\n";
+    cout << "aleth " << buildinfo->project_version << "\n";
     cout << "eth network protocol version: " << dev::eth::c_protocolVersion << "\n";
     cout << "Client database version: " << dev::eth::c_databaseVersion << "\n";
     cout << "Build: " << buildinfo->system_name << "/" << buildinfo->build_type << "\n";
@@ -110,11 +110,12 @@ int main(int argc, char** argv)
     setDefaultOrCLocale();
 
     // Init secp256k1 context by calling one of the functions.
-    toPublic({});
+    toPublic(Secret{});
 
     // Init defaults
     Ethash::init();
     NoProof::init();
+    NoReward::init();
 
     /// Operating mode.
     OperationMode mode = OperationMode::Node;
@@ -132,7 +133,6 @@ int main(int argc, char** argv)
 
     string jsonAdmin;
     ChainParams chainParams;
-    string privateChain;
 
     bool upnp = true;
     WithExisting withExisting = WithExisting::Trust;
@@ -149,7 +149,6 @@ int main(int argc, char** argv)
     std::map<p2p::NodeID, pair<NodeIPEndpoint, bool>> preferredNodes;
     bool bootstrap = true;
     bool disableDiscovery = false;
-    bool enableDiscovery = false;
     bool allowLocalDiscovery = false;
     static const unsigned NoNetworkID = (unsigned)-1;
     unsigned networkID = NoNetworkID;
@@ -208,7 +207,6 @@ int main(int argc, char** argv)
     auto addClientOption = clientDefaultMode.add_options();
     addClientOption("mainnet", "Use the main network protocol");
     addClientOption("ropsten", "Use the Ropsten testnet");
-    addClientOption("private", po::value<string>()->value_name("<name>"), "Use a private chain");
     addClientOption("test", "Testing mode; disable PoW and provide test rpc interface");
     addClientOption("config", po::value<string>()->value_name("<file>"),
         "Configure specialised blockchain using given JSON information\n");
@@ -219,8 +217,10 @@ int main(int argc, char** argv)
     addClientOption("admin", po::value<string>()->value_name("<password>"),
         "Specify admin session key for JSON-RPC (default: auto-generated and printed at "
         "start-up)");
-    addClientOption("kill,K", "Kill the blockchain first");
-    addClientOption("rebuild,R", "Rebuild the blockchain from the existing database");
+    addClientOption("kill,K", "Kill the blockchain first. This will remove all blocks and state.");
+    addClientOption("rebuild,R",
+        "Rebuild the blockchain from the existing database. This involves reimporting all blocks "
+        "and will probably take a while.");
     addClientOption("rescue", "Attempt to rescue a corrupt database\n");
     addClientOption("import-presale", po::value<string>()->value_name("<file>"),
         "Import a pre-sale key; you'll need to specify the password to this key");
@@ -324,9 +324,17 @@ int main(int argc, char** argv)
     addImportExportOption("import-snapshot", po::value<string>()->value_name("<path>"),
         "Import blockchain and state data from the Parity Warp Sync snapshot\n");
 
+    std::string const logChannels =
+        "block blockhdr bq chain client debug discov error ethcap exec host impolite info net "
+        "overlaydb p2pcap peer rlpx rpc snap statedb sync timer tq trace vmtrace warn warpcap watch";
     LoggingOptions loggingOptions;
     po::options_description loggingProgramOptions(
-        createLoggingProgramOptions(c_lineWidth, loggingOptions));
+        createLoggingProgramOptions(c_lineWidth, loggingOptions, logChannels));
+    // log-vmtrace is needed only in aleth
+    auto addLoggingOption = loggingProgramOptions.add_options();
+    addLoggingOption("log-vmtrace", po::bool_switch(&loggingOptions.vmTrace),
+        "Enable VM trace log (requires log-verbosity 4).\n");
+
 
     po::options_description generalOptions("GENERAL OPTIONS", c_lineWidth);
     auto addGeneralOption = generalOptions.add_options();
@@ -380,7 +388,6 @@ int main(int argc, char** argv)
     if (vm.count("test"))
     {
         testingMode = true;
-        enableDiscovery = false;
         disableDiscovery = true;
         bootstrap = false;
     }
@@ -623,16 +630,6 @@ int main(int argc, char** argv)
             cerr << "Bad " << "--network-id" << " option: " << vm["network-id"].as<string>() << "\n";
             return AlethErrors::BadNetworkIdOption;
         }
-    if (vm.count("private"))
-        try
-        {
-            privateChain = vm["private"].as<string>();
-        }
-        catch (...)
-        {
-            cerr << "Bad " << "--private" << " option: " << vm["private"].as<string>() << "\n";
-            return AlethErrors::BadPrivateOption;
-        }
     if (vm.count("kill"))
         withExisting = WithExisting::Kill;
     if (vm.count("rebuild"))
@@ -667,9 +664,9 @@ int main(int argc, char** argv)
     if (vm.count("help"))
     {
         cout << "NAME:\n"
-             << "   cpp-ethereum " << Version << '\n'
+             << "   aleth " << Version << '\n'
              << "USAGE:\n"
-             << "   cpp-ethereum [options]\n\n"
+             << "   aleth [options]\n\n"
              << "WALLET USAGE:\n";
         AccountManager::streamAccountHelp(cout);
         AccountManager::streamWalletHelp(cout);
@@ -682,32 +679,27 @@ int main(int argc, char** argv)
     {
         try
         {
-            chainParams = chainParams.loadConfig(configJSON, {}, configPath);
+            chainParams = ChainParams{configJSON, {}, configPath};
             chainConfigIsSet = true;
         }
         catch (...)
         {
-            cerr << "provided configuration is not well formatted\n";
-            cerr << "sample: \n" << genesisInfo(eth::Network::MainNetworkTest) << "\n";
-            return AlethErrors::Success;
+            cerr << "provided configuration is not well-formatted\n";
+            cerr << "well-formatted sample: \n"
+                 << genesisInfo(eth::Network::MainNetworkTest) << "\n";
+            return AlethErrors::ConfigFileInvalid;
         }
     }
 
     setupLogging(loggingOptions);
 
-    if (!privateChain.empty())
-    {
-        chainParams.extraData = sha3(privateChain).asBytes();
-        chainParams.difficulty = chainParams.minimumDifficulty;
-        chainParams.gasLimit = u256(1) << 32;
-    }
 
     if (!chainConfigIsSet)
         // default to mainnet if not already set with any of `--mainnet`, `--ropsten`, `--genesis`, `--config`
         chainParams = ChainParams(genesisInfo(eth::Network::MainNetwork), genesisStateRoot(eth::Network::MainNetwork));
 
     if (loggingOptions.verbosity > 0)
-        cout << EthGrayBold "cpp-ethereum, a C++ Ethereum client" EthReset << "\n";
+        cout << EthGrayBold "aleth, a C++ Ethereum client" EthReset << "\n";
 
     miner.execute();
 
@@ -755,7 +747,7 @@ int main(int argc, char** argv)
     };
 
     auto netPrefs = publicIP.empty() ? NetworkConfig(listenIP, listenPort, upnp) : NetworkConfig(publicIP, listenIP ,listenPort, upnp);
-    netPrefs.discovery = (privateChain.empty() && !disableDiscovery) || enableDiscovery;
+    netPrefs.discovery = !disableDiscovery;
     netPrefs.allowLocalDiscovery = allowLocalDiscovery;
     netPrefs.pin = vm.count("pin") != 0;
 
@@ -764,7 +756,7 @@ int main(int argc, char** argv)
     if (testingMode)
         chainParams.allowFutureBlocks = true;
 
-    dev::WebThreeDirect web3(WebThreeDirect::composeClientVersion("cpp-ethereum"), db::databasePath(),
+    dev::WebThreeDirect web3(WebThreeDirect::composeClientVersion("aleth"), db::databasePath(),
         snapshotPath, chainParams, withExisting, netPrefs, &nodesState, testingMode);
 
     if (!extraData.empty())
@@ -899,7 +891,7 @@ int main(int argc, char** argv)
         keyManager.import(s, "Imported key (UNSAFE)");
     }
 
-    cout << "cpp-ethereum " << Version << "\n";
+    cout << "aleth " << Version << "\n";
 
     if (mode == OperationMode::ImportSnapshot)
     {
@@ -940,7 +932,7 @@ int main(int argc, char** argv)
     if (author)
         cout << "Mining Beneficiary: " << renderFullAddress(author) << "\n";
 
-    if (bootstrap || !remoteHost.empty() || enableDiscovery || listenSet || !preferredNodes.empty())
+    if (bootstrap || !remoteHost.empty() || !disableDiscovery || listenSet || !preferredNodes.empty())
     {
         web3.startNetwork();
         cout << "Node ID: " << web3.enode() << "\n";
@@ -1025,9 +1017,9 @@ int main(int argc, char** argv)
             else
                 web3.addNode(p.first, p.second.first);
 
-        if (bootstrap && privateChain.empty())
-            for (auto const& i : Host::pocHosts())
-                web3.requirePeer(i.first, i.second);
+        if (bootstrap)
+            for (auto const& i : defaultBootNodes())
+                web3.addNode(i.first, i.second);
         if (!remoteHost.empty())
             web3.addNode(p2p::NodeID(), remoteHost + ":" + toString(remotePort));
     }

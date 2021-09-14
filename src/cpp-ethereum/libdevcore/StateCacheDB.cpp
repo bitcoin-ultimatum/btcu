@@ -1,20 +1,6 @@
-/*
-    This file is part of cpp-ethereum.
-
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2014-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 #include "StateCacheDB.h"
 #include "Common.h"
 #include "CommonData.h"
@@ -59,12 +45,8 @@ std::string StateCacheDB::lookup(h256 const& _h) const
     {
         if (!m_enforceRefs || it->second.second > 0)
             return it->second.first;
-#ifndef WIN32
         else
-            cwarn << "Lookup required for value with refcount == 0. This is probably a critical "
-                     "trie issue"
-                  << _h;
-#endif
+            cwarn << "Lookup required for value with refcount == 0. This is probably a critical trie issue" << _h;
     }
     return std::string();
 }
@@ -93,9 +75,6 @@ void StateCacheDB::insert(h256 const& _h, bytesConstRef _v)
     }
     else
         m_main[_h] = make_pair(_v.toString(), 1);
-#if ETH_PARANOIA
-    cdebug << "INST" << _h << "=>" << m_main[_h].second;
-#endif
 }
 
 bool StateCacheDB::kill(h256 const& _h)
@@ -110,19 +89,6 @@ bool StateCacheDB::kill(h256 const& _h)
             m_main[_h].second--;
             return true;
         }
-#if ETH_PARANOIA
-        else
-        {
-            // If we get to this point, then there was probably a node in the level DB which we need to remove and which we have previously
-            // used as part of the memory-based StateCacheDB. Nothing to be worried about *as long as the node exists in the DB*.
-            cdebug << "NOKILL-WAS" << _h;
-        }
-        cdebug << "KILL" << _h << "=>" << m_main[_h].second;
-    }
-    else
-    {
-        cdebug << "NOKILL" << _h;
-#endif
     }
     return false;
 }

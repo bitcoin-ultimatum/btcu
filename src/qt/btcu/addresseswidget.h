@@ -48,6 +48,7 @@ private Q_SLOTS:
     void onCopyClicked();
     void onAddContactShowHideClicked();
     void onpbnMenuClicked();
+    void showEvent(QShowEvent *event);
 
     void changeTheme(bool isLightTheme, QString &theme) override;
 private:

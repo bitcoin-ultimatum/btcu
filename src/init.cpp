@@ -1488,6 +1488,8 @@ bool AppInit2()
                 delete pblocktree;
                 delete zerocoinDB;
                 delete pSporkDB;
+
+                ContractStateShutdown();
                 
                 //BTCU specific: zerocoin and spork DB's
                 zerocoinDB = new CZerocoinDB(0, false, fReindex);
@@ -1599,6 +1601,7 @@ bool AppInit2()
                     RecalculateBTCUSupply(reindexZerocoin ? Params().Zerocoin_StartHeight() : 1);
                 }
 
+                ContractStateInit();
 
                 if (!fReindex) {
                     uiInterface.InitMessage(_("Verifying blocks..."));
@@ -1656,7 +1659,6 @@ bool AppInit2()
         }
     }
 
-    ContractStateInit();
 
     // As LoadBlockIndex can take several minutes, it's possible the user
     // requested to kill the GUI during the last operation. If so, exit.
@@ -2023,6 +2025,9 @@ bool AppInit2()
         pwalletMain->pLeasingManager = pleasingManagerMain;
 #endif // ENABLE_WALLET
 #endif // ENABLE_LEASING_MANAGER
+
+    //Update block hash and block height in leasing manager and other backends
+    GetMainSignals().UpdatedBlockTip(chainActive.Tip());
 
 #if defined(ENABLE_WALLET) && defined(ENABLE_LEASING_MANAGER)
     // Generate coins in the background

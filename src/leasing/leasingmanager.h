@@ -37,6 +37,10 @@ public:
     bool GetLeasingRewards(const LeaserType type, const CKeyID& leaserID, const size_t nLimit, std::vector<CTxOut>& vRewards) const;
     CTxOut CalcLeasingReward(const COutPoint& point, const CKeyID& keyID) const;
     void GetAllAmountsLeasedTo(CPubKey &pubKey, CAmount &amount) const;
+    void GetAllAmountsLeasedFrom(CPubKey &pubKey, CAmount &amount) const;
+
+    CTxOut CalcLeasingReward(const LeaserType type, const CKeyID& leaserID, const CAmount aAmount) const;
+    void CalcLeasingReward(CPubKey &pubKey, CAmount &amount) const;
 
     const uint256& GetBlockHash() const;
     

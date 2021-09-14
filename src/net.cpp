@@ -1479,13 +1479,19 @@ void ThreadOpenAddedConnections()
         {
             LOCK(cs_vNodes);
             for (CNode* pnode : vNodes)
-                for (std::list<std::vector<CService> >::iterator it = lservAddressesToAdd.begin(); it != lservAddressesToAdd.end(); it++)
+                LOCK(cs_vNodes);
+            for (CNode* pnode : vNodes)
+                for (std::list<std::vector<CService> >::iterator it = lservAddressesToAdd.begin(); it != lservAddressesToAdd.end(); it++) {
                     for (CService& addrNode : *(it))
                         if (pnode->addr == addrNode) {
                             it = lservAddressesToAdd.erase(it);
-                            it--;
+                            if (lservAddressesToAdd.begin() != it)
+                                it--;
                             break;
                         }
+                    if (lservAddressesToAdd.size() == 0)
+                        break;
+                }
         }
         for (std::vector<CService>& vserv : lservAddressesToAdd) {
             CSemaphoreGrant grant(*semOutbound);

@@ -2,77 +2,38 @@
     "andNonConst" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
-            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
+            "filling-rpc-server" : "Geth-1.9.6-unstable-63b18027-20190920",
+            "filling-tool-version" : "retesteth-0.0.1+commit.0ae18aef.Linux.g++",
+            "lllcversion" : "Version: 0.5.12-develop.2019.9.13+commit.2d601a4f.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stArgsZeroOneBalance/andNonConstFiller.yml",
-            "sourceHash" : "3d5abb158c46ad438375479226ce03f39ffc0f809558ab533520b0fbd42d7e68"
+            "sourceHash" : "af4a324dac9c55f53806bae80c00d568e0ceb8431e14e83d0af215f71d172370"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
-            "currentDifficulty" : "0x20000",
+            "currentDifficulty" : "0x020000",
             "currentGasLimit" : "0x0f4240",
             "currentNumber" : "0x01",
             "currentTimestamp" : "0x03e8",
             "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
         },
         "post" : {
-            "Byzantium" : [
+            "Istanbul" : [
                 {
-                    "hash" : "0x233eb567263caf5e290cc041b3e89821260bd1a5bbba5d401e65e805c2dd3d00",
                     "indexes" : {
                         "data" : 0,
                         "gas" : 0,
                         "value" : 0
                     },
+                    "hash" : "0xc6b8259cb6c7759cadab6d66fe52cf784c73a113bff75458ade39af1c7545e95",
                     "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
                 },
                 {
-                    "hash" : "0x46d15aac1c9fcd44fcc79e5902495fd197e8f3c20e9b3368e892830a5b70000b",
                     "indexes" : {
                         "data" : 0,
                         "gas" : 0,
                         "value" : 1
                     },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "Constantinople" : [
-                {
-                    "hash" : "0x5d7914f5bf8f21c682d81f0497ae99fdb28497f53d10d9c9f1f84f367c84a3b3",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                },
-                {
-                    "hash" : "0x46d15aac1c9fcd44fcc79e5902495fd197e8f3c20e9b3368e892830a5b70000b",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 1
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "ConstantinopleFix" : [
-                {
-                    "hash" : "0x233eb567263caf5e290cc041b3e89821260bd1a5bbba5d401e65e805c2dd3d00",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                },
-                {
-                    "hash" : "0x46d15aac1c9fcd44fcc79e5902495fd197e8f3c20e9b3368e892830a5b70000b",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 1
-                    },
+                    "hash" : "0x3da391d490d6372b3c5f7bbc3c4ac88757078f340da65ce6622d65bdfa1a973a",
                     "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
                 }
             ]
@@ -80,14 +41,14 @@
         "pre" : {
             "0x095e7baea6a6c7c4c2dfeb977efac326af552d87" : {
                 "balance" : "0x00",
-                "code" : "0x73095e7baea6a6c7c4c2dfeb977efac326af552d873173095e7baea6a6c7c4c2dfeb977efac326af552d873116600055",
+                "code" : "0x73095e7baea6a6c7c4c2dfeb977efac326af552d873173095e7baea6a6c7c4c2dfeb977efac326af552d87311660005500",
                 "nonce" : "0x00",
                 "storage" : {
                 }
             },
             "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
                 "balance" : "0x0de0b6b3a7640000",
-                "code" : "",
+                "code" : "0x",
                 "nonce" : "0x00",
                 "storage" : {
                 }

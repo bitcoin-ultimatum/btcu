@@ -2,72 +2,29 @@
     "delegatecallAndOOGatTxLevel" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
-            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
+            "filling-rpc-server" : "Geth-1.9.6-unstable-63b18027-20190920",
+            "filling-tool-version" : "retesteth-0.0.1+commit.0ae18aef.Linux.g++",
+            "lllcversion" : "Version: 0.5.12-develop.2019.9.13+commit.2d601a4f.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stDelegatecallTestHomestead/delegatecallAndOOGatTxLevelFiller.json",
-            "sourceHash" : "8d761c310ebb4e5041c17b5b8f86aa6c84530260b76dcf9546b138b3ccab00da"
+            "sourceHash" : "19894e4bc30dff2a78b120dff216766216160d9f3a64d1ba1568818c574bdbdb"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
-            "currentDifficulty" : "0x20000",
+            "currentDifficulty" : "0x020000",
             "currentGasLimit" : "0x01c9c380",
             "currentNumber" : "0x01",
             "currentTimestamp" : "0x03e8",
             "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
         },
         "post" : {
-            "Byzantium" : [
+            "Istanbul" : [
                 {
-                    "hash" : "0xba5b78a980dd457d36a4662048a50e4dd61ae61dc46aa65fd8c7e62d3737c23f",
                     "indexes" : {
                         "data" : 0,
                         "gas" : 0,
                         "value" : 0
                     },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "Constantinople" : [
-                {
-                    "hash" : "0xba5b78a980dd457d36a4662048a50e4dd61ae61dc46aa65fd8c7e62d3737c23f",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "ConstantinopleFix" : [
-                {
-                    "hash" : "0xba5b78a980dd457d36a4662048a50e4dd61ae61dc46aa65fd8c7e62d3737c23f",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "EIP150" : [
-                {
-                    "hash" : "0xba5b78a980dd457d36a4662048a50e4dd61ae61dc46aa65fd8c7e62d3737c23f",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "Homestead" : [
-                {
-                    "hash" : "0x2e18df95e1e1ff61fc388c004dcb33c7ec8d70f7ecf1582b8a7b9e09d0213aff",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
+                    "hash" : "0xa6c348fa5d4f200b3a7fde1be4c9f780467d1aac16e59f7e06a1f8a06200e27f",
                     "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
                 }
             ]
@@ -75,7 +32,7 @@
         "pre" : {
             "0x095e7baea6a6c7c4c2dfeb977efac326af552d87" : {
                 "balance" : "0x0186a0",
-                "code" : "0x600060006000600073945304eb96065b2a98b57a48a06ae28d285a71b5622dc6c1f4600055",
+                "code" : "0x600060006000600073945304eb96065b2a98b57a48a06ae28d285a71b5622dc6c1f460005500",
                 "nonce" : "0x00",
                 "storage" : {
                 }
@@ -89,7 +46,7 @@
             },
             "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
                 "balance" : "0x0de0b6b3a7640000",
-                "code" : "",
+                "code" : "0x",
                 "nonce" : "0x00",
                 "storage" : {
                 }

@@ -1,30 +1,16 @@
-/*
-    This file is part of cpp-ethereum.
-
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file State.cpp
- * @author Gav Wood <i@gavwood.com>
- * @date 2014
- */
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2013-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
 #include "State.h"
 
+#ifndef QTUM_BUILD
 #include "Block.h"
 #include "BlockChain.h"
+#endif
 #include "ExtVM.h"
 #include "TransactionQueue.h"
+#include "DatabasePaths.h"
 #include <libdevcore/Assertions.h>
 #include <libdevcore/DBFactory.h>
 #ifndef QTUM_BUILD
@@ -32,7 +18,7 @@
 #endif
 #include <libevm/VMFactory.h>
 #include <boost/filesystem.hpp>
-#include <boost/timer.hpp>
+#include "util.h"
 
 using namespace std;
 using namespace dev;
@@ -56,60 +42,69 @@ State::State(State const& _s):
     m_unchangedCacheEntries(_s.m_unchangedCacheEntries),
     m_nonExistingAccountsCache(_s.m_nonExistingAccountsCache),
     m_touched(_s.m_touched),
+    m_unrevertablyTouched(_s.m_unrevertablyTouched),
     m_accountStartNonce(_s.m_accountStartNonce)
 {}
 
 OverlayDB State::openDB(fs::path const& _basePath, h256 const& _genesisHash, WithExisting _we)
 {
-    fs::path path = _basePath.empty() ? db::databasePath() : _basePath;
-
-    if (db::isDiskDatabase() && _we == WithExisting::Kill)
-    {
-#ifndef WIN32
-        clog(VerbosityDebug, "statedb") << "Killing state database (WithExisting::Kill).";
-#endif
-        fs::remove_all(path / fs::path("state"));
-    }
-
-    path /= fs::path(toHex(_genesisHash.ref().cropped(0, 4))) / fs::path(toString(c_databaseVersion));
+    DatabasePaths const dbPaths{_basePath, _genesisHash};
     if (db::isDiskDatabase())
     {
-        fs::create_directories(path);
-        DEV_IGNORE_EXCEPTIONS(fs::permissions(path, fs::owner_all));
+        if (_we == WithExisting::Kill)
+        {
+            clog(VerbosityInfo, "statedb") << "Deleting state database: " << dbPaths.statePath();
+            fs::remove_all(dbPaths.statePath());
+        }
+
+        clog(VerbosityDebug, "statedb")
+            << "Verifying path exists (and creating if not present): " << dbPaths.chainPath();
+        fs::create_directories(dbPaths.chainPath());
+        clog(VerbosityDebug, "statedb")
+            << "Ensuring permissions are set for path: " << dbPaths.chainPath();
+        DEV_IGNORE_EXCEPTIONS(fs::permissions(dbPaths.chainPath(), fs::owner_all));
     }
 
     try
     {
-		std::unique_ptr<db::DatabaseFace> db = db::DBFactory::create(path / fs::path("state"));
-#ifndef WIN32
-        clog(VerbosityTrace, "statedb") << "Opened state DB.";
-#endif
+        clog(VerbosityTrace, "statedb") << "Opening state database";
+        std::unique_ptr<db::DatabaseFace> db = db::DBFactory::create(dbPaths.statePath());
         return OverlayDB(std::move(db));
     }
     catch (boost::exception const& ex)
     {
-#ifndef WIN32
-        cwarn << boost::diagnostic_information(ex) << '\n';
-#endif
-        if (!db::isDiskDatabase())
-            throw;
-        else if (fs::space(path / fs::path("state")).available < 1024)
+        if (db::isDiskDatabase())
         {
-#ifndef WIN32
-            cwarn << "Not enough available space found on hard drive. Please free some up and then "
-                     "re-run. Bailing.";
-#endif
-            BOOST_THROW_EXCEPTION(NotEnoughAvailableSpace());
+            clog(VerbosityError, "statedb")
+                << "Error opening state database: " << dbPaths.statePath();
+            db::DatabaseStatus const dbStatus =
+                *boost::get_error_info<db::errinfo_dbStatusCode>(ex);
+            if (fs::space(dbPaths.statePath()).available < 1024)
+            {
+                clog(VerbosityError, "statedb")
+                    << "Not enough available space found on hard drive. Please free some up and "
+                       "then re-run. Bailing.";
+                BOOST_THROW_EXCEPTION(NotEnoughAvailableSpace());
+            }
+            else if (dbStatus == db::DatabaseStatus::Corruption)
+            {
+                clog(VerbosityError, "statedb")
+                    << "Database corruption detected. Please see the exception for corruption "
+                       "details. Exception: "
+                    << boost::diagnostic_information(ex);
+                BOOST_THROW_EXCEPTION(DatabaseCorruption());
+            }
+            else if (dbStatus == db::DatabaseStatus::IOError)
+            {
+                clog(VerbosityError, "statedb") << "Database already open. You appear to have "
+                                                   "another instance of Aleth running.";
+                BOOST_THROW_EXCEPTION(DatabaseAlreadyOpen());
+            }
         }
-        else
-        {
-#ifndef WIN32
-            cwarn << "Database " << (path / fs::path("state"))
-                  << "already open. You appear to have another instance of ethereum running. "
-                     "Bailing.";
-#endif
-            BOOST_THROW_EXCEPTION(DatabaseAlreadyOpen());
-        }
+        clog(VerbosityError, "statedb")
+            << "Unknown error encountered when opening state database. Exception details: "
+            << boost::diagnostic_information(ex);
+        throw;
     }
 }
 
@@ -139,6 +134,13 @@ void State::removeEmptyAccounts()
     for (auto& i: m_cache)
         if (i.second.isDirty() && i.second.isEmpty())
             i.second.kill();
+
+    for (auto const& _address : m_unrevertablyTouched)
+    {
+        Account* a = account(_address);
+        if (a && a->isEmpty())
+            a->kill();
+    }
 }
 
 State& State::operator=(State const& _s)
@@ -152,6 +154,7 @@ State& State::operator=(State const& _s)
     m_unchangedCacheEntries = _s.m_unchangedCacheEntries;
     m_nonExistingAccountsCache = _s.m_nonExistingAccountsCache;
     m_touched = _s.m_touched;
+    m_unrevertablyTouched = _s.m_unrevertablyTouched;
     m_accountStartNonce = _s.m_accountStartNonce;
     return *this;
 }
@@ -181,11 +184,15 @@ Account* State::account(Address const& _addr)
     clearCacheIfTooLarge();
 
     RLP state(stateBack);
-    auto i = m_cache.emplace(
-        std::piecewise_construct,
-        std::forward_as_tuple(_addr),
-        std::forward_as_tuple(state[0].toInt<u256>(), state[1].toInt<u256>(), state[2].toHash<h256>(), state[3].toHash<h256>(), Account::Unchanged)
-    );
+    auto const nonce = state[0].toInt<u256>();
+    auto const balance = state[1].toInt<u256>();
+    auto const storageRoot = state[2].toHash<h256>();
+    auto const codeHash = state[3].toHash<h256>();
+    // version is 0 if absent from RLP
+    auto const version = state[4] ? state[4].toInt<u256>() : 0;
+
+    auto i = m_cache.emplace(piecewise_construct, forward_as_tuple(_addr),
+        forward_as_tuple(nonce, balance, storageRoot, codeHash, version, Account::Unchanged));
     m_unchangedCacheEntries.push_back(_addr);
     return &i.first->second;
 }
@@ -293,6 +300,7 @@ std::pair<State::AddressMap, h256> State::addresses(
 
 void State::setRoot(h256 const& _r)
 {
+    LogPrint("sc","%s: hashStateRoot: %s\n", __func__, _r.hex().c_str());
     m_cache.clear();
     m_unchangedCacheEntries.clear();
     m_nonExistingAccountsCache.clear();
@@ -529,10 +537,13 @@ bytes const& State::code(Address const& _addr) const
     return a->code();
 }
 
-void State::setCode(Address const& _address, bytes&& _code)
+void State::setCode(Address const& _address, bytes&& _code, u256 const& _version)
 {
-    m_changeLog.emplace_back(_address, code(_address));
-    m_cache[_address].setCode(std::move(_code));
+    // rollback assumes that overwriting of the code never happens
+    // (not allowed in contract creation logic in Executive)
+    assert(!addressHasCode(_address));
+    m_changeLog.emplace_back(Change::Code, _address);
+    m_cache[_address].setCode(move(_code), _version);
 }
 
 h256 State::codeHash(Address const& _a) const
@@ -562,6 +573,17 @@ size_t State::codeSize(Address const& _a) const
     }
     else
         return 0;
+}
+
+u256 State::version(Address const& _a) const
+{
+    Account const* a = account(_a);
+    return a ? a->version() : 0;
+}
+
+void State::unrevertableTouch(Address const& _address)
+{
+    m_unrevertablyTouched.insert(_address);
 }
 
 size_t State::savepoint() const
@@ -596,7 +618,7 @@ void State::rollback(size_t _savepoint)
             m_cache.erase(change.address);
             break;
         case Change::Code:
-            account.setCode(std::move(change.oldCode));
+            account.resetCode();
             break;
         case Change::Touch:
             account.untouch();
@@ -616,10 +638,9 @@ std::pair<ExecutionResult, TransactionReceipt> State::execute(EnvInfo const& _en
     e.setResultRecipient(res);
 
     auto onOp = _onOp;
-#if ETH_VMTRACE
-    if (!onOp)
+    if (isVmTraceEnabled() && !onOp)
         onOp = e.simpleTrace();
-#endif
+
     u256 const startGasUsed = _envInfo.gasUsed();
     bool const statusCode = executeTransaction(e, _t, onOp);
 
@@ -643,12 +664,14 @@ std::pair<ExecutionResult, TransactionReceipt> State::execute(EnvInfo const& _en
     return make_pair(res, receipt);
 }
 
-void State::executeBlockTransactions(Block const& _block, unsigned _txCount, LastBlockHashesFace const& _lastHashes, SealEngineFace const& _sealEngine)
+#ifndef QTUM_BUILD
+void State::executeBlockTransactions(Block const& _block, unsigned _txCount,
+    LastBlockHashesFace const& _lastHashes, SealEngineFace const& _sealEngine)
 {
     u256 gasUsed = 0;
     for (unsigned i = 0; i < _txCount; ++i)
     {
-        EnvInfo envInfo(_block.info(), _lastHashes, gasUsed);
+        EnvInfo envInfo(_block.info(), _lastHashes, gasUsed, _sealEngine.chainParams().chainID);
 
         Executive e(*this, envInfo, _sealEngine);
         executeTransaction(e, _block.pending()[i], OnOpFunc());
@@ -656,6 +679,7 @@ void State::executeBlockTransactions(Block const& _block, unsigned _txCount, Las
         gasUsed += e.gasUsed();
     }
 }
+#endif
 
 /// @returns true when normally halted; false when exceptionally halted; throws when internal VM
 /// exception occurred.
@@ -753,6 +777,7 @@ std::ostream& dev::eth::operator<<(std::ostream& _out, State const& _s)
     return _out;
 }
 
+#ifndef QTUM_BUILD
 State& dev::eth::createIntermediateState(State& o_s, Block const& _block, unsigned _txIndex, BlockChain const& _bc)
 {
     o_s = _block.state();
@@ -766,6 +791,7 @@ State& dev::eth::createIntermediateState(State& o_s, Block const& _block, unsign
     }
     return o_s;
 }
+#endif
 
 template <class DB>
 AddressHash dev::eth::commit(AccountMap const& _cache, SecureTrieDB<Address, DB>& _state)
@@ -778,7 +804,11 @@ AddressHash dev::eth::commit(AccountMap const& _cache, SecureTrieDB<Address, DB>
                 _state.remove(i.first);
             else
             {
-                RLPStream s(4);
+                auto const version = i.second.version();
+
+                // version = 0: [nonce, balance, storageRoot, codeHash]
+                // version > 0: [nonce, balance, storageRoot, codeHash, version]
+                RLPStream s(version != 0 ? 5 : 4);
                 s << i.second.nonce() << i.second.balance();
 
                 if (i.second.storageOverlay().empty())
@@ -808,6 +838,9 @@ AddressHash dev::eth::commit(AccountMap const& _cache, SecureTrieDB<Address, DB>
                 }
                 else
                     s << i.second.codeHash();
+
+                if (version != 0)
+                    s << i.second.version();
 
                 _state.insert(i.first, &s.out());
             }

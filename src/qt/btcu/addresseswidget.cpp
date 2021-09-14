@@ -388,6 +388,11 @@ void AddressesWidget::onpbnMenuClicked()
       }
    }
    this->index = rIndex;
+
+   if(pos.y()+menu->height() > ui->scrollAddresses->height())
+   {
+       pos.setY(pos.y() - (menu->height() + btnMenu->height()));
+   }
    menu->move(pos);
    menu->show();
 
@@ -397,6 +402,7 @@ void AddressesWidget::onpbnMenuClicked()
 void AddressesWidget::updateAddresses()
 {
    addressTablemodel->refreshAddressTable();
+   this->filter->setType(QStringList({AddressTableModel::Send, AddressTableModel::ColdStakingSend}));
    this->filter->setSourceModel(addressTablemodel);
    QList<AddressLabelRow *> listRow = ui->scrollAreaWidgetContents->findChildren<AddressLabelRow*> ();
    int size = listRow.length();
@@ -408,4 +414,8 @@ void AddressesWidget::updateAddresses()
       delete row;
    }
    addRows();
+}
+
+void AddressesWidget::showEvent(QShowEvent *event) {
+    updateAddresses();
 }

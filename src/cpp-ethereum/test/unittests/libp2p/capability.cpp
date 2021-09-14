@@ -1,5 +1,5 @@
 // Aleth: Ethereum C++ client, tools and libraries.
-// Copyright 2019 Aleth Authors.
+// Copyright 2015-2019 Aleth Authors.
 // Licensed under the GNU General Public License, Version 3.
 
 #include <libp2p/Capability.h>
@@ -20,12 +20,18 @@ class TestCapability : public CapabilityFace, public Worker
 public:
     explicit TestCapability(Host const& _host) : Worker("test"), m_host(_host) {}
 
-    std::string name() const override { return "test"; }
+    string name() const override { return "test"; }
     unsigned version() const override { return 2; }
+    CapDesc descriptor() const override { return {name(), version()}; }
     unsigned messageCount() const override { return UserPacket + 1; }
-
-    void onStarting() override {}
-    void onStopping() override {}
+    char const* packetTypeToString(unsigned) const override
+    {
+        return "UserPacket";
+    }
+    chrono::milliseconds backgroundWorkInterval() const override
+    {
+        return c_backgroundWorkInterval;
+    }
 
     void onConnect(NodeID const& _nodeID, u256 const&) override
     {
@@ -45,6 +51,8 @@ public:
         m_testSums.erase(_nodeID);
     }
 
+    void doBackgroundWork() override {}
+
     void sendTestMessage(NodeID const& _id, int _x)
     {
         RLPStream s;
@@ -52,7 +60,7 @@ public:
             _id, m_host.capabilityHost()->prep(_id, name(), s, UserPacket, 1) << _x);
     }
 
-    std::pair<int, int> retrieveTestData(NodeID const& _id)
+    pair<int, int> retrieveTestData(NodeID const& _id)
     {
         int cnt = 0;
         int checksum = 0;
@@ -66,10 +74,14 @@ public:
         return {cnt, checksum};
     }
 
+    static chrono::milliseconds constexpr c_backgroundWorkInterval{1000};
+
     Host const& m_host;
-    std::unordered_map<NodeID, int> m_cntReceivedMessages;
-    std::unordered_map<NodeID, int> m_testSums;
+    unordered_map<NodeID, int> m_cntReceivedMessages;
+    unordered_map<NodeID, int> m_testSums;
 };
+
+chrono::milliseconds constexpr TestCapability::c_backgroundWorkInterval;
 
 TEST(p2p, capability)
 {
@@ -101,8 +113,7 @@ TEST(p2p, capability)
 
     EXPECT_TRUE(host1.isStarted());
     EXPECT_TRUE(host2.isStarted());
-    host1.requirePeer(
-        host2.id(), NodeIPEndpoint(bi::address::from_string(localhost), port2, port2));
+    host1.requirePeer(host2.id(), NodeIPEndpoint(bi::make_address(localhost), port2, port2));
 
     // Wait for up to 12 seconds, to give the hosts time to connect to each other.
     for (unsigned i = 0; i < 12000; i += step)
@@ -122,7 +133,7 @@ TEST(p2p, capability)
         thc2->sendTestMessage(host1.id(), i);
 
     this_thread::sleep_for(chrono::seconds(target / 64 + 1));
-    std::pair<int, int> testData = thc1->retrieveTestData(host2.id());
+    pair<int, int> testData = thc1->retrieveTestData(host2.id());
     EXPECT_EQ(target, testData.first);
     EXPECT_EQ(checksum, testData.second);
 }

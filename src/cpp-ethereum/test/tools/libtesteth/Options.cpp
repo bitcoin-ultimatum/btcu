@@ -1,23 +1,9 @@
-/*
-    This file is part of cpp-ethereum.
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2017-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file
- * Class for handling testeth custom options
- */
-
+/// @file
+/// Class for handling testeth custom options
 #include <libdevcore/DBFactory.h>
 #include <libevm/VMFactory.h>
 #include <libweb3jsonrpc/Debug.h>
@@ -39,40 +25,45 @@ void printHelp()
     cout << "Usage: \n";
     cout << std::left;
     cout << "\nSetting test suite\n";
-    cout << setw(30) << "-t <TestSuite>" << setw(25) << "Execute test operations\n";
-    cout << setw(30) << "-t <TestSuite>/<TestCase>\n";
-    cout << setw(30) << "--testpath <PathToTheTestRepo>\n";
+    cout << setw(35) << "-t <TestSuite>" << "Execute test operations\n";
+    cout << "-t <TestSuite>/<TestCase>\n";
+    cout << setw(35) << "--testpath <PathToTheTestRepo>" << "Set path to the test folder\n";
 
     cout << "\nDebugging\n";
-    cout << setw(30) << "-d <index>" << setw(25) << "Set the transaction data array index when running GeneralStateTests\n";
-    cout << setw(30) << "-g <index>" << setw(25) << "Set the transaction gas array index when running GeneralStateTests\n";
-    cout << setw(30) << "-v <index>" << setw(25) << "Set the transaction value array index when running GeneralStateTests\n";
-    cout << setw(30) << "--singletest <TestName>" << setw(25) << "Run on a single test\n";
-    cout << setw(30) << "--singletest <TestFile> <TestName>\n";
-    cout << setw(30) << "--verbosity <level>" << setw(25) << "Set logs verbosity. 0 - silent, 1 - only errors, 2 - informative, >2 - detailed\n";
-    cout << setw(30) << "--vm <interpreter|jit|smart|hera>" << setw(25) << "Set VM type for VMTests suite\n";
-    cout << setw(30) << "--vmtrace" << setw(25) << "Enable VM trace for the test. (Require build with VMTRACE=1)\n";
-    cout << setw(30) << "--jsontrace <Options>" << setw(25) << "Enable VM trace to stdout in json format. Argument is a json config: '{ \"disableStorage\" : false, \"disableMemory\" : false, \"disableStack\" : false, \"fullStorage\" : true }'\n";
-    cout << setw(30) << "--stats <OutFile>" << setw(25) << "Output debug stats to the file\n";
-    cout << setw(30) << "--exectimelog" << setw(25) << "Output execution time for each test suite\n";
-    cout << setw(30) << "--statediff" << setw(25) << "Trace state difference for state tests\n";
+    cout << setw(35) << "-d <index>" << setw(25) << "Set the transaction data array index when running GeneralStateTests\n";
+    cout << setw(35) << "-g <index>" << setw(25) << "Set the transaction gas array index when running GeneralStateTests\n";
+    cout << setw(35) << "-v <index>" << setw(25) << "Set the transaction value array index when running GeneralStateTests\n";
+    cout << setw(35) << "--singletest <TestName>" << "Run on a single test\n";
+    cout << setw(35) << "--singlenet <networkId>" << setw(25) << "Run tests for a specific network (Frontier|Homestead|EIP150|EIP158|Byzantium|Constantinople|ConstantinopleFix)\n";
+    cout << setw(35) << "--testfile <TestFile>"
+         << "Run tests from a file. Requires -t <TestSuite>\n";
+    cout << setw(35) << "--testfile <TestFile> --singletest <TestName>"
+         << "Run on a single test from a file. Requires -t <TestSuite>\n";
+    cout << setw(35) << "--verbosity <level>" << setw(25) << "Set logs verbosity. 0 - silent, 1 - only errors, 2 - informative, >2 - detailed\n";
+    cout << setw(35) << "--vm <name|path> (=legacy)" << setw(25) << "Set VM type for VMTests suite. Available options are: interpreter, legacy.\n";
+    cout << setw(35) << "--evmc <option>=<value>" << "EVMC option\n";
+    cout << setw(35) << "--vmtrace" << setw(25) << "Enable VM trace for the test.\n";
+    cout << setw(35) << "--jsontrace <Options>" << setw(25) << "Enable VM trace to stdout in json format. Argument is a json config: '{ \"disableStorage\" : false, \"disableMemory\" : false, \"disableStack\" : false, \"fullStorage\" : true }'\n";
+    cout << setw(35) << "--stats <OutFile>" << setw(25) << "Output debug stats to the file\n";
+    cout << setw(35) << "--exectimelog" << setw(25) << "Output execution time for each test suite\n";
+    cout << setw(35) << "--statediff" << setw(25) << "Trace state difference for state tests\n";
 
     cout << "\nAdditional Tests\n";
-    cout << setw(30) << "--all" << setw(25) << "Enable all tests\n";
+    cout << setw(35) << "--all" << setw(25) << "Enable all tests\n";
 
     cout << "\nTest Generation\n";
-    cout << setw(30) << "--filltests" << setw(25) << "Run test fillers\n";
-    cout << setw(30) << "--fillchain" << setw(25) << "When filling the state tests, fill tests as blockchain instead\n";
-    cout << setw(30) << "--showhash" << setw(25) << "Show filler hash debug information\n";
-    cout << setw(30) << "--randomcode <MaxOpcodeNum>" << setw(25) << "Generate smart random EVM code\n";
-    cout << setw(30) << "--createRandomTest" << setw(25) << "Create random test and output it to the console\n";
-    cout << setw(30) << "--createRandomTest <PathToOptions.json>" << setw(25) << "Use following options file for random code generation\n";
-    cout << setw(30) << "--seed <uint>" << setw(25) << "Define a seed for random test\n";
-    cout << setw(30) << "--options <PathTo.json>" << setw(25) << "Use following options file for random code generation\n";
-    //cout << setw(30) << "--fulloutput" << setw(25) << "Disable address compression in the output field\n";
-    cout << setw(30) << "--db <name> (=memorydb)" << setw(25) << "Use the supplied database for the block and state databases. Valid options: leveldb, rocksdb, memorydb\n";
-    cout << setw(30) << "--help" << setw(25) << "Display list of command arguments\n";
-    cout << setw(30) << "--version" << setw(25) << "Display build information\n";
+    cout << setw(35) << "--filltests" << "Run test fillers\n";
+    cout << setw(35) << "--fillchain" << setw(25) << "When filling the state tests, fill tests as blockchain instead\n";
+    cout << setw(35) << "--showhash" << setw(25) << "Show filler hash debug information\n";
+    cout << setw(35) << "--randomcode <MaxOpcodeNum>" << setw(25) << "Generate smart random EVM code\n";
+    cout << setw(35) << "--createRandomTest" << setw(25) << "Create random test and output it to the console\n";
+    cout << setw(35) << "--createRandomTest <PathToOptions.json> " << setw(25) << "Use following options file for random code generation\n";
+    cout << setw(35) << "--seed <uint>" << setw(25) << "Define a seed for random test\n";
+    cout << setw(35) << "--options <PathTo.json>" << setw(25) << "Use following options file for random code generation\n";
+    cout << setw(30) << "--fullstate" << setw(25) << "Do not compress large states to hash\n";
+    cout << setw(35) << "--db <name> (=memorydb)" << setw(25) << "Use the supplied database for the block and state databases. Valid options: leveldb, rocksdb, memorydb\n";
+    cout << setw(35) << "--help" << setw(25) << "Display list of command arguments\n";
+    cout << setw(35) << "--version" << setw(25) << "Display build information\n";
 }
 
 void printVersion()
@@ -81,7 +72,7 @@ void printVersion()
 }
 }
 
-void Options::setVerbosity(int _level)
+void Options::setVerbosity(int _level, bool _vmTrace)
 {
     static boost::iostreams::stream<boost::iostreams::null_sink> nullOstream(
         (boost::iostreams::null_sink()));
@@ -96,6 +87,7 @@ void Options::setVerbosity(int _level)
     }
     else if (_level == 1 || _level == 2)
         logOptions.verbosity = VerbositySilent;
+    logOptions.vmTrace = _vmTrace;
     dev::setupLogging(logOptions);
 }
 
@@ -178,13 +170,8 @@ Options::Options(int argc, const char** argv)
         }
         else if (arg == "--vmtrace")
         {
-#if ETH_VMTRACE
             vmtrace = true;
             verbosity = VerbosityTrace;
-#else
-            cerr << "--vmtrace option requires a build with cmake -DVMTRACE=1\n";
-            exit(1);
-#endif
         }
         else if (arg == "--jsontrace")
         {
@@ -214,24 +201,7 @@ Options::Options(int argc, const char** argv)
         else if (arg == "--singletest")
         {
             throwIfNoArgumentFollows();
-            singleTest = true;
-            auto name1 = std::string{argv[++i]};
-            if (i + 1 < argc) // two params
-            {
-                auto name2 = std::string{argv[++i]};
-                if (name2[0] == '-') // not param, another option
-                {
-                    singleTestName = std::move(name1);
-                    i--;
-                }
-                else
-                {
-                    singleTestFile = std::move(name1);
-                    singleTestName = std::move(name2);
-                }
-            }
-            else
-                singleTestName = std::move(name1);
+            singleTestName = std::string{argv[++i]};
         }
         else if (arg == "--singlenet")
         {
@@ -239,8 +209,18 @@ Options::Options(int argc, const char** argv)
             singleTestNet = std::string{argv[++i]};
             ImportTest::checkAllowedNetwork(singleTestNet);
         }
-        else if (arg == "--fulloutput")
-            fulloutput = true;
+        else if (arg == "--testfile")
+        {
+            throwIfNoArgumentFollows();
+            singleTestFile = std::string{argv[++i]};
+            if (!boost::filesystem::exists(singleTestFile))
+            {
+                cerr << "Test file not found: " << singleTestFile << "\n";
+                exit(1);
+            }
+        }
+        else if (arg == "--fullstate")
+            fullstate = true;
         else if (arg == "--verbosity")
         {
             throwIfNoArgumentFollows();
@@ -345,8 +325,8 @@ Options::Options(int argc, const char** argv)
     //check restricted options
     if (createRandomTest)
     {
-        if (trValueIndex >= 0 || trGasIndex >= 0 || trDataIndex >= 0 || singleTest || all ||
-            stats || filltests || fillchain)
+        if (trValueIndex >= 0 || trGasIndex >= 0 || trDataIndex >= 0 || !singleTestName.empty() ||
+            all || stats || filltests || fillchain)
         {
             cerr << "--createRandomTest cannot be used with any of the options: " <<
                     "trValueIndex, trGasIndex, trDataIndex, singleTest, all, " <<
@@ -363,7 +343,7 @@ Options::Options(int argc, const char** argv)
     }
 
     // If no verbosity is set. use default
-    setVerbosity(verbosity == -1 ? 1 : verbosity);
+    setVerbosity(verbosity == -1 ? 1 : verbosity, vmtrace);
 }
 
 Options const& Options::get(int argc, const char** argv)

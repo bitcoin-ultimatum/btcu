@@ -23,7 +23,7 @@
 #include "zbtcuchain.h"
 #include <string>
 #include <stdint.h>
-
+#include "masternode-budget.h"
 #include "libzerocoin/Coin.h"
 #include "spork.h"
 #include "zbtcu/deterministicmint.h"
@@ -210,28 +210,25 @@ CKeyID GetKeyForDestination(const CCryptoKeyStore& store, const CTxDestination& 
 
 UniValue createcontract(const UniValue& params, bool fHelp){
 
-    //std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
-    //CWallet* const pwallet = wallet.get();
-
-
     auto locked_chain = nullptr;//pwalletMain->chain().lock();
     LOCK2(cs_main, pwalletMain->cs_wallet);
-    //QtumDGP qtumDGP(globalState.get(), fGettingValuesDGP);
-    uint64_t blockGasLimit = 40000000;//= qtumDGP.getBlockGasLimit(::ChainActive().Height());
-    uint64_t minGasPrice = 40;//CAmount(qtumDGP.getMinGasPrice(::ChainActive().Height()));
-    CAmount nGasPrice = 40;//(minGasPrice>DEFAULT_GAS_PRICE)?minGasPrice:DEFAULT_GAS_PRICE;
+    QtumDGP qtumDGP(globalState.get(), fGettingValuesDGP);
+    auto t = chainActive.Height();
+    uint64_t blockGasLimit = qtumDGP.getBlockGasLimit(chainActive.Height());
+    uint64_t minGasPrice = CAmount(qtumDGP.getMinGasPrice(chainActive.Height()));
+    CAmount nGasPrice = (minGasPrice>DEFAULT_GAS_PRICE)?minGasPrice:DEFAULT_GAS_PRICE;
 
     if (fHelp || params.size() < 1)
         throw std::runtime_error("createcontract"
-               "\nCreate a contract with bytcode." +
+               "\nCreate a contract with bytcode.\n" +
                HelpRequiringPassphrase() + "\n"
 
-                       "bytecode"//, RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "contract bytcode."},
-                       "gasLimit"//, RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "gasLimit, default: "+i64tostr(DEFAULT_GAS_LIMIT_OP_CREATE)+", max: "+i64tostr(blockGasLimit)},
-                       "gasPrice"//, RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "gasPrice QTUM price per gas unit, default: "+FormatMoney(nGasPrice)+", min:"+FormatMoney(minGasPrice)},
-                       "senderaddress"//, RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "The qtum address that will be used to create the contract."},
-                       "broadcast"//, RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Whether to broadcast the transaction or not."},
-                       "changeToSender"//, RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Return the change to the sender."},
+                       "bytecode - STR_HEX. Contract bytcode.\n"
+                       "gasLimit - AMOUNT. default: DEFAULT_GAS_LIMIT_OP_CREATE)\n"
+                       "gasPrice - AMOUNT. GasPrice BTCU price per gas unit.\n"
+                       "senderaddress - STR_HEX. The btcu address that will be used to create the contract.\n"
+                       "broadcast - BOOL. Whether to broadcast the transaction or not.\n"
+                       "changeToSender - BOOL. Return the change to the sender.\n"
 
                        "[\n"
                        "  {\n"
@@ -243,7 +240,7 @@ UniValue createcontract(const UniValue& params, bool fHelp){
                                                                       "]\n" +
 
                        HelpExampleCli("createcontract", "\"60606040525b33600060006101000a81548173ffffffffffffffffffffffffffffffffffffffff02191690836c010000000000000000000000009081020402179055506103786001600050819055505b600c80605b6000396000f360606040526008565b600256\"")
-                       + HelpExampleCli("createcontract", "\"60606040525b33600060006101000a81548173ffffffffffffffffffffffffffffffffffffffff02191690836c010000000000000000000000009081020402179055506103786001600050819055505b600c80605b6000396000f360606040526008565b600256\" 6000000 +FormatMoney(minGasPrice)+\"QM72Sfpbz1BPpXFHz9m3CdqATR44Jvaydd\" true")
+                       + HelpExampleCli("createcontract", "\"60606040525b33600060006101000a81548173ffffffffffffffffffffffffffffffffffffffff02191690836c010000000000000000000000009081020402179055506103786001600050819055505b600c80605b6000396000f360606040526008565b600256\" 6000000 40 \"QM72Sfpbz1BPpXFHz9m3CdqATR44Jvaydd\" true")
     );
 
 
@@ -279,7 +276,7 @@ UniValue createcontract(const UniValue& params, bool fHelp){
     if (params.size() > 3){
         senderAddress = CBTCUAddress(params[3].get_str()).Get();
         if (!IsValidDestinationKey(senderAddress))
-            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Qtum address to send from");
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid BTCU address to send from");
         if (!IsValidContractSenderAddressKey(senderAddress))
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid contract sender address. Only P2PK and P2PKH allowed");
         else
@@ -357,7 +354,38 @@ UniValue createcontract(const UniValue& params, bool fHelp){
         if (!pwalletMain->GetKey(key_id, key)) {
             throw JSONRPCError(RPC_WALLET_ERROR, "Private key not available");
         }
+
+        //check if sender is validator or if create contract allowed for all
+       if (!sporkManager.IsSporkActive(SPORK_1019_CREATECONTRACT_ANY_ALLOWED)){
+          CPubKey pubkey = key.GetPubKey();
+          bool bSCValidatorFound = false;
+          //genesis validators
+          auto genesisValidators = Params().GenesisBlock().vtx[0].validatorRegister;
+          for(auto &gv : genesisValidators){
+             if(pubkey == gv.pubKey){
+                bSCValidatorFound = true;
+                break;
+             }
+          }
+
+          //voted validators
+          if(!bSCValidatorFound)
+          {
+             auto validatorsRegistrationList = g_ValidatorsState.get_validators();
+             for (auto& rv: validatorsRegistrationList)
+             {
+                if(pubkey == rv.pubKey){
+                   bSCValidatorFound = true;
+                   break;
+                }
+             }
+          }
+
+          if(!bSCValidatorFound)
+             throw JSONRPCError(RPC_WALLET_CREATECONTRACT_DISABLED, "Create smart contract allowed only for validators");
+       }
         std::vector<unsigned char> scriptSig;
+        scriptSig.push_back(0);
         scriptPubKey = (CScript() << CScriptNum(addresstype::PUBKEYHASH) << ToByteVector(key_id) << ToByteVector(scriptSig) << OP_SENDER) + scriptPubKey;
     }
     else
@@ -375,7 +403,12 @@ UniValue createcontract(const UniValue& params, bool fHelp){
     // make our change address
     CReserveKey reservekey(pwalletMain);
     CWalletTx wtx;
-    if (!pwalletMain->CreateTransaction(scriptPubKey, 0, wtx, reservekey, nFeeRequired, strError, coinControl.get(), ALL_COINS, true, nGasFee, true, true, true, signSenderAddress)) {
+
+    if (nGasFee > 0) nValue = nGasFee;
+    std::vector<std::pair<CScript, CAmount> > vecSend;
+    vecSend.push_back(std::make_pair(scriptPubKey, 0));
+
+    if (!pwalletMain->CreateTransaction(vecSend, wtx, reservekey, nFeeRequired, strError, coinControl.get(), ALL_COINS, false, nGasFee, false, true, true, signSenderAddress)) {
         if (nFeeRequired > pwalletMain->GetBalance())
             strError = strprintf("Error: This transaction requires a transaction fee of at least %s because of its amount, complexity, or use of recently received funds!", FormatMoney(nFeeRequired));
         throw JSONRPCError(RPC_WALLET_ERROR, strError);
@@ -431,23 +464,23 @@ UniValue sendtocontract(const UniValue& params, bool fHelp){
 
     LOCK2(cs_main, pwalletMain->cs_wallet);
     QtumDGP qtumDGP(globalState.get(), fGettingValuesDGP);
-    uint64_t blockGasLimit = 40000000;//qtumDGP.getBlockGasLimit(::ChainActive().Height());
-    uint64_t minGasPrice = 40;//CAmount(qtumDGP.getMinGasPrice(::ChainActive().Height()));
-    CAmount nGasPrice = 40;// (minGasPrice>DEFAULT_GAS_PRICE)?minGasPrice:DEFAULT_GAS_PRICE;
+    uint64_t blockGasLimit = qtumDGP.getBlockGasLimit(chainActive.Height());
+    uint64_t minGasPrice = CAmount(qtumDGP.getMinGasPrice(chainActive.Height()));
+    CAmount nGasPrice = (minGasPrice>DEFAULT_GAS_PRICE)?minGasPrice:DEFAULT_GAS_PRICE;
 
     if (fHelp || params.size() < 2) {
         throw std::runtime_error(std::string("sendtocontract"
-                                             "\nSend funds and data to a contract.") +
+                                             "\nSend funds and data to a contract.\n") +
 
                                  std::string(
-                                         "contractaddress" //RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The contract address that will receive the funds and data."},
-                                         "datahex"//, RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "data to send."},
-                                         "amount"//, RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "The amount in " + CURRENCY_UNIT + " to send. eg 0.1, default: 0"},
-                                         "gasLimit"//, RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "gasLimit, default: "+i64tostr(DEFAULT_GAS_LIMIT_OP_SEND)+", max: "+i64tostr(blockGasLimit)},
-                                         "gasPrice"//, RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "gasPrice Qtum price per gas unit, default: "+FormatMoney(nGasPrice)+", min:"+FormatMoney(minGasPrice)},
-                                         "senderaddress"//, RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "The qtum address that will be used as sender."},
-                                         "broadcast"//, RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Whether to broadcast the transaction or not."},
-                                         "changeToSender"//, RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Return the change to the sender."},
+                                         "\ncontractaddress - STR_HEX. The contract address that will receive the funds and data.\n"
+                                         "datahex - STR_HEX. Data to send.\n"
+                                         "amount - AMOUNT. The amount in CURRENCY_UNIT  to send. eg 0.1, default: 0\n"
+                                         "gasLimit - AMOUNT. Default: DEFAULT_GAS_LIMIT_OP_SEND\n"
+                                         "gasPrice - AMOUNT. GasPrice Qtum price per gas unit, default: +FormatMoney(nGasPrice)\n"
+                                         "senderaddress - STR_HEX. The qtum address that will be used as sender.\n"
+                                         "broadcast - BOOL. Whether to broadcast the transaction or not.\n"
+                                         "changeToSender - BOOL. Return the change to the sender.\n"
                                          //},
                                          //RPCResult{
                                          "[\n"
@@ -547,7 +580,7 @@ UniValue sendtocontract(const UniValue& params, bool fHelp){
         for (const COutput& out : vecOutputs) {
 
             CTxDestination destAdress;
-            const CScript& scriptPubKey = out.tx->tx->vout[out.i].scriptPubKey;
+            const CScript& scriptPubKey = out.tx->vout[out.i].scriptPubKey;
             bool fValidAddress = ExtractDestination(scriptPubKey, destAdress);
 
             if (!fValidAddress || senderAddress != destAdress)
@@ -623,7 +656,7 @@ UniValue sendtocontract(const UniValue& params, bool fHelp){
 
     CWalletTx wtx;
     CReserveKey reservekey(pwalletMain);
-    if (!pwalletMain->CreateTransaction(scriptPubKey, nAmount, wtx, reservekey, nFeeRequired, strError, &coinControl, ALL_COINS, true, nGasFee, true)) {
+    if (!pwalletMain->CreateTransaction(scriptPubKey, nAmount, wtx, reservekey, nFeeRequired, strError, &coinControl, ALL_COINS, false, nGasFee, false, true)) {
         if (nFeeRequired > pwalletMain->GetBalance())
             strError = strprintf("Error: This transaction requires a transaction fee of at least %s because of its amount, complexity, or use of recently received funds!", FormatMoney(nFeeRequired));
         throw JSONRPCError(RPC_WALLET_ERROR, strError);
@@ -762,7 +795,7 @@ UniValue transactionReceiptToJSON(const QtumTransactionReceipt& txRec)
 
 UniValue callcontract(const UniValue& params, bool fHelp)
 {
-    if (fHelp || params.size() > 2)
+    if (fHelp || params.size() > 4 || params.size() < 2)
         throw std::runtime_error(std::string("callcontract\n"
                "\nCall contract methods offline.\n"
                //{
@@ -1341,7 +1374,7 @@ void SendMoney(const CTxDestination& address, CAmount nValue, CWalletTx& wtxNew,
     // Create and send the transaction
     CReserveKey reservekey(pwalletMain);
     CAmount nFeeRequired;
-    if (!pwalletMain->CreateTransaction(scriptPubKey, nValue, wtxNew, reservekey, nFeeRequired, strError, NULL, ALL_COINS, fUseIX, (CAmount)0, false, false,false, CNoDestination(),validatorRegister, validatorVote)) {
+    if (!pwalletMain->CreateTransaction(scriptPubKey, nValue, wtxNew, reservekey, nFeeRequired, strError, NULL, ALL_COINS, fUseIX, (CAmount)0, false, true,false, CNoDestination(),validatorRegister, validatorVote)) {
         if (nValue + nFeeRequired > pwalletMain->GetBalance())
             strError = strprintf("Error: This transaction requires a transaction fee of at least %s because of its amount, complexity, or use of recently received funds!", FormatMoney(nFeeRequired));
         LogPrintf("SendMoney() : %s\n", strError);
@@ -1634,7 +1667,7 @@ UniValue CreateLeasingTransaction(const UniValue& params, CWalletTx& wtxNew, CRe
         throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Invalid amount (%d). Min amount: %d",
                                                             nValue, Params().GetMinLeasingAmount()));
     // Check amount
-    CAmount currBalance = pwalletMain->GetBalance();
+    CAmount currBalance = pwalletMain->GetBalance(ISMINE_SPENDABLE_ALL_NON_LEASED);
     if (nValue > currBalance)
         throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "Insufficient funds");
 
@@ -1921,9 +1954,10 @@ UniValue signmessage(const UniValue& params, bool fHelp)
             HelpExampleRpc("signmessage", "\"DMJRSsuU9zfyrvxVaAEFQqK4MxZg6vgeS6\", \"my message\""));
 
     LOCK2(cs_main, pwalletMain->cs_wallet);
-
+#ifndef TEST_BTCU
     if (!pwalletMain->IsCrypted()  && !Params().IsRegTestNet())
         throw JSONRPCError(RPC_WALLET_WRONG_ENC_STATE, "Error: running with an not encrypted wallet. Run encryptwallet first");
+#endif
 
     EnsureWalletIsUnlocked();
 
@@ -1946,12 +1980,17 @@ UniValue signmessage(const UniValue& params, bool fHelp)
     ss << strMessageMagic;
     ss << strMessage;
 
+    UniValue obj(UniValue::VOBJ);
     std::vector<unsigned char> vchSig;
-    if (!key.SignCompact(ss.GetHash(), vchSig))
+    uint256 msgHash = ss.GetHash();
+
+    if (!key.SignCompact(msgHash, vchSig))
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Sign failed");
 
     pwalletMain->Lock();
-    return EncodeBase64(&vchSig[0], vchSig.size());
+    obj.push_back(Pair("signature", EncodeBase64(&vchSig[0], vchSig.size())));
+    obj.push_back(Pair("msghash", msgHash.ToString()));
+    return obj;
 }
 
 UniValue getreceivedbyaddress(const UniValue& params, bool fHelp)

@@ -27,7 +27,7 @@ BOOST_FIXTURE_TEST_SUITE(rpc_wallet_tests, TestingSetup)
 BOOST_AUTO_TEST_CASE(rpc_addmultisig)
 {
     LOCK(pwalletMain->cs_wallet);
-    SelectParams(CBaseChainParams::REGTEST);
+    SelectParams(CBaseChainParams::MAIN);
     rpcfn_type addmultisig = tableRPC["addmultisigaddress"]->actor;
 
     // old, 65-byte-long:
@@ -68,7 +68,7 @@ BOOST_AUTO_TEST_CASE(rpc_wallet)
     // Test RPC calls for various wallet statistics
     UniValue r;
 
-    SelectParams(CBaseChainParams::REGTEST);
+    SelectParams(CBaseChainParams::MAIN);
 
     LOCK2(cs_main, pwalletMain->cs_wallet);
 
@@ -168,12 +168,12 @@ BOOST_AUTO_TEST_CASE(rpc_wallet)
     /* Should throw error because this address is not loaded in the wallet */
     BOOST_CHECK_THROW(CallRPC("signmessage 1EmoXtVCCaJVm2msqSw1zPBbPJjRQhNqFFR mymessage"), std::runtime_error);
 
-    SelectParams(CBaseChainParams::REGTEST);
+    SelectParams(CBaseChainParams::MAIN);
     /* missing arguments */
     BOOST_CHECK_THROW(CallRPC("verifymessage " + demoAddress.ToString()), std::runtime_error);
     BOOST_CHECK_THROW(CallRPC("verifymessage " + demoAddress.ToString() + " " + retValue.get_str()), std::runtime_error);
     /* Illegal address */
-    BOOST_CHECK_THROW(CallRPC("verifymessage 1EmoXtVCCaJVm2msqSw1zPBbPJjRQhNqF " + retValue.get_str() + " mymessage"), std::runtime_error);
+    BOOST_CHECK_THROW(CallRPC("verifymessage 1HWueZ9CbH41fjsBqdfyhWKQgbtSguSkNz " + retValue.get_str() + " mymessage"), std::runtime_error);
     /* wrong address */
     BOOST_CHECK(CallRPC("verifymessage 1EmoXtVCCaJVm2msqSw1zPBbPJjRQhNqFF " + retValue.get_str() + " mymessage").get_bool() == false);
     /* Correct address and signature but wrong message */

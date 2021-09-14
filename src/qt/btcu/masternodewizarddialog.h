@@ -46,6 +46,7 @@ private:
 
     WalletModel *walletModel = nullptr;
     bool createMN();
+    bool checkName(QString newName);
     void inform(QString text);
     void initBtn(std::initializer_list<QPushButton*> args);
 };

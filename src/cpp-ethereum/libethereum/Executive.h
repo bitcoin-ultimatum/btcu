@@ -1,34 +1,14 @@
-/*
-    This file is part of cpp-ethereum.
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2014-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
 #pragma once
 
 #include "Transaction.h"
-
 #include <libdevcore/Log.h>
 #include <libethcore/Common.h>
-#include <libevm/VMFace.h>
-
-#ifndef QTUM_BUILD
-#include <json/json.h>
-#endif
+#include <libevm/ExtVMFace.h>
 #include <functional>
-
-namespace Json
-{
-    class Value;
-}
 
 namespace dev
 {
@@ -44,47 +24,6 @@ class BlockChain;
 class ExtVM;
 class SealEngineFace;
 struct Manifest;
-
-class StandardTrace
-{
-public:
-    struct DebugOptions
-    {
-        bool disableStorage = false;
-        bool disableMemory = false;
-        bool disableStack = false;
-        bool fullStorage = false;
-    };
-
-    StandardTrace();
-    void operator()(uint64_t _steps, uint64_t _PC, Instruction _inst, bigint _newMemSize,
-        bigint _gasCost, bigint _gas, VMFace const* _vm, ExtVMFace const* _extVM);
-
-    void setShowMnemonics() { m_showMnemonics = true; }
-    void setOptions(DebugOptions _options) { m_options = _options; }
-
-#ifndef QTUM_BUILD
-    Json::Value jsonValue() const { return m_trace; }
-#endif
-    std::string styledJson() const;
-    std::string multilineTrace() const;
-
-    OnOpFunc onOp()
-    {
-        return [=](uint64_t _steps, uint64_t _PC, Instruction _inst, bigint _newMemSize,
-                   bigint _gasCost, bigint _gas, VMFace const* _vm, ExtVMFace const* _extVM) {
-            (*this)(_steps, _PC, _inst, _newMemSize, _gasCost, _gas, _vm, _extVM);
-        };
-    }
-
-private:
-    bool m_showMnemonics = false;
-    std::vector<Instruction> m_lastInst;
-#ifndef QTUM_BUILD
-    Json::Value m_trace;
-#endif
-    DebugOptions m_options;
-};
 
 /**
  * @brief Message-call/contract-creation executor; useful for executing transactions.
@@ -112,6 +51,7 @@ public:
     /// Simple constructor; executive will operate on given state, with the given environment info.
     Executive(State& _s, EnvInfo const& _envInfo, SealEngineFace const& _sealEngine, unsigned _level = 0): m_s(_s), m_envInfo(_envInfo), m_depth(_level), m_sealEngine(_sealEngine) {}
 
+#ifndef QTUM_BUILD
     /** Easiest constructor.
      * Creates executive to operate on the state of end of the given block, populating environment
      * info from given Block and the LastHashes portion from the BlockChain.
@@ -130,6 +70,7 @@ public:
      * State is assigned the resultant value, but otherwise unused.
      */
     Executive(State& io_s, Block const& _block, unsigned _txIndex, BlockChain const& _bc, unsigned _level = 0);
+#endif
 
     Executive(Executive const&) = delete;
     void operator=(Executive) = delete;
@@ -192,9 +133,17 @@ public:
     /// Revert all changes made to the state by this execution.
     void revert();
 
+    /// Used only in tests
+    ExtVM const& extVM() const { return *m_ext; }
+
 private:
     /// @returns false iff go() must be called (and thus a VM execution in required).
-    bool executeCreate(Address const& _txSender, u256 const& _endowment, u256 const& _gasPrice, u256 const& _gas, bytesConstRef _code, Address const& _originAddress);
+    bool createWithAddressFromNonceAndSender(Address const& _sender, u256 const& _endowment,
+        u256 const& _gasPrice, u256 const& _gas, bytesConstRef _init, Address const& _origin,
+        u256 const& _version);
+    /// @returns false iff go() must be called (and thus a VM execution in required).
+    bool executeCreate(Address const& _txSender, u256 const& _endowment, u256 const& _gasPrice,
+        u256 const& _gas, bytesConstRef _code, Address const& _originAddress, u256 const& _version);
 
     State& m_s;							///< The state to which this operation/transaction is applied.
     // TODO: consider changign to EnvInfo const& to avoid LastHashes copy at every CALL/CREATE

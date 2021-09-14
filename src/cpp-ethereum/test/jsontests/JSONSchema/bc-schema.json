@@ -22,6 +22,9 @@
                 "comment": {
                     "type": "string"
                 },
+                "expectException": {
+                    "type": "string"
+                },
                 "expectExceptionALL": {
                     "type": "string"
                 },
@@ -44,6 +47,9 @@
                     "type": "string"
                 },
                 "expectExceptionHomestead": {
+                    "type": "string"
+                },
+                "expectExceptionIstanbul": {
                     "type": "string"
                 },
                 "rlp": {
@@ -292,6 +298,9 @@
                 "genesisRLP": {
                     "$ref": "#/definitions/ConfusedHexType"
                 },
+                "postStateHash": {
+                    "$ref": "#/definitions/ConfusedHexType"
+                },
                 "postState": {
                     "patternProperties": {
                         "^0x[0-9a-f]*": {
@@ -313,7 +322,6 @@
 		}
             },
             "required": [
-                "postState",
                 "pre",
                 "network",
                 "lastblockhash",

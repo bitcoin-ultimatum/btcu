@@ -60,16 +60,44 @@ TestingSetup::TestingSetup() : BasicTestingSetup()
             bool ok = ActivateBestChain(state);
             BOOST_CHECK(ok);
         }
+        namespace fs = boost::filesystem;
+        const CChainParams& chainparams = Params();
+        dev::eth::NoProof::init();
+        fs::path qtumStateDir = GetDataDir() / "stateQtum";
+        bool fStatus = fs::exists(qtumStateDir);
+        const std::string dirQtum(qtumStateDir.string());
+        const dev::h256 hashDB(dev::sha3(dev::rlp("")));
+        dev::eth::BaseState existsQtumstate = fStatus ? dev::eth::BaseState::PreExisting : dev::eth::BaseState::Empty;
+        globalState = std::unique_ptr<QtumState>(new QtumState(dev::u256(0), QtumState::openDB(dirQtum, hashDB, dev::WithExisting::Trust), dirQtum, existsQtumstate));
+        auto geni = chainparams.EVMGenesisInfo(dev::eth::Network::qtumMainNetwork);
+        dev::eth::ChainParams cp((geni));
+        globalSealEngine = std::unique_ptr<dev::eth::SealEngineFace>(cp.createSealEngine());
+
+       // if(chainActive.Tip() != nullptr){
+       //     auto hash = uintToh256(chainActive.Tip()->hashStateRoot);
+       //     globalState->setRoot(hash);
+       //     globalState->setRootUTXO(uintToh256(chainActive.Tip()->hashUTXORoot));
+       // } else {
+            globalState->setRoot(dev::sha3(dev::rlp("")));
+            globalState->setRootUTXO(uintToh256(chainparams.GenesisBlock().hashUTXORoot));
+            globalState->populateFrom(cp.genesisState);
+        //}
+
+        globalState->db().commit();
+        globalState->dbUtxo().commit();
 #ifdef ENABLE_WALLET
         bool fFirstRun;
         pwalletMain = new CWallet("wallet.dat");
         pwalletMain->LoadWallet(fFirstRun);
+        auto zwalletMain = new CzBTCUWallet(pwalletMain->strWalletFile);
+        pwalletMain->setZWallet(zwalletMain);
         RegisterValidationInterface(pwalletMain);
 #endif
         nScriptCheckThreads = 3;
         for (int i=0; i < nScriptCheckThreads-1; i++)
             threadGroup.create_thread(&ThreadScriptCheck);
         RegisterNodeSignals(GetNodeSignals());
+
 }
 
 TestingSetup::~TestingSetup()

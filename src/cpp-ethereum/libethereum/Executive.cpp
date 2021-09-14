@@ -1,36 +1,20 @@
-/*
-    This file is part of cpp-ethereum.
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2014-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
 #include "Executive.h"
-
 #include "Block.h"
+#ifndef QTUM_BUILD
 #include "BlockChain.h"
+#endif
 #include "ExtVM.h"
 #include "Interface.h"
+#include "StandardTrace.h"
 #include "State.h"
-
 #include <libdevcore/CommonIO.h>
 #include <libethcore/CommonJS.h>
 #include <libevm/LegacyVM.h>
 #include <libevm/VMFactory.h>
-
-#ifndef QTUM_BUILD
-#include <json/json.h>
-#endif
-#include <boost/timer.hpp>
-
-#include <numeric>
 
 using namespace std;
 using namespace dev;
@@ -38,6 +22,8 @@ using namespace dev::eth;
 
 namespace
 {
+Address const c_RipemdPrecompiledAddress{0x03};
+
 std::string dumpStackAndMemory(LegacyVM const& _vm)
 {
     ostringstream o;
@@ -58,171 +44,35 @@ std::string dumpStorage(ExtVM const& _ext)
         o << showbase << hex << i.second.first << ": " << i.second.second << "\n";
     return o.str();
 };
-
-
 }  // namespace
 
-#ifdef QTUM_BUILD
-StandardTrace::StandardTrace()
-{}
-#else
-StandardTrace::StandardTrace():
-    m_trace(Json::arrayValue)
-{}
-#endif
-
-bool changesMemory(Instruction _inst)
-{
-    return
-        _inst == Instruction::MSTORE ||
-        _inst == Instruction::MSTORE8 ||
-        _inst == Instruction::MLOAD ||
-        _inst == Instruction::CREATE ||
-        _inst == Instruction::CALL ||
-        _inst == Instruction::CALLCODE ||
-        _inst == Instruction::SHA3 ||
-        _inst == Instruction::CALLDATACOPY ||
-        _inst == Instruction::CODECOPY ||
-        _inst == Instruction::EXTCODECOPY ||
-        _inst == Instruction::DELEGATECALL;
-}
-
-bool changesStorage(Instruction _inst)
-{
-    return _inst == Instruction::SSTORE;
-}
-
-void StandardTrace::operator()(uint64_t _steps, uint64_t PC, Instruction inst, bigint newMemSize,
-    bigint gasCost, bigint gas, VMFace const* _vm, ExtVMFace const* voidExt)
-{
-#ifdef QTUM_BUILD
-    return;
-#else
-    (void)_steps;
-
-    ExtVM const& ext = dynamic_cast<ExtVM const&>(*voidExt);
-    auto vm = dynamic_cast<LegacyVM const*>(_vm);
-
-    Json::Value r(Json::objectValue);
-
-    Json::Value stack(Json::arrayValue);
-    if (vm && !m_options.disableStack)
-    {
-        // Try extracting information about the stack from the VM is supported.
-        for (auto const& i : vm->stack())
-            stack.append(toCompactHexPrefixed(i, 1));
-        r["stack"] = stack;
-    }
-
-    bool newContext = false;
-    Instruction lastInst = Instruction::STOP;
-
-    if (m_lastInst.size() == ext.depth)
-    {
-        // starting a new context
-        assert(m_lastInst.size() == ext.depth);
-        m_lastInst.push_back(inst);
-        newContext = true;
-    }
-    else if (m_lastInst.size() == ext.depth + 2)
-    {
-        m_lastInst.pop_back();
-        lastInst = m_lastInst.back();
-    }
-    else if (m_lastInst.size() == ext.depth + 1)
-    {
-        // continuing in previous context
-        lastInst = m_lastInst.back();
-        m_lastInst.back() = inst;
-    }
-    else
-    {
-#ifndef WIN32
-        cwarn << "GAA!!! Tracing VM and more than one new/deleted stack frame between steps!";
-        cwarn << "Attmepting naive recovery...";
-#endif
-        m_lastInst.resize(ext.depth + 1);
-    }
-
-    Json::Value memJson(Json::arrayValue);
-    if (vm && !m_options.disableMemory && (changesMemory(lastInst) || newContext))
-    {
-        for (unsigned i = 0; i < vm->memory().size(); i += 32)
-        {
-            bytesConstRef memRef(vm->memory().data() + i, 32);
-            memJson.append(toHex(memRef));
-        }
-        r["memory"] = memJson;
-    }
-
-    if (!m_options.disableStorage && (m_options.fullStorage || changesStorage(lastInst) || newContext))
-    {
-        Json::Value storage(Json::objectValue);
-        for (auto const& i: ext.state().storage(ext.myAddress))
-            storage[toCompactHexPrefixed(i.second.first, 1)] = toCompactHexPrefixed(i.second.second, 1);
-        r["storage"] = storage;
-    }
-
-    if (m_showMnemonics)
-        r["op"] = instructionInfo(inst).name;
-    r["pc"] = toString(PC);
-    r["gas"] = toString(gas);
-    r["gasCost"] = toString(gasCost);
-    r["depth"] = toString(ext.depth);
-    if (!!newMemSize)
-        r["memexpand"] = toString(newMemSize);
-
-    m_trace.append(r);
-#endif
-}
-
-std::string StandardTrace::styledJson() const
-{
-#ifdef QTUM_BUILD
-    return "";
-#else
-    return Json::StyledWriter().write(m_trace);
-#endif
-}
-
-string StandardTrace::multilineTrace() const
-{
-#ifdef QTUM_BUILD
-    return "";
-#else
-    if (m_trace.empty())
-        return {};
-
-    // Each opcode trace on a separate line
-    return std::accumulate(std::next(m_trace.begin()), m_trace.end(),
-        Json::FastWriter().write(m_trace[0]),
-        [](std::string a, Json::Value b) { return a + Json::FastWriter().write(b); });
-#endif
-}
-
-Executive::Executive(Block& _s, BlockChain const& _bc, unsigned _level):
-    m_s(_s.mutableState()),
-    m_envInfo(_s.info(), _bc.lastBlockHashes(), 0),
+#ifndef QTUM_BUILD
+Executive::Executive(Block& _s, BlockChain const& _bc, unsigned _level)
+  : m_s(_s.mutableState()),
+    m_envInfo(_s.info(), _bc.lastBlockHashes(), 0, _bc.chainID()),
     m_depth(_level),
     m_sealEngine(*_bc.sealEngine())
 {
 }
 
-Executive::Executive(Block& _s, LastBlockHashesFace const& _lh, unsigned _level):
-    m_s(_s.mutableState()),
-    m_envInfo(_s.info(), _lh, 0),
+Executive::Executive(Block& _s, LastBlockHashesFace const& _lh, unsigned _level)
+  : m_s(_s.mutableState()),
+    m_envInfo(_s.info(), _lh, 0, _s.sealEngine()->chainParams().chainID),
     m_depth(_level),
     m_sealEngine(*_s.sealEngine())
 {
 }
 
-Executive::Executive(State& io_s, Block const& _block, unsigned _txIndex, BlockChain const& _bc, unsigned _level):
-    m_s(createIntermediateState(io_s, _block, _txIndex, _bc)),
-    m_envInfo(_block.info(), _bc.lastBlockHashes(), _txIndex ? _block.receipt(_txIndex - 1).cumulativeGasUsed() : 0),
+Executive::Executive(
+    State& io_s, Block const& _block, unsigned _txIndex, BlockChain const& _bc, unsigned _level)
+  : m_s(createIntermediateState(io_s, _block, _txIndex, _bc)),
+    m_envInfo(_block.info(), _bc.lastBlockHashes(),
+        _txIndex ? _block.receipt(_txIndex - 1).cumulativeGasUsed() : 0, _bc.chainID()),
     m_depth(_level),
     m_sealEngine(*_bc.sealEngine())
 {
 }
+#endif
 
 u256 Executive::gasUsed() const
 {
@@ -265,10 +115,11 @@ void Executive::initialize(Transaction const& _transaction)
         }
         if (m_t.nonce() != nonceReq)
         {
-            LOG(m_execLogger) << "Sender: " << m_t.sender().hex() << " Invalid Nonce: Require "
-                              << nonceReq << " Got " << m_t.nonce();
+            LOG(m_execLogger) << "Sender: " << m_t.sender().hex() << " Invalid Nonce: Required "
+                              << nonceReq << ", received " << m_t.nonce();
             m_excepted = TransactionException::InvalidNonce;
-            BOOST_THROW_EXCEPTION(InvalidNonce() << RequirementError((bigint)nonceReq, (bigint)m_t.nonce()));
+            BOOST_THROW_EXCEPTION(
+                InvalidNonce() << RequirementError((bigint)nonceReq, (bigint)m_t.nonce()));
         }
 
         // Avoid unaffordable transactions.
@@ -326,19 +177,21 @@ bool Executive::call(CallParameters const& _p, u256 const& _gasPrice, Address co
 
     if (m_sealEngine.isPrecompiled(_p.codeAddress, m_envInfo.number()))
     {
+        // Empty RIPEMD contract needs to be deleted even in case of OOG
+        // because of the anomaly on the main net caused by buggy behavior by both Geth and Parity
+        // https://github.com/ethereum/go-ethereum/pull/3341/files#diff-2433aa143ee4772026454b8abd76b9dd
+        // https://github.com/ethereum/EIPs/issues/716
+        // https://github.com/ethereum/aleth/pull/5664
+        // We mark the account as touched here, so that is can be removed among other touched empty
+        // accounts (after tx finalization)
+        if (_p.receiveAddress == c_RipemdPrecompiledAddress)
+            m_s.unrevertableTouch(_p.codeAddress);
+
         bigint g = m_sealEngine.costOfPrecompiled(_p.codeAddress, _p.data, m_envInfo.number());
         if (_p.gas < g)
         {
             m_excepted = TransactionException::OutOfGasBase;
             // Bail from exception.
-
-            // Empty precompiled contracts need to be deleted even in case of OOG
-            // because the bug in both Geth and Parity led to deleting RIPEMD precompiled in this case
-            // see https://github.com/ethereum/go-ethereum/pull/3341/files#diff-2433aa143ee4772026454b8abd76b9dd
-            // We mark the account as touched here, so that is can be removed among other touched empty accounts (after tx finalization)
-            if (m_envInfo.number() >= m_sealEngine.chainParams().EIP158ForkBlock)
-                m_s.addBalance(_p.codeAddress, 0);
-
             return true;	// true actually means "all finished - nothing more to be done regarding go().
         }
         else
@@ -364,9 +217,11 @@ bool Executive::call(CallParameters const& _p, u256 const& _gasPrice, Address co
         {
             bytes const& c = m_s.code(_p.codeAddress);
             h256 codeHash = m_s.codeHash(_p.codeAddress);
+            // Contract will be executed with the version stored in account
+            auto const version = m_s.version(_p.codeAddress);
             m_ext = make_shared<ExtVM>(m_s, m_envInfo, m_sealEngine, _p.receiveAddress,
                 _p.senderAddress, _origin, _p.apparentValue, _gasPrice, _p.data, &c, codeHash,
-                m_depth, false, _p.staticCall);
+                version, m_depth, false, _p.staticCall);
         }
     }
 
@@ -382,24 +237,38 @@ bool Executive::call(CallParameters const& _p, u256 const& _gasPrice, Address co
 
 bool Executive::create(Address const& _txSender, u256 const& _endowment, u256 const& _gasPrice, u256 const& _gas, bytesConstRef _init, Address const& _origin)
 {
-    // Contract creation by an external account is the same as CREATE opcode
-    return createOpcode(_txSender, _endowment, _gasPrice, _gas, _init, _origin);
+    // Contract will be created with the version corresponding to latest hard fork
+    auto const latestVersion = m_sealEngine.evmSchedule(m_envInfo.number()).accountVersion;
+    return createWithAddressFromNonceAndSender(
+        _txSender, _endowment, _gasPrice, _gas, _init, _origin, latestVersion);
 }
 
 bool Executive::createOpcode(Address const& _sender, u256 const& _endowment, u256 const& _gasPrice, u256 const& _gas, bytesConstRef _init, Address const& _origin)
 {
+    // Contract will be created with the version equal to parent's version
+    return createWithAddressFromNonceAndSender(
+        _sender, _endowment, _gasPrice, _gas, _init, _origin, m_s.version(_sender));
+}
+
+bool Executive::createWithAddressFromNonceAndSender(Address const& _sender, u256 const& _endowment,
+    u256 const& _gasPrice, u256 const& _gas, bytesConstRef _init, Address const& _origin,
+    u256 const& _version)
+{
     u256 nonce = m_s.getNonce(_sender);
     m_newAddress = right160(sha3(rlpList(_sender, nonce)));
-    return executeCreate(_sender, _endowment, _gasPrice, _gas, _init, _origin);
+    return executeCreate(_sender, _endowment, _gasPrice, _gas, _init, _origin, _version);
 }
 
 bool Executive::create2Opcode(Address const& _sender, u256 const& _endowment, u256 const& _gasPrice, u256 const& _gas, bytesConstRef _init, Address const& _origin, u256 const& _salt)
 {
     m_newAddress = right160(sha3(bytes{0xff} +_sender.asBytes() + toBigEndian(_salt) + sha3(_init)));
-    return executeCreate(_sender, _endowment, _gasPrice, _gas, _init, _origin);
+    // Contract will be created with the version equal to parent's version
+    return executeCreate(
+        _sender, _endowment, _gasPrice, _gas, _init, _origin, m_s.version(_sender));
 }
 
-bool Executive::executeCreate(Address const& _sender, u256 const& _endowment, u256 const& _gasPrice, u256 const& _gas, bytesConstRef _init, Address const& _origin)
+bool Executive::executeCreate(Address const& _sender, u256 const& _endowment, u256 const& _gasPrice,
+    u256 const& _gas, bytesConstRef _init, Address const& _origin, u256 const& _version)
 {
     if (_sender != MaxAddress ||
         m_envInfo.number() < m_sealEngine.chainParams().experimentalForkBlock)  // EIP86
@@ -438,7 +307,11 @@ bool Executive::executeCreate(Address const& _sender, u256 const& _endowment, u2
     // Schedule _init execution if not empty.
     if (!_init.empty())
         m_ext = make_shared<ExtVM>(m_s, m_envInfo, m_sealEngine, m_newAddress, _sender, _origin,
-            _endowment, _gasPrice, bytesConstRef(), _init, sha3(_init), m_depth, true, false);
+            _endowment, _gasPrice, bytesConstRef(), _init, sha3(_init), _version, m_depth, true,
+            false);
+    else
+        // code stays empty, but we set the version
+        m_s.setCode(m_newAddress, {}, _version);
 
     return !m_ext;
 }
@@ -452,7 +325,6 @@ OnOpFunc Executive::simpleTrace()
         ExtVM const& ext = *static_cast<ExtVM const*>(voidExt);
         auto vm = dynamic_cast<LegacyVM const*>(_vm);
 
-        ostringstream o;
         if (vm)
             LOG(traceLogger) << dumpStackAndMemory(*vm);
         LOG(traceLogger) << dumpStorage(ext);
@@ -504,7 +376,7 @@ bool Executive::go(OnOpFunc const& _onOp)
                 }
                 if (m_res)
                     m_res->output = out.toVector(); // copy output to execution result
-                m_s.setCode(m_ext->myAddress, out.toVector());
+                m_s.setCode(m_ext->myAddress, out.toVector(), m_ext->version);
             }
             else
                 m_output = vm->exec(m_gas, *m_ext, _onOp);
@@ -517,41 +389,31 @@ bool Executive::go(OnOpFunc const& _onOp)
         }
         catch (VMException const& _e)
         {
-#ifndef WIN32
             LOG(m_detailsLogger) << "Safe VM Exception. " << diagnostic_information(_e);
-#endif
             m_gas = 0;
             m_excepted = toTransactionException(_e);
             revert();
         }
         catch (InternalVMError const& _e)
         {
-#ifndef WIN32
             cerror << "Internal VM Error (EVMC status code: "
-                   << *boost::get_error_info<errinfo_evmcStatusCode>(_e) << ")";
-#endif
+                 << *boost::get_error_info<errinfo_evmcStatusCode>(_e) << ")";
             revert();
             throw;
         }
         catch (Exception const& _e)
         {
-#ifndef WIN32
-            // TODO: AUDIT: check that this can never reasonably happen. Consider what to do if it
-            // does.
+            // TODO: AUDIT: check that this can never reasonably happen. Consider what to do if it does.
             cerror << "Unexpected exception in VM. There may be a bug in this implementation. "
-                   << diagnostic_information(_e);
-#endif
+                 << diagnostic_information(_e);
             exit(1);
             // Another solution would be to reject this transaction, but that also
             // has drawbacks. Essentially, the amount of ram has to be increased here.
         }
         catch (std::exception const& _e)
         {
-#ifndef WIN32
-            // TODO: AUDIT: check that this can never reasonably happen. Consider what to do if it
-            // does.
+            // TODO: AUDIT: check that this can never reasonably happen. Consider what to do if it does.
             cerror << "Unexpected std::exception in VM. Not enough RAM? " << _e.what();
-#endif
             exit(1);
             // Another solution would be to reject this transaction, but that also
             // has drawbacks. Essentially, the amount of ram has to be increased here.
@@ -572,8 +434,9 @@ bool Executive::finalize()
 {
     if (m_ext)
     {
-        // Accumulate refunds for suicides.
-        m_ext->sub.refunds += m_ext->evmSchedule().suicideRefundGas * m_ext->sub.suicides.size();
+        // Accumulate refunds for selfdestructs.
+        m_ext->sub.refunds +=
+            m_ext->evmSchedule().selfdestructRefundGas * m_ext->sub.selfdestructs.size();
 
         // Refunds must be applied before the miner gets the fees.
         assert(m_ext->sub.refunds >= 0);
@@ -589,12 +452,12 @@ bool Executive::finalize()
         m_s.addBalance(m_envInfo.author(), feesEarned);
     }
 
-    // Suicides...
+    // Selfdestructs...
     if (m_ext)
-        for (auto a: m_ext->sub.suicides)
+        for (auto a: m_ext->sub.selfdestructs)
             m_s.kill(a);
 
-    // Logs..
+    // Logs...
     if (m_ext)
         m_logs = m_ext->sub.logs;
 

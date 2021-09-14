@@ -145,8 +145,8 @@ class CreatecontractTest(BtcuTestFramework):
         self.nodes[0].generate(COINBASE_MATURITY+50)
         self.node = self.nodes[0]
         self.createcontract_simple_test()
-        #self.createcontract_with_sender_test()
-        #self.createcontract_no_broadcast_test()
+        self.createcontract_with_sender_test()
+        self.createcontract_no_broadcast_test()
 
 if __name__ == '__main__':
     CreatecontractTest().main()

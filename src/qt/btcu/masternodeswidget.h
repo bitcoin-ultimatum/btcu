@@ -9,11 +9,17 @@
 #include <QWidget>
 #include "qt/btcu/pwidget.h"
 #include "qt/btcu/furabstractlistitemdelegate.h"
+#include "qt/btcu/addressfilterproxymodel.h"
+#include "qt/btcu/mnrow.h"
 #include "qt/btcu/mnmodel.h"
 #include "qt/btcu/tooltipmenu.h"
+#include "addresstablemodel.h"
 #include <QTimer>
 #include <atomic>
 #include <QSpacerItem>
+#include <QSharedPointer>
+
+#define CREATE_MN_AMOUNT 1000
 
 class BTCUGUI;
 
@@ -30,7 +36,6 @@ class MasterNodesWidget : public PWidget
     Q_OBJECT
 
 public:
-
     explicit MasterNodesWidget(BTCUGUI *parent = nullptr);
     ~MasterNodesWidget();
 
@@ -41,43 +46,49 @@ public:
 
     void showEvent(QShowEvent *event) override;
     void hideEvent(QHideEvent *event) override;
-Q_SIGNALS:
 
+private:
+    void clearScrollWidget();
+
+Q_SIGNALS:
    void CreateMasternode();
 
 private Q_SLOTS:
     void onCreateMNClicked();
     void onStartAllClicked(int type);
     void changeTheme(bool isLightTheme, QString &theme) override;
-    void onMNClicked(const QModelIndex &index);
-    void onEditMNClicked();
+    void onUpgradeMNClicked();
     void onDeleteMNClicked();
     void onInfoMNClicked();
     void updateListState();
     void updateModelAndInform(QString informText);
-   void onpbnMenuClicked();
+    void onpbnMenuClicked(QModelIndex index);
 
    void onTempADD();
    void onpbnMasternodeClicked();
    void onpbnValidatorClicked();
-   void onpbnMyClicked();
-   void onpbnGlobalClicked();
+   void onpbnMyMasternodesClicked();
+   void onpbnGlobalMasternodesClicked();
 
 private:
     Ui::MasterNodesWidget *ui;
     FurAbstractListItemDelegate *delegate;
+    AddressTableModel* addressTableModel = nullptr;
+    AddressFilterProxyModel *filter = nullptr;
     MNModel *mnModel = nullptr;
     TooltipMenu* menu = nullptr;
    TooltipMenu* menuMy = nullptr;
     QModelIndex index;
     QTimer *timer = nullptr;
 
+    QVector<QSharedPointer<MNRow>> MNRows;
     std::atomic<bool> isLoading;
 
     bool checkMNsNetwork();
     void startAlias(QString strAlias);
     bool startAll(QString& failedMN, bool onlyMissing);
     bool startMN(CMasternodeConfig::CMasternodeEntry mne, std::string& strError);
+    void removeMNLine();
 // temp
    bool bShowHistory = false;
    bool bShowHistoryMy = false;

@@ -25,11 +25,14 @@
 #include "qt/btcu/coldstakingwidget.h"
 #include "qt/btcu/leasingwidget.h"
 #include "qt/btcu/masternodeswidget.h"
+#include "qt/btcu/validatorwidget.h"
+#include "qt/btcu/createcontract.h"
 #include "qt/btcu/snackbar.h"
 #include "qt/btcu/settings/settingswidget.h"
 #include "qt/rpcconsole.h"
 //#include "qt/btcu/createmasternodewidget.h"
 #include "qt/btcu/leasingstatisticswidget.h"
+#include <QProgressDialog>
 
 #ifdef Q_OS_MAC
 #include "qt/macos_appnap.h"
@@ -64,6 +67,7 @@ public:
     void resizeEvent(QResizeEvent *event) override;
     void showHide(bool show);
     int getNavWidth();
+
 Q_SIGNALS:
     void themeChanged(bool isLightTheme, QString& theme);
     void windowResizeEvent(QResizeEvent* event);
@@ -77,6 +81,8 @@ public Q_SLOTS:
     void goToMasterNodes();
     void goToColdStaking();
     void goToLeasing();
+    void goToValidator();
+    void goToContract();
     void goToSettings();
 
    void goToCreateMasternode();
@@ -84,6 +90,8 @@ public Q_SLOTS:
    void goToLeasingStatistics();
 
     void connectActions();
+
+    void showProgress(const QString& title, int nProgress);
 
     /** Get restart command-line parameters and request restart */
     void handleRestart(QStringList args);
@@ -128,6 +136,7 @@ protected:
 private:
     bool enableWallet;
     ClientModel* clientModel = nullptr;
+    QProgressDialog* pProgressDialog = nullptr;
 
     // Actions
     QAction* quitAction = nullptr;
@@ -147,6 +156,8 @@ private:
     MasterNodesWidget *masterNodesWidget = nullptr;
     ColdStakingWidget *coldStakingWidget = nullptr;
     LeasingWidget *leasingWidget = nullptr;
+    ValidatorWidget *validatorWidget = nullptr;
+    CreateContract *contractWidget = nullptr;
     SettingsWidget* settingsWidget = nullptr;
     //CreateMasterNodeWidget* createMasterNode = nullptr;
     //CreateValidatorWidget * createValidator = nullptr;

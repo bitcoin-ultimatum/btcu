@@ -23,6 +23,7 @@
 #include "libzerocoin/Denominations.h"
 #include "libzerocoin/SpendType.h"
 #include "sporkid.h"
+#include <span.h>
 
 #ifdef WIN32
 #include <sstream>
@@ -31,6 +32,13 @@
 class CScript;
 class CSizeComputer;
 static const unsigned int MAX_SIZE = 0x02000000;
+
+
+//! Safely convert odd char pointer types to standard ones.
+inline char* CharCast(char* c) { return c; }
+inline char* CharCast(unsigned char* c) { return (char*)c; }
+inline const char* CharCast(const char* c) { return c; }
+inline const char* CharCast(const unsigned char* c) { return (const char*)c; }
 
 /**
  * Used to bypass the rule against non-const reference to temporary
@@ -669,6 +677,11 @@ void Serialize(Stream& os, const std::set<K, Pred, A>& m, int nType, int nVersio
 template <typename Stream, typename K, typename Pred, typename A>
 void Unserialize(Stream& is, std::set<K, Pred, A>& m, int nType, int nVersion);
 
+template<typename Stream>
+void Serialize(Stream& s, const Span<const unsigned char>& span, int nType, int nVersion) { s.write(CharCast(span.data()), span.size()); }
+template<typename Stream>
+void Serialize(Stream& s, const Span<unsigned char>& span, int nType, int nVersion) { s.write(CharCast(span.data()), span.size()); }
+
 
 /**
  * If none of the specialized versions above matched, default to calling member function.
@@ -1040,6 +1053,7 @@ public:
     int nVersion;
 
     CSizeComputer(int nTypeIn, int nVersionIn) : nSize(0), nType(nTypeIn), nVersion(nVersionIn) {}
+    explicit CSizeComputer(int nVersionIn) : nSize(0), nVersion(nVersionIn) {}
 
     CSizeComputer& write(const char* psz, size_t nSize)
     {
@@ -1065,5 +1079,13 @@ public:
         return nSize;
     }
 };
+
+
+///////////////////BTC Export///////////////////
+template <typename T>
+size_t GetSerializeSize(const T& t, int nVersion = 0)
+{
+   return (CSizeComputer(nVersion) << t).size();
+}
 
 #endif // BTCU_SERIALIZE_H

@@ -1,23 +1,9 @@
-/*
-	This file is part of cpp-ethereum.
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2017-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
-	cpp-ethereum is free software: you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation, either version 3 of the License, or
-	(at your option) any later version.
-
-	cpp-ethereum is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file
- * Fixture class for boost output when running testeth
- */
-
+/// @file
+/// Fixture class for boost output when running testeth
 #pragma once
 #include <test/tools/libtestutils/Common.h>
 #include <test/tools/libtesteth/JsonSpiritHeaders.h>
@@ -52,9 +38,15 @@ public:
 	boost::filesystem::path const& testFile() { return m_currentTestFileName; }
 	void printTestExecStats();
 
+    // Mark the _folderName as executed for a given _suitePath (to filler files)
+    void markTestFolderAsFinished(
+        boost::filesystem::path const& _suitePath, std::string const& _folderName);
+
 private:
 	TestOutputHelper() {}
-	Timer m_timer;
+    void checkUnfinishedTestFolders();  // Checkup that all test folders are active during the test
+                                        // run
+    Timer m_timer;
 	size_t m_currTest;
 	size_t m_maxTests;
 	std::string m_currentTestName;
@@ -62,6 +54,8 @@ private:
 	boost::filesystem::path m_currentTestFileName;
 	typedef std::pair<double, std::string> execTimeName;
 	std::vector<execTimeName> m_execTimeResults;
+    typedef std::set<std::string> FolderNameSet;
+    std::map<boost::filesystem::path, FolderNameSet> m_finishedTestFoldersMap;
 };
 
 class TestOutputHelperFixture

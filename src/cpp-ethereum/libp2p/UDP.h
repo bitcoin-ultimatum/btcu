@@ -1,23 +1,6 @@
-/*
- This file is part of cpp-ethereum.
-
- cpp-ethereum is free software: you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation, either version 3 of the License, or
- (at your option) any later version.
-
- cpp-ethereum is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
-
- You should have received a copy of the GNU General Public License
- along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
- */
-/** @file UDP.h
- * @author Alex Leverington <nessence@gmail.com>
- * @date 2014
- */
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2014-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
 #pragma once
 
@@ -113,10 +96,20 @@ public:
     static_assert((unsigned)maxDatagramSize < 65507u, "UDP datagrams cannot be larger than 65507 bytes");
 
     /// Create socket for specific endpoint.
-    UDPSocket(ba::io_service& _io, UDPSocketEvents& _host, bi::udp::endpoint _endpoint): m_host(_host), m_endpoint(_endpoint), m_socket(_io) { m_started.store(false); m_closed.store(true); };
+    UDPSocket(ba::io_context& _io, UDPSocketEvents& _host, bi::udp::endpoint _endpoint)
+      : m_host(_host), m_endpoint(_endpoint), m_socket(_io)
+    {
+        m_started.store(false);
+        m_closed.store(true);
+    };
 
     /// Create socket which listens to all ports.
-    UDPSocket(ba::io_service& _io, UDPSocketEvents& _host, unsigned _port): m_host(_host), m_endpoint(bi::udp::v4(), _port), m_socket(_io) { m_started.store(false); m_closed.store(true); };
+    UDPSocket(ba::io_context& _io, UDPSocketEvents& _host, unsigned _port)
+      : m_host(_host), m_endpoint(bi::udp::v4(), _port), m_socket(_io)
+    {
+        m_started.store(false);
+        m_closed.store(true);
+    };
     virtual ~UDPSocket() { disconnect(); }
 
     /// Socket will begin listening for and delivering packets

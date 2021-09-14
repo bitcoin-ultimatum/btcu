@@ -337,6 +337,16 @@ public:
         return result;
     }
 
+   /** Compute the SHA256 hash of all data written to this object.
+     *
+     * Invalidates this object.
+   */
+   uint256 GetSHA256() {
+      uint256 result;
+      ctx.Finalize(result.begin());
+      return result;
+   }
+
     template <typename T>
     CHashWriter& operator<<(const T& obj)
     {
@@ -358,6 +368,15 @@ uint256 SerializeHash(const T& obj, int nType = SER_GETHASH, int nVersion = PROT
 unsigned int MurmurHash3(unsigned int nHashSeed, const std::vector<unsigned char>& vDataToHash);
 
 void BIP32Hash(const ChainCode chainCode, unsigned int nChild, unsigned char header, const unsigned char data[32], unsigned char output[64]);
+
+/** Return a CHashWriter primed for tagged hashes (as specified in BIP 340).
+ *
+ * The returned object will have SHA256(tag) written to it twice (= 64 bytes).
+ * A tagged hash can be computed by feeding the message into this object, and
+ * then calling CHashWriter::GetSHA256().
+ */
+CHashWriter TaggedHash(const std::string& tag);
+
 
 //int HMAC_SHA512_Init(HMAC_SHA512_CTX *pctx, const void *pkey, size_t len);
 //int HMAC_SHA512_Update(HMAC_SHA512_CTX *pctx, const void *pdata, size_t len);

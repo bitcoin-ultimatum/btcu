@@ -2,10 +2,11 @@
     "RawExtCodeCopyMemoryGas" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
-            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
+            "filling-rpc-server" : "Geth-1.9.6-unstable-63b18027-20190920",
+            "filling-tool-version" : "retesteth-0.0.1+commit.0ae18aef.Linux.g++",
+            "lllcversion" : "Version: 0.5.12-develop.2019.9.13+commit.2d601a4f.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stEIP150singleCodeGasPrices/RawExtCodeCopyMemoryGasFiller.json",
-            "sourceHash" : "a8ca59451670db9a0d82f1b91e163982d3ab7b00168acccb63619feebac4099a"
+            "sourceHash" : "ea6638f6ee530ae78a3c004b4e6f837f5c7293b341aba107f139611195fbf6d9"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -16,58 +17,14 @@
             "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
         },
         "post" : {
-            "Byzantium" : [
+            "Istanbul" : [
                 {
-                    "hash" : "0xdd7c68b94ba7007eb5bff79c11b1dbb2f5bcc47d7bee305298b760856f7be6ea",
                     "indexes" : {
                         "data" : 0,
                         "gas" : 0,
                         "value" : 0
                     },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "Constantinople" : [
-                {
-                    "hash" : "0xdd7c68b94ba7007eb5bff79c11b1dbb2f5bcc47d7bee305298b760856f7be6ea",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "ConstantinopleFix" : [
-                {
-                    "hash" : "0xdd7c68b94ba7007eb5bff79c11b1dbb2f5bcc47d7bee305298b760856f7be6ea",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "EIP150" : [
-                {
-                    "hash" : "0xdd7c68b94ba7007eb5bff79c11b1dbb2f5bcc47d7bee305298b760856f7be6ea",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "Homestead" : [
-                {
-                    "hash" : "0x60b8a1372e768661d0c83723a862df03ba35138aac9478a00199511fa5e446f7",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
+                    "hash" : "0xc326457ca026075494f32e46c1f5fa415ac902b1f862c301939a4bb17294d745",
                     "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
                 }
             ]
@@ -82,14 +39,14 @@
             },
             "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
                 "balance" : "0xe8d4a51000",
-                "code" : "",
+                "code" : "0x",
                 "nonce" : "0x00",
                 "storage" : {
                 }
             },
             "0xb94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
                 "balance" : "0x00",
-                "code" : "0x5a600055612b706000600073094f5374fce5edbc8e2a8697c15331677e6ebf0b3c5a600155",
+                "code" : "0x5a600055612b706000600073094f5374fce5edbc8e2a8697c15331677e6ebf0b3c5a60015500",
                 "nonce" : "0x00",
                 "storage" : {
                 }

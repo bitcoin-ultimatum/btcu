@@ -1,5 +1,5 @@
 // Aleth: Ethereum C++ client, tools and libraries.
-// Copyright 2019 Aleth Authors.
+// Copyright 2015-2019 Aleth Authors.
 // Licensed under the GNU General Public License, Version 3.
 
 #include "Common.h"
@@ -30,10 +30,8 @@ boost::filesystem::path dev::test::getTestPath()
 
     if (ptestPath == nullptr)
     {
-#ifndef WIN32
         clog(VerbosityWarning, "test")
             << " could not find environment variable ETHEREUM_TEST_PATH \n";
-#endif
         testPath = "../../test/jsontests";
     }
     else
@@ -57,7 +55,6 @@ Json::Value dev::test::loadJsonFromFile(fs::path const& _path)
     Json::Reader reader;
     Json::Value result;
     string s = dev::contentsString(_path);
-#ifndef WIN32
     if (!s.length())
         clog(VerbosityWarning, "test")
             << "Contents of " << _path.string()
@@ -65,7 +62,6 @@ Json::Value dev::test::loadJsonFromFile(fs::path const& _path)
                "set ETHEREUM_TEST_PATH to its path?";
     else
         clog(VerbosityWarning, "test") << "FIXTURE: loaded test from file: " << _path.string();
-#endif
 
     reader.parse(s, result);
     return result;

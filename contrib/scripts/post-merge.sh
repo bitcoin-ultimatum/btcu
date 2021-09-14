@@ -5,6 +5,7 @@
 # -call ./contrib/scripts/pre-merge.sh
 # -call git merge orion/master --no-commit
 # -call ./contrib/scripts/post-merge.sh orion btcu
+# -call git commit -a
 # -call git push
 
 sed -i '' 's/'"${1}"'/'"${2}"'/' README.md

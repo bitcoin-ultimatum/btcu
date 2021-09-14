@@ -59,6 +59,7 @@ namespace BCLog {
         COINSTAKE   = (1 << 21),
         HTTPPOLL    = (1 << 22),
         LEASING     = (1 << 23),
+        SC          = (1 << 24),
         ALL         = ~(uint32_t)0,
     };
 

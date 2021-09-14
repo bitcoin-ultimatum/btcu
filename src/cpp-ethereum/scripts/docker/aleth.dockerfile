@@ -1,7 +1,7 @@
 # Multistage Dockerfile for the Aleth tools.
 # It depends on sources being available in the docker context,
 # so build it from the project root dir as
-#     docker build -f scripts/docker/cpp-ethereum.dockerfile .
+#     docker build -f scripts/docker/aleth.dockerfile .
 
 
 # Build stage
@@ -13,26 +13,30 @@ RUN apk add --no-cache \
         cmake \
         make \
         git
-ADD . /source
+COPY . /source
 WORKDIR /build
-RUN cmake /source -DVMTRACE=ON -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release -DHUNTER_JOBS_NUMBER=$(nproc)
+RUN cmake /source -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release -DHUNTER_JOBS_NUMBER=$(nproc)
 RUN make -j $(nproc) && make install
 
 # Target: testeth
 # This is not the last stage so build it as
-#     docker build --target testeth -f scripts/docker/cpp-ethereum.dockerfile .
+#     docker build --target testeth -f scripts/docker/aleth.dockerfile .
 
 FROM alpine:latest AS testeth
+RUN adduser -D testeth
 RUN apk add --no-cache libstdc++
+USER testeth
 COPY --from=builder /build/test/testeth /usr/bin/
 ENTRYPOINT ["/usr/bin/testeth"]
 
 
-# Target: cpp-ethereum
+# Target: aleth
 
-FROM alpine:latest AS cpp-ethereum
+FROM alpine:latest AS aleth
 RUN apk add --no-cache python3 libstdc++
-COPY --from=builder /usr/bin/cpp-ethereum /source/scripts/cpp-ethereum.py /source/scripts/dopple.py /usr/bin/
-COPY --from=builder /usr/share/cpp-ethereum/ /usr/share/cpp-ethereum/
+RUN adduser -D aleth
+COPY --from=builder /usr/bin/aleth* /source/scripts/aleth.py /source/scripts/dopple.py /usr/bin/
+COPY --from=builder /usr/share/aleth/ /usr/share/aleth/
+USER aleth
 EXPOSE 8545
-ENTRYPOINT ["/usr/bin/cpp-ethereum.py"]
+ENTRYPOINT ["/usr/bin/aleth.py"]

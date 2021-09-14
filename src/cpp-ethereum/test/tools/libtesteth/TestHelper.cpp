@@ -1,23 +1,9 @@
-/*
-        This file is part of cpp-ethereum.
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2017-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
-        cpp-ethereum is free software: you can redistribute it and/or modify
-        it under the terms of the GNU General Public License as published by
-        the Free Software Foundation, either version 3 of the License, or
-        (at your option) any later version.
-
-        cpp-ethereum is distributed in the hope that it will be useful,
-        but WITHOUT ANY WARRANTY; without even the implied warranty of
-        MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-        GNU General Public License for more details.
-
-        You should have received a copy of the GNU General Public License
-        along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file
- * Helper functions to work with json::spirit and test files
- */
-
+/// @file
+/// Helper functions to work with json::spirit and test files
 #include "TestHelper.h"
 #include "Options.h"
 #include "TestOutputHelper.h"
@@ -114,6 +100,8 @@ string netIdToString(eth::Network _netId)
         return "Constantinople";
     case eth::Network::ConstantinopleFixTest:
         return "ConstantinopleFix";
+    case eth::Network::IstanbulTest:
+        return "Istanbul";
     case eth::Network::FrontierToHomesteadAt5:
         return "FrontierToHomesteadAt5";
     case eth::Network::HomesteadToDaoAt5:
@@ -138,10 +126,10 @@ eth::Network stringToNetId(string const& _netname)
     static vector<eth::Network> const networks{
         {eth::Network::FrontierTest, eth::Network::HomesteadTest, eth::Network::EIP150Test,
             eth::Network::EIP158Test, eth::Network::ByzantiumTest, eth::Network::ConstantinopleTest,
-            eth::Network::ConstantinopleFixTest, eth::Network::FrontierToHomesteadAt5,
-            eth::Network::HomesteadToDaoAt5, eth::Network::HomesteadToEIP150At5,
-            eth::Network::EIP158ToByzantiumAt5, eth::Network::ByzantiumToConstantinopleFixAt5,
-            eth::Network::TransitionnetTest}};
+            eth::Network::ConstantinopleFixTest, eth::Network::IstanbulTest,
+            eth::Network::FrontierToHomesteadAt5, eth::Network::HomesteadToDaoAt5,
+            eth::Network::HomesteadToEIP150At5, eth::Network::EIP158ToByzantiumAt5,
+            eth::Network::ByzantiumToConstantinopleFixAt5, eth::Network::TransitionnetTest}};
 
     for (auto const& net : networks)
         if (netIdToString(net) == _netname)
@@ -151,35 +139,13 @@ eth::Network stringToNetId(string const& _netname)
     return eth::Network::FrontierTest;
 }
 
-bool isDisabledNetwork(eth::Network _net)
-{
-    Options const& opt = Options::get();
-    if (opt.all || opt.filltests || opt.createRandomTest || !opt.singleTestNet.empty())
-    {
-        return false;
-    }
-    switch (_net)
-    {
-    case eth::Network::FrontierTest:
-    case eth::Network::HomesteadTest:
-    case eth::Network::FrontierToHomesteadAt5:
-    case eth::Network::HomesteadToDaoAt5:
-    case eth::Network::HomesteadToEIP150At5:
-    case eth::Network::ConstantinopleTest:  // Disable initial constantinople version
-        return true;
-    default:
-        break;
-    }
-    return false;
-}
-
 set<eth::Network> const& getNetworks()
 {
     // Networks for the test case execution when filling the tests
     static set<eth::Network> const networks{
         {eth::Network::FrontierTest, eth::Network::HomesteadTest, eth::Network::EIP150Test,
             eth::Network::EIP158Test, eth::Network::ByzantiumTest, eth::Network::ConstantinopleTest,
-            eth::Network::ConstantinopleFixTest}};
+            eth::Network::ConstantinopleFixTest, eth::Network::IstanbulTest}};
     return networks;
 }
 
@@ -637,10 +603,55 @@ string prepareLLLCVersionString()
     return "Error getting LLLC Version";
 }
 
-#define STR(X) #X
-string prepareBinaryenVersionString()
+// A simple C++ implementation of the Levenshtein distance algorithm to measure the amount of
+// difference between two strings. https://gist.github.com/TheRayTracer/2644387
+size_t levenshteinDistance(char const* _s, size_t _n, char const* _t, size_t _m)
 {
-    return STR(BINARYEN_VERSION);
+    ++_n;
+    ++_m;
+    size_t* d = new size_t[_n * _m];
+
+    memset(d, 0, sizeof(size_t) * _n * _m);
+    for (size_t i = 1, im = 0; i < _m; ++i, ++im)
+    {
+        for (size_t j = 1, jn = 0; j < _n; ++j, ++jn)
+        {
+            if (_s[jn] == _t[im])
+                d[(i * _n) + j] = d[((i - 1) * _n) + (j - 1)];
+            else
+            {
+                d[(i * _n) + j] = min(d[(i - 1) * _n + j] + 1, /* A deletion. */
+                    min(d[i * _n + (j - 1)] + 1,               /* An insertion. */
+                        d[(i - 1) * _n + (j - 1)] + 1));       /* A substitution. */
+            }
+        }
+    }
+
+    size_t r = d[_n * _m - 1];
+    delete[] d;
+    return r;
+}
+
+std::vector<std::string> testSuggestions(
+    vector<string> const& _testList, std::string const& _sMinusTArg)
+{
+    vector<string> ret;
+    size_t allTestsElementIndex = 0;
+    // <index in availableTests, compared distance>
+    typedef std::pair<size_t, size_t> NameDistance;
+    // Use `vector` here because `set` does not work with sort
+    std::vector<NameDistance> distanceMap;
+    for (auto& it : _testList)
+    {
+        int const dist = test::levenshteinDistance(
+            _sMinusTArg.c_str(), _sMinusTArg.size(), it.c_str(), it.size());
+        distanceMap.emplace_back(allTestsElementIndex++, dist);
+    }
+    std::sort(distanceMap.begin(), distanceMap.end(),
+        [](NameDistance const& _a, NameDistance const& _b) { return _a.second < _b.second; });
+    for (size_t i = 0; i < 3 && i < distanceMap.size(); i++)
+        ret.push_back(_testList[distanceMap[i].first]);
+    return ret;
 }
 
 void copyFile(fs::path const& _source, fs::path const& _destination)

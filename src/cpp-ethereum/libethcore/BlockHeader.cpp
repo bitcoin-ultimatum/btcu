@@ -1,23 +1,7 @@
-/*
-    This file is part of cpp-ethereum.
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2014-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file BlockHeader.cpp
- * @author Gav Wood <i@gavwood.com>
- * @date 2014
- */
 
 #include <libdevcore/Common.h>
 #include <libdevcore/Log.h>
@@ -251,24 +235,18 @@ void BlockHeader::verify(Strictness _s, BlockHeader const& _parent, bytesConstRe
                 transactionsTrie.insert(&k.out(), txList[i].data());
 
                 txs.push_back(txList[i].data());
-#ifndef WIN32
                 cdebug << toHex(k.out()) << toHex(txList[i].data());
-#endif
             }
-#ifndef WIN32
             cdebug << "trieRootOver" << expectedRoot;
             cdebug << "orderedTrieRoot" << orderedTrieRoot(txs);
             cdebug << "TrieDB" << transactionsTrie.root();
             cdebug << "Contents:";
-            for (auto const& t : txs)
+            for (auto const& t: txs)
                 cdebug << toHex(t);
-#endif
 
             BOOST_THROW_EXCEPTION(InvalidTransactionsRoot() << Hash256RequirementError(expectedRoot, m_transactionsRoot));
         }
-#ifndef WIN32
         LOG(m_logger) << "Expected uncle hash: " << toString(sha3(root[2].data()));
-#endif
         if (m_sha3Uncles != sha3(root[2].data()))
             BOOST_THROW_EXCEPTION(InvalidUnclesHash() << Hash256RequirementError(sha3(root[2].data()), m_sha3Uncles));
     }

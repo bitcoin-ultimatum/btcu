@@ -59,7 +59,7 @@ SendWidget::SendWidget(BTCUGUI* parent) :
    ui->pushButtonFee->setVisible(false);
    ui->pushButtonAddRecipient->setVisible(false);
     /* Subtitle */
-    ui->labelSubtitle1->setText(tr("send public coins"));
+    ui->labelSubtitle1->setText(tr("Send public coins"));
     setCssProperty(ui->labelSubtitle1, "text-subtitle");
 
     ui->labelSubtitle2->setText(tr("Select coin type to spend"));
@@ -691,7 +691,7 @@ void SendWidget::onContactsClicked(SendMultiRow* entry){
         pos = focusedEntry->getEditLineRect().bottomLeft();
         pos.setY((pos.y() + (focusedEntry->getEditHeight() - 12) * 3));
     }
-    pos.setX(pos.x() + 30);
+    pos.setX(pos.x() + 20);
     pos.setY(pos.y() + 13);
     menuContacts->move(pos);
     menuContacts->show();

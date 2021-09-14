@@ -426,6 +426,7 @@ static void MutateTxSign(CMutableTransaction& tx, const std::string& flagStr)
         const CScript& prevPubKey = coins->vout[txin.prevout.n].scriptPubKey;
 
         txin.scriptSig.clear();
+        CScriptWitness witness;
         // Only sign SIGHASH_SINGLE if there's a corresponding output:
         if (!fHashSingle || (i < mergedTx.vout.size()))
             SignSignature(keystore, prevPubKey, mergedTx, i, nHashType);
@@ -434,7 +435,7 @@ static void MutateTxSign(CMutableTransaction& tx, const std::string& flagStr)
         for (const CTransaction& txv : txVariants) {
             txin.scriptSig = CombineSignatures(prevPubKey, mergedTx, i, txin.scriptSig, txv.vin[i].scriptSig);
         }
-        if (!VerifyScript(txin.scriptSig, prevPubKey, STANDARD_SCRIPT_VERIFY_FLAGS, MutableTransactionSignatureChecker(&mergedTx, i)))
+        if (!BTC::VerifyScript(txin.scriptSig, prevPubKey, &witness, STANDARD_SCRIPT_VERIFY_FLAGS, MutableTransactionSignatureChecker(&mergedTx, i)))
             fComplete = false;
     }
 

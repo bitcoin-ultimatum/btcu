@@ -1,24 +1,6 @@
-/*
-    This file is part of cpp-ethereum.
-
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file peer.cpp
- * @author Gav Wood <i@gavwood.com>
- * @date 2014
- * Peer Network test functions.
- */
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2014-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
 #include <libp2p/Capability.h>
 #include <libp2p/Host.h>
@@ -36,12 +18,19 @@ using namespace dev::p2p;
 class TestCap : public CapabilityFace, public Worker
 {
 public:
-    std::string name() const override { return "p2pTestCapability"; }
+    string name() const override { return "p2pTestCapability"; }
     unsigned version() const override { return 2; }
+    CapDesc descriptor() const override { return {name(), version()}; }
     unsigned messageCount() const override { return UserPacket + 1; }
+    char const* packetTypeToString(unsigned) const override
+    {
+        return "p2pTestCapabilityPacketType";
+    }
 
-    void onStarting() override {}
-    void onStopping() override {}
+    chrono::milliseconds backgroundWorkInterval() const override
+    {
+        return c_backgroundWorkInterval;
+    }
 
     void onConnect(NodeID const&, u256 const&) override {}
     bool interpretCapabilityPacket(NodeID const&, unsigned _id, RLP const& _r) override
@@ -49,7 +38,12 @@ public:
         return _id > 0 || _r.size() > 0;
     }
     void onDisconnect(NodeID const&) override {}
+    void doBackgroundWork() override {}
+
+    static chrono::milliseconds constexpr c_backgroundWorkInterval{1000};
 };
+
+chrono::milliseconds constexpr TestCap::c_backgroundWorkInterval;
 
 BOOST_AUTO_TEST_SUITE(libp2p)
 BOOST_FIXTURE_TEST_SUITE(p2p, TestOutputHelperFixture)
@@ -94,7 +88,7 @@ BOOST_AUTO_TEST_CASE(host)
     }
 
     BOOST_REQUIRE(host1.haveNetwork() && host2.haveNetwork());
-    host1.addNode(node2, NodeIPEndpoint(bi::address::from_string(c_localhostIp), host2port, host2port));
+    host1.addNode(node2, NodeIPEndpoint(bi::make_address(c_localhostIp), host2port, host2port));
 
     // Wait for up to 24 seconds, to give the hosts time to find each other
     for (unsigned i = 0; i < 24000; i += step)
@@ -153,11 +147,11 @@ BOOST_AUTO_TEST_CASE(registerCapabilityAfterNetworkStart)
 
 BOOST_AUTO_TEST_CASE(saveNodes)
 {
-    std::list<Host*> hosts;
+    list<Host*> hosts;
     unsigned const c_step = 10;
     unsigned const c_nodes = 6;
     unsigned const c_peers = c_nodes - 1;
-    std::set<short unsigned> ports;
+    set<short unsigned> ports;
 
     for (unsigned i = 0; i < c_nodes; ++i)
     {
@@ -177,14 +171,16 @@ BOOST_AUTO_TEST_CASE(saveNodes)
     
     Host& host = *hosts.front();
     for (auto const& h: hosts)
-        host.addNode(h->id(), NodeIPEndpoint(bi::address::from_string(c_localhostIp), h->listenPort(), h->listenPort()));
+        host.addNode(h->id(),
+            NodeIPEndpoint(bi::make_address(c_localhostIp), h->listenPort(), h->listenPort()));
 
     for (unsigned i = 0; i < c_peers * 1000 && host.peerCount() < c_peers; i += c_step)
         this_thread::sleep_for(chrono::milliseconds(c_step));
 
     Host& host2 = *hosts.back();
     for (auto const& h: hosts)
-        host2.addNode(h->id(), NodeIPEndpoint(bi::address::from_string(c_localhostIp), h->listenPort(), h->listenPort()));
+        host2.addNode(h->id(),
+            NodeIPEndpoint(bi::make_address(c_localhostIp), h->listenPort(), h->listenPort()));
 
     for (unsigned i = 0; i < c_peers * 2000 && host2.peerCount() < c_peers; i += c_step)
         this_thread::sleep_for(chrono::milliseconds(c_step));
@@ -210,7 +206,12 @@ BOOST_AUTO_TEST_CASE(saveNodes)
     RLP r(firstHostNetwork);
     BOOST_REQUIRE(r.itemCount() == 3);
     BOOST_REQUIRE(r[0].toInt<unsigned>() == dev::p2p::c_protocolVersion);
-    BOOST_REQUIRE_EQUAL(r[1].toBytes().size(), 32); // secret
+
+    BOOST_REQUIRE(r[1].isList());
+    BOOST_REQUIRE(r[1].itemCount() == 2);
+    BOOST_REQUIRE_EQUAL(r[1][0].toBytes().size(), 32);  // secret
+    BOOST_REQUIRE(r[1][1].isList());                    // ENR
+
     BOOST_REQUIRE(r[2].itemCount() >= c_nodes);
     
     for (auto i: r[2])
@@ -221,6 +222,40 @@ BOOST_AUTO_TEST_CASE(saveNodes)
 
     for (auto host: hosts)
         delete host;
+}
+
+BOOST_AUTO_TEST_CASE(saveENR)
+{
+    NetworkConfig config("13.74.189.147", "", 30303, false);
+    Host host1("Test", config);
+    ENR enr1 = host1.enr();
+
+    bytes store(host1.saveNetwork());
+
+    Host host2("Test", config, bytesConstRef(&store));
+    ENR enr2 = host2.enr();
+
+    BOOST_REQUIRE_EQUAL(enr1.sequenceNumber(), enr2.sequenceNumber());
+    BOOST_REQUIRE(enr1.keyValuePairs() == enr2.keyValuePairs());
+    BOOST_REQUIRE(enr1.signature() == enr2.signature());
+}
+
+BOOST_AUTO_TEST_CASE(updateENRfromConfig)
+{
+    NetworkConfig config("", "", 30303, false);
+    Host host1("Test", config);
+    ENR enr1 = host1.enr();
+
+    bytes store(host1.saveNetwork());
+
+    NetworkConfig config2("13.74.189.148", "", 30303, false);
+    Host host2("Test", config2, bytesConstRef(&store));
+    host2.start();
+    host2.stop();
+    ENR enr2 = host2.enr();
+
+    BOOST_REQUIRE_EQUAL(enr2.sequenceNumber(), enr1.sequenceNumber() + 1);
+    BOOST_REQUIRE_EQUAL(enr2.ip(), bi::make_address("13.74.189.148"));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
@@ -246,7 +281,7 @@ BOOST_AUTO_TEST_CASE(requirePeer)
     BOOST_REQUIRE(port2);
     BOOST_REQUIRE_NE(port1, port2);
 
-    host1.requirePeer(node2, NodeIPEndpoint(bi::address::from_string(localhost), port2, port2));
+    host1.requirePeer(node2, NodeIPEndpoint(bi::make_address(localhost), port2, port2));
 
     // Wait for up to 12 seconds, to give the hosts time to connect to each other.
     for (unsigned i = 0; i < 12000; i += step)
@@ -262,8 +297,8 @@ BOOST_AUTO_TEST_CASE(requirePeer)
     BOOST_REQUIRE_EQUAL(host1peerCount, 1);
     BOOST_REQUIRE_EQUAL(host2peerCount, 1);
 
-    PeerSessionInfos sis1 = host1.peerSessionInfo();
-    PeerSessionInfos sis2 = host2.peerSessionInfo();
+    PeerSessionInfos sis1 = host1.peerSessionInfos();
+    PeerSessionInfos sis2 = host2.peerSessionInfos();
 
     BOOST_REQUIRE_EQUAL(sis1.size(), 1);
     BOOST_REQUIRE_EQUAL(sis2.size(), 1);
@@ -309,8 +344,8 @@ BOOST_AUTO_TEST_CASE(requirePeerNoNetwork)
     host1.registerCapability(make_shared<TestCap>());
     host2.registerCapability(make_shared<TestCap>());
 
-    host1.requirePeer(node2, NodeIPEndpoint(bi::address::from_string(c_localhostIp),
-                                 0 /* tcp port */, 0 /* udp port */));
+    host1.requirePeer(
+        node2, NodeIPEndpoint(bi::make_address(c_localhostIp), 0 /* tcp port */, 0 /* udp port */));
 
     BOOST_REQUIRE(!host1.isRequiredPeer(node2));
 }
@@ -323,8 +358,8 @@ BOOST_AUTO_TEST_CASE(emptySharedPeer)
 {
     shared_ptr<Peer> p;
     BOOST_REQUIRE(!p);
-    
-    std::map<NodeID, std::shared_ptr<Peer>> peers;
+
+    map<NodeID, shared_ptr<Peer>> peers;
     p = peers[NodeID()];
     BOOST_REQUIRE(!p);
     
@@ -366,7 +401,8 @@ int peerTest(int argc, char** argv)
     Host ph("Test", NetworkConfig(listenPort));
 
     if (!remoteHost.empty() && !remoteAlias)
-        ph.addNode(remoteAlias, NodeIPEndpoint(bi::address::from_string(remoteHost), remotePort, remotePort));
+        ph.addNode(
+            remoteAlias, NodeIPEndpoint(bi::make_address(remoteHost), remotePort, remotePort));
 
     this_thread::sleep_for(chrono::milliseconds(200));
 

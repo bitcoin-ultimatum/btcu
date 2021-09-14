@@ -612,12 +612,16 @@ CAmount CWallet::GetZerocoinBalance(bool fMatureOnly) const
         //nLastMaturityCheck = chainActive.Height();
 
         CAmount nBalance = 0;
-        std::vector<CMintMeta> vMints = zbtcuTracker->GetMints(true);
-        for (auto meta : vMints) {
-            // Every public coin spend is now spendable, no need to mint new coins on top.
-            //if (meta.nHeight >= mapMintMaturity.at(meta.denom) || meta.nHeight >= chainActive.Height() || meta.nHeight == 0)
-            //    continue;
-            nBalance += libzerocoin::ZerocoinDenominationToAmount(meta.denom);
+        if(zbtcuTracker)
+        {
+           std::vector<CMintMeta> vMints = zbtcuTracker->GetMints(true);
+           for (auto meta : vMints)
+           {
+              // Every public coin spend is now spendable, no need to mint new coins on top.
+              //if (meta.nHeight >= mapMintMaturity.at(meta.denom) || meta.nHeight >= chainActive.Height() || meta.nHeight == 0)
+              //    continue;
+              nBalance += libzerocoin::ZerocoinDenominationToAmount(meta.denom);
+           }
         }
         return nBalance;
     }

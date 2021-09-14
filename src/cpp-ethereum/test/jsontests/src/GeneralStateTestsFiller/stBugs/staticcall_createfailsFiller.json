@@ -15,7 +15,7 @@
 		            "gas" : -1,
 		            "value" : -1
 		        },
-		        "network" : [">=Byzantium"],
+		        "network" : [">=Istanbul"],
 		        "result" : {
 		            "0xb94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
 				"storage": {
@@ -23,24 +23,6 @@
 				}						
 			    },
 			    "0x1d0384eb7c2b1a9d9862c8e180f9e4d1696a2a8e" : {
-				"shouldnotexist" : "1"						
-			    }
-		        }
-		},
-		{
-		        "indexes" : {
-		            "data" : [1],
-		            "gas" : 0,
-		            "value" : 0
-		        },
-		        "network" : [">=Byzantium"],
-		        "result" : {
-		            "0xb94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
-				"storage": {
-				    "0x01" : "0x00"
-				}						
-			    },
-			    "0x82db939397f8eb81135c6c703368a27a40059f0c" : {
 				"shouldnotexist" : "1"						
 			    }
 		        }

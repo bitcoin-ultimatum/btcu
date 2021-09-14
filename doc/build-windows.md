@@ -83,15 +83,15 @@ To install project dependencies open the project folder in the Powershell termin
     vcpkg install --triplet x64-windows-static $(Get-Content -Path depends\vcpkg\vcpkg-packages.txt).split()
 ```
 
-Note: If you didn't add the VCPKG folder to the PATH environment variable you will have to specify the full path to vcpkg.exe.
+**Note:** If you didn't add the VCPKG folder to the PATH environment variable you will have to specify the full path to vcpkg.exe.
 
-Important: If the process takes more than 30 minutes probably something goes wrong. In that case you can simply re-run the command.
+**Important note:** If the process takes more than 30 minutes probably something goes wrong. In that case you can simply re-run the command.
 
 ### Boost installation
 
 In order to build Boost firstly please open the project folder in Powershell terminal and run: 
 ```cmd
-    (new-object System.Net.WebClient).DownloadFile("https://dl.bintray.com/boostorg/release/1.71.0/source/boost_1_71_0.zip","${PWD}\depends\packages\static\boost_1_71_0.zip")
+    (new-object System.Net.WebClient).DownloadFile("https://boostorg.jfrog.io/artifactory/main/release/1.71.0/source/boost_1_71_0.zip","${PWD}\depends\packages\static\boost_1_71_0.zip")
 
     cd depends\packages\static\  # The folder where
                                  # the Boost files would be

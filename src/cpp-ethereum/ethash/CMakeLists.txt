@@ -11,7 +11,6 @@ include(${CMAKE_SOURCE_DIR}/cmake/cable/bootstrap.cmake)
 include(CableToolchains)
 include(CableBuildType)
 include(CableCompilerSettings)
-cable_configure_toolchain(DEFAULT cxx11)
 
 list(APPEND CMAKE_PREFIX_PATH /usr/local/opt/google-benchmark)
 list(APPEND CMAKE_PREFIX_PATH /usr/local/opt/googletest)
@@ -38,7 +37,7 @@ elseif(MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 4)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /LARGEADDRESSAWARE")
 endif()
 
-option(ETHASH_INSTALL_CMAKE_CONFIG "Install CMake configuration scripts for find_package(CONFIG)" ON)
+option(ETHASH_INSTALL_CMAKE_CONFIG "Install CMake configuration scripts for find_package(CONFIG)" OFF)
 
 option(ETHASH_FUZZING "Build with fuzzer instrumentation" OFF)
 if(ETHASH_FUZZING)
@@ -50,7 +49,7 @@ add_subdirectory(lib/ethash)
 
 # Disable tests for Windows
 if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-    option(ETHASH_BUILD_TESTS "Build unit tests" ON)
+    option(ETHASH_BUILD_TESTS "Build unit tests" ${ENABLE_TESTS})
     if(ETHASH_BUILD_TESTS)
         add_subdirectory(test)
     endif()

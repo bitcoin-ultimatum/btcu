@@ -144,7 +144,7 @@ bool AttemptToAddContractToBlock(CTxMemPoolEntry& me, CTransaction& tx, CBlock* 
         blockTransactions.push_back(std::make_shared<const CTransaction>(t));
     }
     //TODO: Add convertation from pblock transactions
-    QtumTxConverter convert(tx, NULL, NULL, contractflags);
+    QtumTxConverter convert(tx, NULL, &blockTransactions, contractflags);
 
     ExtractQtumTX resultConverter;
     if(!convert.extractionQtumTransactions(resultConverter)){
@@ -240,30 +240,6 @@ bool AttemptToAddContractToBlock(CTxMemPoolEntry& me, CTransaction& tx, CBlock* 
     bceResult.refundSender += testExecResult.refundSender;
     bceResult.refundOutputs.insert(bceResult.refundOutputs.end(), testExecResult.refundOutputs.begin(), testExecResult.refundOutputs.end());
     bceResult.valueTransfers = std::move(testExecResult.valueTransfers);
-
-    // The constructed block template
-    std::unique_ptr<CBlockTemplate> pblocktemplate;
-
-    pblock->vtx.emplace_back(me.GetTx());
-    auto fee = me.GetFee();
-    //pblocktemplate->vTxFees.push_back(fee);
-    //pblocktemplate->vTxSigOpsCost.push_back(me.GetSigOpCost());
-    //this->nBlockWeight += me.GetTxWeight();
-    //++nBlockTx;
-    //pblock->nBlockSigOpsCost += me.GetSigOpCost();
-    //nFees += me.GetFee();
-    //nBlock.insert(iter);
-
-    for (CTransaction &t : bceResult.valueTransfers) {
-        pblock->vtx.emplace_back(std::move(t));
-        //this->nBlockWeight += GetTransactionWeight(t);
-        //pblock->nBlockSigOpsCost += GetLegacySigOpCount(t);
-        //++nBlockTx;
-    }
-    //calculate sigops from new refund/proof tx
-    //pblock->nBlockSigOpsCost -= GetLegacySigOpCount(pblock->vtx[proofTx]);
-    //RebuildRefundTransaction();
-    //this->nBlockSigOpsCost += GetLegacySigOpCount(pblock->vtx[proofTx]);
 
     bceResult.valueTransfers.clear();
 
@@ -663,11 +639,11 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn, CWallet* pwallet, 
             }
         }
 
-        for (CTransaction tx: pblock->vtx){
+        /*for (CTransaction tx: pblock->vtx){
             if(tx.HasCreateOrCall()){
                 AttemptToAddContractToBlock(mempool.mapTx.begin()->second, tx,pblock,40);
             }
-        }
+        }*/
 
         CValidationState state;
         if (!TestBlockValidity(state, *pblock, pindexPrev, false, false)) {

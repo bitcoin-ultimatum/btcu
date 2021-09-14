@@ -24,11 +24,17 @@
 #include <stdint.h>
 #include <iostream>
 #include "zbtcu/deterministicmint.h"
+#include "qt/btcu/addressfilterproxymodel.h"
 
 #include <QDebug>
 #include <QSet>
 #include <QTimer>
 
+class CLeasingManager: public CValidationInterface {
+public:
+    void GetAllAmountsLeasedFrom(CPubKey &pubKey, CAmount &amount) const;
+    void CalcLeasingReward(CPubKey &pubKey, CAmount &amount) const;
+};
 
 WalletModel::WalletModel(CWallet* wallet, OptionsModel* optionsModel, QObject* parent) : QObject(parent), wallet(wallet), optionsModel(optionsModel), addressTableModel(0),
                                                                                          transactionTableModel(0),
@@ -75,12 +81,12 @@ bool WalletModel::isStakingStatusActive() const {
     return wallet->pStakerStatus->IsActive();
 }
 
-CAmount WalletModel::getBalance(const CCoinControl* coinControl) const
+CAmount WalletModel::getBalance(const CCoinControl* coinControl, bool fIncludeLeased) const
 {
     if (coinControl) {
         CAmount nBalance = 0;
         std::vector<COutput> vCoins;
-        wallet->AvailableCoins(&vCoins, true, coinControl, false, ALL_COINS, false, 1, false, true, true, false, true);
+        wallet->AvailableCoins(&vCoins, true, coinControl, false, ALL_COINS, false, 1, false, true, true, fIncludeLeased, true);
         for (const COutput& out : vCoins)
             if (out.fSpendable)
                 nBalance += out.tx->vout[out.i].nValue;
@@ -162,6 +168,63 @@ CAmount WalletModel::getColdStakedBalance() const
     return wallet->GetColdStakingBalance();
 }
 
+CAmount WalletModel::getInLeasing()
+{
+    AddressTableModel* addressTableModel = this->getAddressTableModel();
+    AddressFilterProxyModel *filter = new AddressFilterProxyModel(QString(AddressTableModel::Receive), this);
+    filter->setSourceModel(addressTableModel);
+
+    std::string address = "";
+    CAmount amount = 0;
+    int rowCount = filter->rowCount();
+    for(int addressNumber = 0; addressNumber < rowCount; addressNumber++)
+    {
+        QModelIndex rowIndex = filter->index(addressNumber, AddressTableModel::Address);
+        QModelIndex sibling = rowIndex.sibling(addressNumber, AddressTableModel::Label);
+        QString label = sibling.data(Qt::DisplayRole).toString();
+        sibling = rowIndex.sibling(addressNumber, AddressTableModel::Address);
+        address = sibling.data(Qt::DisplayRole).toString().toStdString();
+
+        CKeyID key;
+        this->getKeyId(CBTCUAddress(address), key);
+        CPubKey pubKey;
+        this->getPubKey(key, pubKey);
+        CAmount leased = 0;
+        wallet->pLeasingManager->GetAllAmountsLeasedFrom(pubKey, leased);
+        amount += leased;
+    }
+    return amount;
+}
+
+CAmount WalletModel::getLeasingProfit()
+{
+    AddressTableModel* addressTableModel = this->getAddressTableModel();
+    AddressFilterProxyModel *filter = new AddressFilterProxyModel(QString(AddressTableModel::Receive), this);
+    filter->setSourceModel(addressTableModel);
+
+    std::string address = "";
+    CAmount amount = 0;
+    int rowCount = filter->rowCount();
+    for(int addressNumber = 0; addressNumber < rowCount; addressNumber++)
+    {
+        QModelIndex rowIndex = filter->index(addressNumber, AddressTableModel::Address);
+        QModelIndex sibling = rowIndex.sibling(addressNumber, AddressTableModel::Label);
+        QString label = sibling.data(Qt::DisplayRole).toString();
+        sibling = rowIndex.sibling(addressNumber, AddressTableModel::Address);
+        address = sibling.data(Qt::DisplayRole).toString().toStdString();
+
+        CKeyID key;
+        this->getKeyId(CBTCUAddress(address), key);
+        CPubKey pubKey;
+        this->getPubKey(key, pubKey);
+        CAmount reward = 0;
+        wallet->pLeasingManager->CalcLeasingReward(pubKey, reward);
+        amount += reward;
+    }
+    if (amount < 0) amount = 0;
+    return amount;
+}
+
 bool WalletModel::isColdStaking() const
 {
     // TODO: Complete me..
@@ -241,7 +304,7 @@ void WalletModel::emitBalanceChanged()
     Q_EMIT balanceChanged(cachedBalance, cachedUnconfirmedBalance, cachedImmatureBalance,
                         cachedZerocoinBalance, cachedUnconfirmedZerocoinBalance, cachedImmatureZerocoinBalance,
                         cachedWatchOnlyBalance, cachedWatchUnconfBalance, cachedWatchImmatureBalance,
-                        cachedDelegatedBalance, cachedColdStakedBalance);
+                        cachedDelegatedBalance, cachedColdStakedBalance, cachedInLeasingBalance, cachedLeasingProfitBalance);
 }
 
 void WalletModel::checkBalanceChanged()
@@ -261,6 +324,8 @@ void WalletModel::checkBalanceChanged()
     // Cold staking
     CAmount newColdStakedBalance =  getColdStakedBalance();
     CAmount newDelegatedBalance = getDelegatedBalance();
+    CAmount newInLeasing = getInLeasing();
+    CAmount newLeasingProfit = getLeasingProfit();
 
 
     if (haveWatchOnly()) {
@@ -272,7 +337,8 @@ void WalletModel::checkBalanceChanged()
     if (cachedBalance != newBalance || cachedUnconfirmedBalance != newUnconfirmedBalance || cachedImmatureBalance != newImmatureBalance ||
         cachedZerocoinBalance != newZerocoinBalance || cachedUnconfirmedZerocoinBalance != newUnconfirmedZerocoinBalance || cachedImmatureZerocoinBalance != newImmatureZerocoinBalance ||
         cachedWatchOnlyBalance != newWatchOnlyBalance || cachedWatchUnconfBalance != newWatchUnconfBalance || cachedWatchImmatureBalance != newWatchImmatureBalance ||
-        cachedTxLocks != nCompleteTXLocks || cachedDelegatedBalance != newDelegatedBalance || cachedColdStakedBalance != newColdStakedBalance) {
+        cachedTxLocks != nCompleteTXLocks || cachedDelegatedBalance != newDelegatedBalance || cachedColdStakedBalance != newColdStakedBalance ||
+        cachedInLeasingBalance != newInLeasing || cachedLeasingProfitBalance != newLeasingProfit) {
         cachedBalance = newBalance;
         cachedUnconfirmedBalance = newUnconfirmedBalance;
         cachedImmatureBalance = newImmatureBalance;
@@ -285,10 +351,12 @@ void WalletModel::checkBalanceChanged()
         cachedWatchImmatureBalance = newWatchImmatureBalance;
         cachedColdStakedBalance = newColdStakedBalance;
         cachedDelegatedBalance = newDelegatedBalance;
+        cachedInLeasingBalance = newInLeasing;
+        cachedLeasingProfitBalance = newLeasingProfit;
         Q_EMIT balanceChanged(newBalance, newUnconfirmedBalance, newImmatureBalance,
                             newZerocoinBalance, newUnconfirmedZerocoinBalance, newImmatureZerocoinBalance,
                             newWatchOnlyBalance, newWatchUnconfBalance, newWatchImmatureBalance,
-                            newDelegatedBalance, newColdStakedBalance);
+                            newDelegatedBalance, newColdStakedBalance, newInLeasing, newLeasingProfit);
     }
 }
 
@@ -389,7 +457,7 @@ WalletModel::SendCoinsReturn WalletModel::prepareTransaction(WalletModelTransact
 
     QSet<QString> setAddress; // Used to detect duplicates
     int nAddresses = 0;
-
+    bool isP2L = false;
     // Pre-check input data for validity
     Q_FOREACH (const SendCoinsRecipient& rcp, recipients) {
         if (rcp.paymentRequest.IsInitialized()) { // PaymentRequest...
@@ -439,6 +507,7 @@ WalletModel::SendCoinsReturn WalletModel::prepareTransaction(WalletModelTransact
                 scriptPubKey = GetScriptForStakeDelegation(stakerId, ownerId);
             } else if (rcp.isP2L) {
                 CBTCUAddress ownerAdd;
+                isP2L = true;
                 if (rcp.ownerAddress.isEmpty()) {
                     // Create new internal owner address
                     if (!getNewAddress(ownerAdd).result)
@@ -467,7 +536,7 @@ WalletModel::SendCoinsReturn WalletModel::prepareTransaction(WalletModelTransact
         return DuplicateAddress;
     }
 
-    CAmount nBalance = getBalance(coinControl);
+    CAmount nBalance = (isP2L?getBalance(coinControl, false):getBalance(coinControl));
 
     if (total > nBalance) {
         return AmountExceedsBalance;

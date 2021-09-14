@@ -1,7 +1,6 @@
 // Aleth: Ethereum C++ client, tools and libraries.
-// Copyright 2019 Aleth Authors.
+// Copyright 2014-2019 Aleth Authors.
 // Licensed under the GNU General Public License, Version 3.
-
 #pragma once
 
 #include <libdevcore/Address.h>
@@ -24,8 +23,8 @@ namespace eth
 /// Current protocol version.
 extern const unsigned c_protocolVersion;
 
-/// Current minor protocol version.
-extern const unsigned c_minorProtocolVersion;
+/// Current minor database version (for the extras database).
+extern const unsigned c_databaseMinorVersion;
 
 /// Current database version.
 extern const unsigned c_databaseVersion;
@@ -90,7 +89,7 @@ struct ImportRoute
 {
 	h256s deadBlocks;
 	h256s liveBlocks;
-	std::vector<Transaction> goodTranactions;
+	std::vector<Transaction> goodTransactions;
 };
 
 enum class ImportResult
@@ -226,6 +225,7 @@ enum AlethErrors
     UnknownArgument,
     UnknownMiningOption,
     ConfigFileEmptyOrNotFound,
+    ConfigFileInvalid,
     UnknownNetworkType,
     BadNetworkIdOption,
     BadConfigOption,
@@ -234,7 +234,6 @@ enum AlethErrors
     BadBidOption,
     BadFormatOption,
     BadUpnpOption,
-    BadPrivateOption,
     BadAddressOption,
     BadHexValueInAddressOption,
     BadBlockNumberHashOption,

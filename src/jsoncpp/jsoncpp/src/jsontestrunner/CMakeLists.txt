@@ -13,7 +13,7 @@ add_executable(jsontestrunner_exe
     main.cpp
 )
 
-if(BUILD_SHARED_LIBS)
+if(BUILD_SHARED_LIBS AND NOT BUILD_STATIC)
     if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.12.0)
         add_compile_definitions( JSON_DLL )
     else()

@@ -1,6 +1,6 @@
 /* EVMC: Ethereum Client-VM Connector API.
- * Copyright 2018 The EVMC Authors.
- * Licensed under the Apache License, Version 2.0. See the LICENSE file.
+ * Copyright 2018-2019 The EVMC Authors.
+ * Licensed under the Apache License, Version 2.0.
  */
 
 /**
@@ -78,6 +78,8 @@ enum evmc_opcode
     OP_NUMBER = 0x43,
     OP_DIFFICULTY = 0x44,
     OP_GASLIMIT = 0x45,
+    OP_CHAINID = 0x46,
+    OP_SELFBALANCE = 0x47,
 
     OP_POP = 0x50,
     OP_MLOAD = 0x51,
@@ -179,18 +181,21 @@ enum evmc_opcode
 /**
  * Metrics for an EVM 1 instruction.
  *
- * Small integer types are used here to make the tables of metrics cache friendly.
+ * Small integer types are used here to make the tables of metrics smaller.
  */
 struct evmc_instruction_metrics
 {
-    /** The instruction gas cost. Value -1 indicates an undefined instruction. */
+    /** The instruction gas cost. */
     int16_t gas_cost;
 
-    /** The number of items the instruction pops from the EVM stack before execution. */
-    int8_t num_stack_arguments;
+    /** The minimum number of the EVM stack items required for the instruction. */
+    int8_t stack_height_required;
 
-    /** The number of items the instruction pushes to the EVM stack after execution. */
-    int8_t num_stack_returned_items;
+    /**
+     * The EVM stack height change caused by the instruction execution,
+     * i.e. stack height _after_ execution - stack height _before_ execution.
+     */
+    int8_t stack_height_change;
 };
 
 /**

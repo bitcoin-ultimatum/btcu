@@ -39,6 +39,8 @@ private Q_SLOTS:
     void onMasterNodesClicked();
     void onColdStakingClicked();
     void onLeasingClicked();
+    void onValidatorClicked();
+    void onContractClicked();
     void onSettingsClicked();
     void onReceiveClicked();
     void updateButtonStyles();

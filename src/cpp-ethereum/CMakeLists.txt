@@ -15,8 +15,6 @@ include(CableBuildType)
 include(CableToolchains)
 include(GNUInstallDirs)
 
-cable_configure_toolchain(DEFAULT cxx11-pic)
-
 set(ETH_CMAKE_DIR "${CMAKE_SOURCE_DIR}/cmake" CACHE PATH "The path to the cmake directory")
 list(APPEND CMAKE_MODULE_PATH ${ETH_CMAKE_DIR})
 
@@ -40,7 +38,7 @@ include(EthExecutableHelper)
 include(EthDependencies)
 include(EthUtils)
 
-if (MSVC)
+if (MSVC OR BUILD_STATIC)
     set(BUILD_SHARED_LIBS OFF)
     set(BUILD_STATIC_LIBS ON)
 endif()
@@ -54,6 +52,7 @@ set(UTILS_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/utils")
 
 configure_project()
 
+option(TESTS "Build ethash tests" ${ENABLE_TESTS})
 if(TESTS)
     # Import binaryen library for testeth.
     # TODO: remove this once testeth uses binaryen as a CLI tool.
@@ -93,10 +92,6 @@ if (TESTS)
     #enable_testing()
    #add_subdirectory(test)
 endif()
-
-
-install(FILES ${PROJECT_BINARY_DIR}/cpp-ethereum/buildinfo.json DESTINATION ${CMAKE_INSTALL_DATADIR}/cpp-ethereum)
-
 
 if(WIN32)
     set(CPACK_GENERATOR ZIP)

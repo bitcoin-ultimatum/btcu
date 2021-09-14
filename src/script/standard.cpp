@@ -405,7 +405,7 @@ int ScriptSigArgsExpected(txnouttype t, const std::vector<std::vector<unsigned c
     case TX_LEASE:
         return 3;
     case TX_LEASINGREWARD:
-        return 4;
+        return 2;
     case TX_MULTISIG:
         if (vSolutions.size() < 1 || vSolutions[0].size() < 1)
             return -1;

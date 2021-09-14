@@ -499,7 +499,7 @@ void TopBar::setNumBlocks(int count) {
             int progress = nAttempt + (masternodeSync.RequestedMasternodeAssets - 1) * MASTERNODE_SYNC_THRESHOLD;
             if(progress >= 0){
                 // todo: MN progress..
-                text = strprintf("Synchronizing masternodes data... - Block: %d", count);
+                text = strprintf("Synchronizing masternodes\ndata... - Block: %d", count);
                 //progressBar->setMaximum(4 * MASTERNODE_SYNC_THRESHOLD);
                 //progressBar->setValue(progress);
                 needState = false;
@@ -532,7 +532,7 @@ void TopBar::setNumBlocks(int count) {
             timeBehindText = tr("%1 and %2").arg(tr("%n year(s)", "", years)).arg(
                     tr("%n week(s)", "", remainder / WEEK_IN_SECONDS));
         }
-        QString timeBehind(" behind. Scanning block ");
+        QString timeBehind(" behind.\nScanning block ");
         QString str = timeBehindText + timeBehind + QString::number(count);
         text = str.toStdString();
 
@@ -548,8 +548,8 @@ void TopBar::setNumBlocks(int count) {
 }
 
 void TopBar::loadWalletModel(){
-    connect(walletModel, SIGNAL(balanceChanged(CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount)), this,
-            SLOT(updateBalances(CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount)));
+    connect(walletModel, SIGNAL(balanceChanged(CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount)), this,
+            SLOT(updateBalances(CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount, CAmount)));
     connect(walletModel->getOptionsModel(), SIGNAL(displayUnitChanged(int)), this, SLOT(updateDisplayUnit()));
     connect(walletModel, &WalletModel::encryptionStatusChanged, this, &TopBar::refreshStatus);
 
@@ -605,7 +605,7 @@ void TopBar::updateDisplayUnit()
                           leasingModel->getTotalAmount()/*walletModel->getUnconfirmedZerocoinBalance()*/, walletModel->getImmatureZerocoinBalance(),
                           walletModel->getWatchBalance(), walletModel->getWatchUnconfirmedBalance(),
                           walletModel->getWatchImmatureBalance(), walletModel->getDelegatedBalance(),
-                          walletModel->getColdStakedBalance());
+                          walletModel->getColdStakedBalance(), walletModel->getInLeasing(), walletModel->getLeasingProfit());
            //ui->comboBoxTokens->setCurrentIndex(nDisplayUnit);
 
         }
@@ -615,7 +615,7 @@ void TopBar::updateDisplayUnit()
 void TopBar::updateBalances(const CAmount& balance, const CAmount& unconfirmedBalance, const CAmount& immatureBalance,
                             const CAmount& zerocoinBalance, const CAmount& unconfirmedZerocoinBalance, const CAmount& immatureZerocoinBalance,
                             const CAmount& watchOnlyBalance, const CAmount& watchUnconfBalance, const CAmount& watchImmatureBalance,
-                            const CAmount& delegatedBalance, const CAmount& coldStakedBalance){
+                            const CAmount& delegatedBalance, const CAmount& coldStakedBalance, const CAmount& leasing, const CAmount& leasingReward){
 
     // Locked balance. //TODO move this to the signal properly in the future..
     CAmount nLockedBalance = 0;
@@ -641,11 +641,13 @@ void TopBar::updateBalances(const CAmount& balance, const CAmount& unconfirmedBa
     ui->labelAmountPiv->setText(totalPiv);
     //ui->labelAmountzPiv->setText(totalzPiv);
 
-    ui->labelPendingPiv->setText(GUIUtil::formatBalance(unconfirmedBalance, nDisplayUnit));
-    ui->labelLeasing->setText(GUIUtil::formatBalance(leasingModel->getTotalAmount()/*unconfirmedZerocoinBalance*/, nDisplayUnit, true));
+    //ui->labelImmaturezPiv->setText(QString::number(leasingReward/100000000.0, 'g', 12) + " zBTCU");//GUIUtil::formatBalance(immatureZerocoinBalance, nDisplayUnit, true));
+    ui->labelLeasing->setText(QString::number(leasing/100000000.0) + " zBTCU");
+    ui->labelImmaturezPiv->setText(QString::number(leasingReward/100000000.0, 'g', 5) + " zBTCU");
+    //ui->labelLeasing->setText(GUIUtil::formatBalance(/*leasingModel->getTotalAmount()*/ leasing, nDisplayUnit, true));
 
+    ui->labelPendingPiv->setText(GUIUtil::formatBalance(unconfirmedBalance, nDisplayUnit));
     ui->labelImmaturePiv->setText(GUIUtil::formatBalance(immatureBalance, nDisplayUnit));
-    ui->labelImmaturezPiv->setText(GUIUtil::formatBalance(immatureZerocoinBalance, nDisplayUnit, true));
 }
 
 void TopBar::resizeEvent(QResizeEvent *event){
@@ -777,12 +779,18 @@ bool TopBar::eventFilter(QObject *obj, QEvent *event)
 {
    QEvent::Type type = event->type();
    if (obj ==  ui->lineEditTocens) {
-      if  (type == QEvent::HoverLeave) {
+       if(type == QEvent::KeyPress)
+       {
+           if(!menuTocen || !menuTocen->isVisible()) onTocensClicked();
+           else
+                QTimer::singleShot(100, this, SLOT(hideMenuTocen()));
+       }
+      /*if  (type == QEvent::HoverLeave) {
          QTimer::singleShot(100, this, SLOT(hideMenuTocen()));
       } else if (type == QEvent::HoverEnter)
       {
          if(!menuTocen || !menuTocen->isVisible()) onTocensClicked();
-      }
+      }*/
    }/*else if(menuTocen && menuTocen->isVisible() && obj ==  menuTocen)
    {
       if  (type == QEvent::HoverLeave) {

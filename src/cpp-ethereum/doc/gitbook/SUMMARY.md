@@ -6,7 +6,7 @@
    * [Getting started](getting_started.md)
    * [Interactive Console](interactive_console.md)
    * [Mining](mining.md)
-   * [cpp-ethereum-key](cpp-ethereum-key.md)
+   * [aleth-key](aleth-key.md)
 * [Whisper](whisper.md)
 * Recipes and How-tos
    * [Cold Wallet Storage Device](cold_wallet_storage_device.md)

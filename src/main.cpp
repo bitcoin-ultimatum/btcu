@@ -44,6 +44,8 @@
 #include "zbtcuchain.h"
 #include "leasing/leasing_tx_verify.h"
 #include "blockrewards.h"
+#include "contract.h"
+#include "validation.h"
 
 #include "zbtcu/zerocoin.h"
 #include "libzerocoin/Denominations.h"
@@ -780,7 +782,8 @@ bool IsStandardTx(const CTransaction& tx, std::string& reason)
         else if ((whichType == TX_MULTISIG) && (!fIsBareMultisigStd)) {
             reason = "bare-multisig";
             return false;
-        } else if (txout.IsDust(::minRelayTxFee)) {
+
+        } else if (txout.IsDust(::minRelayTxFee) && !txout.scriptPubKey.HasOpCreate() && !txout.scriptPubKey.HasOpCall()) {
             reason = "dust";
             return false;
         }
@@ -830,7 +833,7 @@ bool AreInputsStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs)
         // IsStandard() will have already returned false
         // and this method isn't called.
         std::vector<std::vector<unsigned char> > stack;
-        if (!EvalScript(stack, tx.vin[i].scriptSig, false, BaseSignatureChecker()))
+        if (!BTC::EvalScript(stack, tx.vin[i].scriptSig, false, BaseSignatureChecker(), SigVersion::BASE, nullptr))
             return false;
 
         if (whichType == TX_SCRIPTHASH) {
@@ -1619,7 +1622,7 @@ bool GetOutput(const uint256& hash, unsigned int index, CValidationState& state,
 }
 
 /** Return transaction in tx, and if it was found inside a block, its hash is placed in hashBlock */
-bool GetTransaction(const uint256& hash, CTransaction& txOut, uint256& hashBlock, bool fAllowSlow, CBlockIndex* blockIndex)
+bool GetTransaction(const uint256& hash, CTransaction& txOut, uint256& hashBlock, bool fAllowSlow, CBlockIndex* blockIndex, bool fRawTrx)
 {
     CBlockIndex* pindexSlow = blockIndex;
 
@@ -1635,7 +1638,7 @@ bool GetTransaction(const uint256& hash, CTransaction& txOut, uint256& hashBlock
             {
                 CCoinsViewCache& view = *pcoinsTip;
                 const CCoins* coins = view.AccessCoins(hash);
-                if (coins) {
+                if (coins && !fRawTrx) {
                     if (coins->nVersion == CTransaction::BITCOIN_VERSION) {
                         hashBlock = Params().HashGenesisBlock();
                         txOut = CTransaction(hash, *coins);
@@ -1936,7 +1939,8 @@ void UpdateCoins(const CTransaction& tx, CValidationState& state, CCoinsViewCach
 bool CScriptCheck::operator()()
 {
     const CScript& scriptSig = ptxTo->vin[nIn].scriptSig;
-    if (!VerifyScript(scriptSig, scriptPubKey, nFlags, CachingTransactionSignatureChecker(ptxTo, nIn, cacheStore), &error)) {
+    CScriptWitness witness;
+    if (!BTC::VerifyScript(scriptSig, scriptPubKey, &witness, nFlags, CachingTransactionSignatureChecker(ptxTo, nIn, cacheStore), &error)) {
         return ::error("CScriptCheck(): %s:%d VerifySignature failed: %s", ptxTo->GetHash().ToString(), nIn, ScriptErrorString(error));
     }
     return true;
@@ -2314,6 +2318,9 @@ bool DisconnectBlock(CBlock& block, CValidationState& state, CBlockIndex* pindex
         DataBaseAccChecksum(pindex, false);
     }
 
+    globalState->setRoot(uintToh256(pindex->pprev->hashStateRoot)); // qtum
+    globalState->setRootUTXO(uintToh256(pindex->pprev->hashUTXORoot)); // qtum
+
     if (pfClean) {
         *pfClean = fClean;
         return true;
@@ -2627,6 +2634,9 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     if (!fAlreadyChecked && !CheckBlock(block, state, !fJustCheck, !fJustCheck))
         return false;
 
+    uint64_t blockGasLimit = 40000000; //= qtumDGP.getBlockGasLimit(::ChainActive().Height());
+    uint64_t minGasPrice = 40;         //CAmount(qtumDGP.getMinGasPrice(::ChainActive().Height()));
+    CAmount nGasPrice = 40;            //(minGasPrice>DEFAULT_GAS_PRICE)?minGasPrice:DEFAULT_GAS_PRICE;
 
     // verify that the view's current state corresponds to the previous block
     // we start from bitcoin chainstate therefore shouldn't check previous for the first block
@@ -2703,6 +2713,11 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     std::vector<uint256> vSpendsInBlock;
     uint256 hashBlock = block.GetHash();
     std::vector<CTransaction> validatorTransactions;
+    uint64_t countCumulativeGasUsed = 0;
+    //std::map<dev::Address, std::pair<CHeightTxIndexKey, std::vector<uint256> > > heightIndexes;
+    uint64_t blockGasUsed = 0;
+    CAmount gasRefunds = 0;
+
     for (unsigned int i = 0; i < block.vtx.size(); i++) {
         const CTransaction& tx = block.vtx[i];
 
@@ -2857,6 +2872,158 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         
         vPos.emplace_back(tx.GetHash(), pos);
         pos.nTxOffset += ::GetSerializeSize(tx, SER_DISK, CLIENT_VERSION);
+
+        bool hasOpSpend = tx.HasOpSpend();
+
+        unsigned int contractflags = SCRIPT_EXEC_BYTE_CODE;
+        
+
+        //checks for smart contracts trxs
+        bool bSCValidatorFound = true;
+        if (tx.HasCreateOrCall() && !hasOpSpend) {
+              //check that only validator can create contract
+              if(tx.HasOpCreate() && !sporkManager.IsSporkActive(SPORK_1019_CREATECONTRACT_ANY_ALLOWED)) {
+                 //check if create contract allowed for all
+                 bSCValidatorFound = false;
+                 //case for create contract, loop in vouts
+                 int nOut = 0;
+                 for(const CTxOut& v : tx.vout){
+                    if(v.scriptPubKey.HasOpCreate()){
+                       //good we've vout with smartcontract
+                       CKeyID senderAddr = CKeyID(uint160(GetSenderAddress(tx, &view, NULL, nOut)));
+
+                       //okay, seek trx pubkey in validators
+                       //genesis validators
+                       auto genesisValidators = Params().GenesisBlock().vtx[0].validatorRegister;
+                       for(auto &gv : genesisValidators){
+                          if(senderAddr == gv.pubKey.GetID()){
+                             bSCValidatorFound = true;
+                             break;
+                          }
+                       }
+
+                       //voted validators
+                       if(!bSCValidatorFound)
+                       {
+                          auto validatorsRegistrationList = g_ValidatorsState.get_validators();
+                          for (auto& rv: validatorsRegistrationList)
+                          {
+                             if(senderAddr == rv.pubKey.GetID()){
+                                bSCValidatorFound = true;
+                                break;
+                             }
+                          }
+                       }
+                       //if key found - break;
+                       if(bSCValidatorFound)
+                          break;
+                    }
+                    ++nOut;
+                 }
+              }
+
+              if(!bSCValidatorFound)
+                 return state.DoS(100, error("ConnectBlock() : Non-validator create contract not allowed"),
+                                  REJECT_INVALID, "sc-create-invalid");
+
+              if (!CheckSenderScript(view, tx)) {
+                 return state.Error("bad-txns-invalid-sender-script");
+              }
+
+              QtumTxConverter convert(tx, &view, NULL, contractflags); //&block.vtx return as 3rd parametr
+
+              ExtractQtumTX resultConvertQtumTX;
+              if (!convert.extractionQtumTransactions(resultConvertQtumTX)) {
+                 return state.Error("ConnectBlock(): Contract transaction of the wrong format");
+              }
+              if (!CheckMinGasPrice(resultConvertQtumTX.second, minGasPrice))
+                 return state.Error("ConnectBlock(): Contract execution has lower gas price than allowed");
+
+
+              dev::u256 gasAllTxs = dev::u256(0);
+              ByteCodeExec exec(block, resultConvertQtumTX.first, blockGasLimit, pindex->pprev);
+              //validate VM version and other ETH params before execution
+              //Reject anything unknown (could be changed later by DGP)
+              //TODO evaluate if this should be relaxed for soft-fork purposes
+              bool nonZeroVersion = false;
+              dev::u256 sumGas = dev::u256(0);
+              //CAmount nTxFee = view.GetValueIn(tx) - tx.GetValueOut();
+              for (QtumTransaction& qtx : resultConvertQtumTX.first) {
+                 sumGas += qtx.gas() * qtx.gasPrice();
+
+                 if (sumGas > dev::u256(INT64_MAX)) {
+                    return state.Error("ConnectBlock(): Transaction's gas stipend overflows");
+                 }
+
+                 //if (sumGas > dev::u256(nTxFee)) {
+                 //    return state.Error("ConnectBlock(): Transaction fee does not cover the gas stipend");
+                 //}
+
+                 VersionVM v = qtx.getVersion();
+                 if (v.format != 0)
+                    return state.Error("ConnectBlock(): Contract execution uses unknown version format");
+                 if (v.rootVM != 0) {
+                    nonZeroVersion = true;
+                 } else {
+                    if (nonZeroVersion) {
+                       //If an output is version 0, then do not allow any other versions in the same tx
+                       return state.Error("ConnectBlock(): Contract tx has mixed version 0 and non-0 VM executions");
+                    }
+                 }
+                 if (!(v.rootVM == 0 || v.rootVM == 1))
+                    return state.Error("ConnectBlock(): Contract execution uses unknown root VM");
+                 if (v.vmVersion != 0)
+                    return state.Error("ConnectBlock(): Contract execution uses unknown VM version");
+                 if (v.flagOptions != 0)
+                    return state.Error("ConnectBlock(): Contract execution uses unknown flag options");
+
+                 //check gas limit is not less than minimum gas limit (unless it is a no-exec tx)
+                 if (qtx.gas() < MINIMUM_GAS_LIMIT && v.rootVM != 0)
+                    return state.Error("ConnectBlock(): Contract execution has lower gas limit than allowed");
+
+                 if (qtx.gas() > UINT32_MAX)
+                    return state.Invalid("ConnectBlock(): Contract execution can not specify greater gas limit than can fit in 32-bits");
+
+                 gasAllTxs += qtx.gas();
+                 if (gasAllTxs > dev::u256(blockGasLimit))
+                    return state.Error("bad-txns-gas-exceeds-blockgaslimit");
+
+                 //don't allow less than DGP set minimum gas price to prevent MPoS greedy mining/spammers
+                 if (v.rootVM != 0 && (uint64_t)qtx.gasPrice() < minGasPrice)
+                    return state.Error("ConnectBlock(): Contract execution has lower gas price than allowed");
+              }
+
+              if (!nonZeroVersion) {
+                 //if tx is 0 version, then the tx must already have been added by a previous contract execution
+                 if (!tx.HasOpSpend()) {
+                    return state.Error("ConnectBlock(): Version 0 contract executions are not allowed unless created by the AAL ");
+                 }
+              }
+
+              if (fAlreadyChecked) {
+
+                 if (!exec.performByteCode()) {
+                    return state.Error("ConnectBlock(): Unknown error during contract execution");
+                 }
+
+                 std::vector<ResultExecute> resultExec(exec.getResult());
+                 ByteCodeExecResult bcer;
+                 if (!exec.processingResults(bcer)) {
+                    return state.Error("ConnectBlock(): Error processing VM execution results");
+                 }
+                 blockGasUsed += bcer.usedGas;
+                 if (blockGasUsed > blockGasLimit) {
+                    return state.Invalid("ConnectBlock(): Block exceeds gas limit");
+                 }
+                 for (CTxOut refundVout : bcer.refundOutputs) {
+                    gasRefunds += refundVout.nValue;
+                 }
+
+                 if (fRecordLogOpcodes && !fJustCheck) {
+                    writeVMlog(resultExec, tx, block);
+                 }
+              }
+           }
     }
 
     //Track zBTCU money supply in the block index
@@ -2962,6 +3129,23 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     if (fTxIndex)
         if (!pblocktree->WriteTxIndex(vPos))
             return AbortNode(state, "Failed to write transaction index");
+
+
+   /////////////////////////////////////////////////////qtum
+   if (fJustCheck)
+   {
+      dev::h256 prevHashStateRoot(dev::sha3(dev::rlp("")));
+      dev::h256 prevHashUTXORoot(dev::sha3(dev::rlp("")));
+      if(pindex->pprev->hashStateRoot != uint256() && pindex->pprev->hashUTXORoot != uint256()){
+         prevHashStateRoot = uintToh256(pindex->pprev->hashStateRoot);
+         prevHashUTXORoot = uintToh256(pindex->pprev->hashUTXORoot);
+      }
+      globalState->setRoot(prevHashStateRoot);
+      globalState->setRootUTXO(prevHashUTXORoot);
+      return true;
+   }
+   ///////////////////////////////////////////////////
+
 
     // add this block to the view's block chain
     view.SetBestBlock(pindex->GetBlockHash());
@@ -3088,6 +3272,9 @@ void static UpdateTip(CBlockIndex* pindexNew)
               DateTimeStrFormat("%Y-%m-%d %H:%M:%S", pChainTip->GetBlockTime()),
               Checkpoints::GuessVerificationProgress(pChainTip), (unsigned int)pcoinsTip->GetCacheSize());
 
+    // Notify external listeners about the new tip.
+    GetMainSignals().UpdatedBlockTip(pChainTip);
+
     // Check the version of the last 100 blocks to see if we need to upgrade:
     static bool fWarned = false;
     if (!IsInitialBlockDownload() && !fWarned) {
@@ -3184,12 +3371,19 @@ bool static ConnectTip(CValidationState& state, CBlockIndex* pindexNew, CBlock* 
     int64_t nTime3;
     LogPrint("bench", "  - Load block from disk: %.2fms [%.2fs]\n", (nTime2 - nTime1) * 0.001, nTimeReadFromDisk * 0.000001);
     {
+        dev::h256 oldHashStateRoot(globalState->rootHash()); // qtum
+        dev::h256 oldHashUTXORoot(globalState->rootHashUTXO()); // qtum
+
         CInv inv(MSG_BLOCK, pindexNew->GetBlockHash());
         bool rv = ConnectBlock(*pblock, state, pindexNew, view, false, fAlreadyChecked);
         GetMainSignals().BlockChecked(*pblock, state);
         if (!rv) {
             if (state.IsInvalid())
                 InvalidBlockFound(pindexNew, state);
+
+           globalState->setRoot(oldHashStateRoot); // qtum
+           globalState->setRootUTXO(oldHashUTXORoot); // qtum
+
             return error("ConnectTip() : ConnectBlock %s failed", pindexNew->GetBlockHash().ToString());
         }
         mapBlockSource.erase(inv.hash);
@@ -3551,8 +3745,7 @@ bool ActivateBestChain(CValidationState& state, CBlock* pblock, bool fAlreadyChe
                             (pnode->nStartingHeight != -1 ? pnode->nStartingHeight - 2000 : nBlockEstimate))
                             pnode->PushInventory(CInv(MSG_BLOCK, hashNewTip));
                 }
-                // Notify external listeners about the new tip.
-                GetMainSignals().UpdatedBlockTip(pindexNewTip);
+
 
                 unsigned size = 0;
                 if (pblock)
@@ -4767,6 +4960,8 @@ bool ProcessNewBlock(CValidationState& state, CNode* pfrom, CBlock* pblock, CDis
 
     LogPrintf("%s : ACCEPTED Block %ld in %ld milliseconds with size=%d\n", __func__, GetHeight(), GetTimeMillis() - nStartTime,
               pblock->GetSerializeSize(SER_DISK, CLIENT_VERSION));
+    LogPrint("sc","%s : SC: rootHash: %s, rootHashUTXO: %s\n",__func__, globalState->rootHash().hex().c_str(), globalState->rootHashUTXO().hex().c_str());
+
 
     return true;
 }
@@ -4792,8 +4987,17 @@ bool TestBlockValidity(CValidationState& state, const CBlock& block, CBlockIndex
         return false;
     if (!ContextualCheckBlock(block, state, pindexPrev))
         return false;
+
+    dev::h256 oldHashStateRoot(globalState->rootHash()); // qtum
+    dev::h256 oldHashUTXORoot(globalState->rootHashUTXO()); // qtum
+
+
     if (!ConnectBlock(block, state, &indexDummy, viewNew, true))
-        return false;
+    {
+       globalState->setRoot(oldHashStateRoot); // qtum
+       globalState->setRootUTXO(oldHashUTXORoot); // qtum
+       return false;
+    }
     assert(state.IsValid());
 
     return true;
@@ -5009,6 +5213,12 @@ bool CVerifyDB::VerifyDB(CCoinsView* coinsview, int nCheckLevel, int nCheckDepth
     int nGoodTransactions = 0;
     CValidationState state;
 
+   ////////////////////////////////////////////////////////////////////////// // qtum
+   dev::h256 oldHashStateRoot(globalState->rootHash());
+   dev::h256 oldHashUTXORoot(globalState->rootHashUTXO());
+   QtumDGP qtumDGP(globalState.get(), fGettingValuesDGP);
+   //////////////////////////////////////////////////////////////////////////
+
     for (CBlockIndex* pindex = chainActive.Tip(); pindex && pindex->pprev; pindex = pindex->pprev) {
         boost::this_thread::interruption_point();
         uiInterface.ShowProgress(_("Verifying blocks..."), std::max(1, std::min(99, (int)(((double)(chainHeight - pindex->nHeight)) / (double)nCheckDepth * (nCheckLevel >= 4 ? 50 : 100)))));
@@ -5059,10 +5269,18 @@ bool CVerifyDB::VerifyDB(CCoinsView* coinsview, int nCheckLevel, int nCheckDepth
             if (!ReadBlockFromDisk(block, pindex))
                 return error("VerifyDB() : *** ReadBlockFromDisk failed at %d, hash=%s", pindex->nHeight, pindex->GetBlockHash().ToString());
 
+            dev::h256 oldHashStateRoot(globalState->rootHash()); // qtum
+            dev::h256 oldHashUTXORoot(globalState->rootHashUTXO()); // qtum
+
             if (!ConnectBlock(block, state, pindex, coins, false)){
+                globalState->setRoot(oldHashStateRoot); // qtum
+                globalState->setRootUTXO(oldHashUTXORoot); // qtum
                 return error("VerifyDB() : *** found unconnectable block at %d, hash=%s", pindex->nHeight, pindex->GetBlockHash().ToString());
             }
         }
+    } else {
+       globalState->setRoot(oldHashStateRoot); // qtum
+       globalState->setRootUTXO(oldHashUTXORoot); // qtum
     }
 
     LogPrintf("No coin database inconsistencies in last %i blocks (%i transactions)\n", chainHeight - pindexState->nHeight, nGoodTransactions);

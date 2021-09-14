@@ -13,6 +13,11 @@ namespace qtumutils
  * @brief btc_ecrecover Wrapper to CPubKey::RecoverCompact
  */
 bool btc_ecrecover(dev::h256 const& hash, dev::u256 const& v, dev::h256 const& r, dev::h256 const& s, dev::h256 & key);
+
+/**
+ * @brief btc_strhash2sha256 btc CHashWriter wrapper
+ */
+dev::h256 btc_strhash2sha256(dev::bytesConstRef _input) noexcept;
 }
 
 #endif

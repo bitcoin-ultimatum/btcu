@@ -13,6 +13,7 @@
 #include <QFile>
 #include <QIntValidator>
 #include <QHostAddress>
+#include <QRegExp>
 #include <QRegExpValidator>
 
 MasterNodeWizardDialog::MasterNodeWizardDialog(WalletModel *model, QWidget *parent) :
@@ -26,7 +27,8 @@ MasterNodeWizardDialog::MasterNodeWizardDialog(WalletModel *model, QWidget *pare
     ui->setupUi(this);
 
     this->setStyleSheet(parent->styleSheet());
-    setCssProperty(ui->frame, "container-dialog");
+
+    setCssProperty(ui->frame, "container-border");
     ui->frame->setContentsMargins(10,10,10,10);
 
     setCssProperty({ui->labelLine1, ui->labelLine3}, "line-purple");
@@ -51,18 +53,26 @@ MasterNodeWizardDialog::MasterNodeWizardDialog(WalletModel *model, QWidget *pare
     setCssProperty(ui->labelMessage3, "text-main-grey");
 
     ui->lineEditName->setPlaceholderText(tr("e.g user_masternode"));
-    initCssEditLine(ui->lineEditName);
+    ui->lineEditName->setProperty("cssClass", "edit-leasing-dialog");
+    //setCssProperty(ui->lineEditName, "edit-primary-multi-book");
+    //initCssEditLine(ui->lineEditName);
     ui->lineEditName->setValidator(new QRegExpValidator(QRegExp("^[A-Za-z0-9]+"), ui->lineEditName));
 
     // Frame 4
     setCssProperty(ui->labelTitle4, "text-title-dialog");
-    setCssProperty({ui->labelSubtitleIp, ui->labelSubtitlePort}, "text-title");
-    setCssSubtitleScreen(ui->labelSubtitleAddressIp);
+    setCssProperty({ui->labelSubtitleIp, ui->labelSubtitlePort}, "text-main-purple");
+    //setCssSubtitleScreen(ui->labelSubtitleAddressIp);
+    setCssProperty(ui->labelSubtitleAddressIp, "text-main-grey");
 
     ui->lineEditIpAddress->setPlaceholderText("e.g 18.255.255.255");
     ui->lineEditPort->setPlaceholderText("e.g 3666");
-    initCssEditLine(ui->lineEditIpAddress);
-    initCssEditLine(ui->lineEditPort);
+    //setCssProperty(ui->lineEditIpAddress, "edit-primary-multi-book");
+    //setCssProperty(ui->lineEditPort, "edit-primary-multi-book");
+
+    ui->lineEditIpAddress->setProperty("cssClass", "edit-leasing-dialog");
+    ui->lineEditPort->setProperty("cssClass", "edit-leasing-dialog");
+    //initCssEditLine(ui->lineEditIpAddress);
+    //initCssEditLine(ui->lineEditPort);
     ui->stackedWidget->setCurrentIndex(pos);
     ui->lineEditPort->setValidator(new QIntValidator(0, 9999999, ui->lineEditPort));
     if(walletModel->isTestNetwork()){
@@ -80,12 +90,11 @@ MasterNodeWizardDialog::MasterNodeWizardDialog(WalletModel *model, QWidget *pare
     setCssProperty({icConfirm1, icConfirm3, icConfirm4}, "ic-step-confirm");
 
     // Connect btns
-    setCssBtnPrimary(ui->btnNext);
+    setCssBtnSecondary(ui->btnNext);
+    setCssBtnPrimary(ui->btnBack);
     ui->btnNext->setText(tr("NEXT"));
-    setCssProperty(ui->btnBack , "btn-dialog-cancel");
     ui->btnBack->setVisible(false);
     ui->btnBack->setText(tr("BACK"));
-    setCssProperty(ui->pushButtonSkip, "ic-close");
 
     connect(ui->pushButtonSkip, SIGNAL(clicked()), this, SLOT(close()));
     connect(ui->btnNext, SIGNAL(clicked()), this, SLOT(onNextClicked()));
@@ -94,7 +103,7 @@ MasterNodeWizardDialog::MasterNodeWizardDialog(WalletModel *model, QWidget *pare
 
 void MasterNodeWizardDialog::showEvent(QShowEvent *event)
 {
-    if (ui->btnNext) ui->btnNext->setFocus();
+    //if (ui->btnNext) ui->btnNext->setFocus();
 }
 
 void MasterNodeWizardDialog::onNextClicked(){
@@ -111,10 +120,33 @@ void MasterNodeWizardDialog::onNextClicked(){
             break;
         }
         case 1:{
-
+            QString name = ui->lineEditName->text();
             // No empty names accepted.
-            if (ui->lineEditName->text().isEmpty()) {
+            if (name.isEmpty()) {
                 setCssEditLine(ui->lineEditName, false, true);
+                inform("Enter masternode's name");
+                return;
+            }
+            if(name.size() > 255)
+            {
+                setCssEditLine(ui->lineEditName, false, true);
+                inform("Maximum length of the name is 255 characters>");
+                return;
+            }
+            QRegExp expr("[a-zA-Z0-9]");
+            for(auto ch : name)
+            {
+                if(!expr.exactMatch(ch))
+                {
+                    setCssEditLine(ui->lineEditName, false, true);
+                    inform("Name must contain only digits and letters");
+                    return;
+                }
+            }
+            if(checkName(name))
+            {
+                setCssEditLine(ui->lineEditName, false, true);
+                inform("Masternode with the same name already exists");
                 return;
             }
             setCssEditLine(ui->lineEditName, true, true);
@@ -131,8 +163,23 @@ void MasterNodeWizardDialog::onNextClicked(){
         }
         case 2:{
 
-            // No empty address accepted
-            if (ui->lineEditIpAddress->text().isEmpty()) {
+            QString address = ui->lineEditIpAddress->text();
+            if (address.isEmpty()) {
+                setCssEditLine(ui->lineEditIpAddress, false, true);
+                inform("Enter IP address");
+                return;
+            }
+            QHostAddress hostAddress(address);
+            QAbstractSocket::NetworkLayerProtocol layerProtocol = hostAddress.protocol();
+            if(layerProtocol == -1)
+            {
+                setCssEditLine(ui->lineEditIpAddress, false, true);
+                inform("Enter correct IPv4 or IPv6 address format");
+                return;
+            }
+            if (ui->lineEditPort->text().toInt() <= 0 || ui->lineEditPort->text().toInt() > 999999){
+                setCssEditLine(ui->lineEditPort, false, true);
+                inform("Invalid port number");
                 return;
             }
 
@@ -140,10 +187,52 @@ void MasterNodeWizardDialog::onNextClicked(){
             ui->btnBack->setVisible(true);
             ui->btnBack->setVisible(true);
             isOk = createMN();
+            if(!isOk) {
+                inform(returnStr);
+                return;
+            }
             accept();
         }
     }
     pos++;
+}
+
+bool MasterNodeWizardDialog::checkName(QString newName)
+{
+    newName = newName.trimmed();
+    std::string strConfFile = "masternode.conf";
+    std::string strDataDir = GetDataDir().string();
+    if (strConfFile != boost::filesystem::basename(strConfFile) + boost::filesystem::extension(strConfFile)){
+        throw std::runtime_error(strprintf(_("masternode.conf %s resides outside data directory %s"), strConfFile, strDataDir));
+    }
+
+    boost::filesystem::path pathBootstrap = GetDataDir() / strConfFile;
+    if (boost::filesystem::exists(pathBootstrap)) {
+        boost::filesystem::path pathMasternodeConfigFile = GetMasternodeConfigFile();
+        boost::filesystem::ifstream streamConfig(pathMasternodeConfigFile);
+
+        if (streamConfig.good()) {
+
+            int linenumber = 1;
+            for (std::string line; std::getline(streamConfig, line); linenumber++) {
+                if (line.empty()) continue;
+                if (line.at(0) == '#') continue;
+
+                std::string name = "";
+
+                int count = 0;
+                for (int i = 0; i < line.size(); ++i) {
+                    if (line.at(i) == ' ') {
+                        if (count == 3) break;
+                        count++;
+                    }
+                    else if (count == 0) name += line.at(i);
+                }
+                if(name == newName.toStdString()) return true;
+            }
+        }
+    }
+    return false;
 }
 
 bool MasterNodeWizardDialog::createMN(){
@@ -164,11 +253,8 @@ bool MasterNodeWizardDialog::createMN(){
         std::string mnKeyString = mnKey.ToString();
 
         // second create mn address
-        QString addressLabel = ui->lineEditName->text();
-        if (addressLabel.isEmpty()) {
-            returnStr = tr("address label cannot be empty");
-            return false;
-        }
+        QString addressLabel = ui->lineEditName->text().trimmed();
+
         std::string alias = addressLabel.toStdString();
 
         QString addressStr = ui->lineEditIpAddress->text();
@@ -349,7 +435,7 @@ void MasterNodeWizardDialog::onBackClicked(){
     switch(pos){
         case 0:{
             ui->stackedWidget->setCurrentIndex(0);
-            ui->btnNext->setFocus();
+            //ui->btnNext->setFocus();
             ui->pushNumber1->setChecked(true);
             ui->pushNumber4->setChecked(false);
             ui->pushNumber3->setChecked(false);

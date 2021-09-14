@@ -149,7 +149,8 @@ UniValue blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool tx
     //////////
     ////////// Coin stake data ////////////////
     /////////
-   /*
+   // TODO need to fix NULL prevout in initStakeInput: SIGFAULT for getblock rpc node, end remove  this #ifdef condition
+#ifdef TEST_BTCU
     if (block.IsProofOfStake()) {
         // First grab it
         uint256 hashProofOfStakeRet;
@@ -183,7 +184,8 @@ UniValue blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool tx
         result.push_back(Pair("stakeModifier", stakeModifier));
         result.push_back(Pair("hashProofOfStake", hashProofOfStakeRet.GetHex()));
     }
-*/
+
+#endif
 
     return result;
 }

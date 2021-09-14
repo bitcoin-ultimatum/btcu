@@ -12,7 +12,7 @@ target_link_libraries(devcrypto
         cryptopp-shared 
         ${LIBCRYPT_LIBRARY}
         )
-if (MSVC)
+if (MSVC OR BUILD_STATIC)
     target_link_libraries(devcrypto cryptopp-static)
 else()
     target_link_libraries(devcrypto cryptopp-shared)

@@ -99,7 +99,7 @@
                     "value": 0
                 },
                 "network": [
-                    ">=Byzantium"
+                    ">=Istanbul"
                 ],
                 "result": {
                     "0000000000000000000000000000000000000001": {
@@ -177,7 +177,7 @@
                     "value": 0
                 },
                 "network": [
-                    ">=Byzantium"
+                    ">=Istanbul"
                 ],
                 "result": {
                     "0000000000000000000000000000000000000001": {
@@ -249,6 +249,8 @@
                 }
             }
         ],
-        "explanation": "Puts the base 21847450052839212624230656502990235142567050104912751880812823948662932355190, exponent 21847450052839212624230656502990235142567050104912751880812823948662932355190 and modulus 1461501637330902918203684832716283019655932542965 into the MODEXP precompile, saves the hash of the result. Gives the execution 22000 gas"
+        "_info": { 
+            "comment": "Puts the base 21847450052839212624230656502990235142567050104912751880812823948662932355190, exponent 21847450052839212624230656502990235142567050104912751880812823948662932355190 and modulus 1461501637330902918203684832716283019655932542965 into the MODEXP precompile, saves the hash of the result. Gives the execution 22000 gas"
+        }
     }
 }

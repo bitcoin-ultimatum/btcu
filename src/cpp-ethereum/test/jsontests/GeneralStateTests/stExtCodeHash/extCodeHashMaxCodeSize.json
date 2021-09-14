@@ -2,39 +2,29 @@
     "extCodeHashMaxCodeSize" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
-            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
+            "filling-rpc-server" : "Geth-1.9.6-unstable-63b18027-20190920",
+            "filling-tool-version" : "retesteth-0.0.1+commit.0ae18aef.Linux.g++",
+            "lllcversion" : "Version: 0.5.12-develop.2019.9.13+commit.2d601a4f.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stExtCodeHash/extCodeHashMaxCodeSizeFiller.yml",
-            "sourceHash" : "6065487ea4a95322c77cc6fd2d9d99dce598b96487e395f220e17a76d43ecc3e"
+            "sourceHash" : "4f5b2289624aeaa6a5585d62dd9bd47faf52bfdad83d447f5553d9dfd2e7db97"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
-            "currentDifficulty" : "0x20000",
+            "currentDifficulty" : "0x020000",
             "currentGasLimit" : "0x0f4240",
             "currentNumber" : "0x01",
             "currentTimestamp" : "0x03e8",
             "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
         },
         "post" : {
-            "Constantinople" : [
+            "Istanbul" : [
                 {
-                    "hash" : "0x054288d46727f18fb61d442c7b9cf541f1c64c879f1d9a08f7ee188a9efc7a33",
                     "indexes" : {
                         "data" : 0,
                         "gas" : 0,
                         "value" : 0
                     },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "ConstantinopleFix" : [
-                {
-                    "hash" : "0x054288d46727f18fb61d442c7b9cf541f1c64c879f1d9a08f7ee188a9efc7a33",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
+                    "hash" : "0xf8803adc08e0d03c21f4421c38f8d3d1fefad2374ec2b209ce31b160b204f0fb",
                     "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
                 }
             ]
@@ -42,7 +32,7 @@
         "pre" : {
             "0x095e7baea6a6c7c4c2dfeb977efac326af552d87" : {
                 "balance" : "0x0de0b6b3a7640000",
-                "code" : "0x6020600060006000600073aaaaaaaa00000000000000000000000000000001620249f0f1506020600060003e6000516000556020600060006000600073bbbbbbbb00000000000000000000000000000001620249f0f1506020600060003e600051600155",
+                "code" : "0x6020600060006000600073aaaaaaaa00000000000000000000000000000001620249f0f1506020600060003e6000516000556020600060006000600073bbbbbbbb00000000000000000000000000000001620249f0f1506020600060003e60005160015500",
                 "nonce" : "0x00",
                 "storage" : {
                 }
@@ -56,14 +46,14 @@
             },
             "0xaaaaaaaa00000000000000000000000000000001" : {
                 "balance" : "0x0de0b6b3a7640000",
-                "code" : "0x73cccccccc000000000000000000000000000000013f60005260206000f3",
+                "code" : "0x73cccccccc000000000000000000000000000000013f60005260206000f300",
                 "nonce" : "0x00",
                 "storage" : {
                 }
             },
             "0xbbbbbbbb00000000000000000000000000000001" : {
                 "balance" : "0x0de0b6b3a7640000",
-                "code" : "0x73cccccccc000000000000000000000000000000013b60005260206000f3",
+                "code" : "0x73cccccccc000000000000000000000000000000013b60005260206000f300",
                 "nonce" : "0x00",
                 "storage" : {
                 }

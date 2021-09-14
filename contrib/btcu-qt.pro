@@ -289,10 +289,6 @@ HEADERS += src/activemasternode.h \
            src/secp256k1/src/group.h \
            src/secp256k1/src/group_impl.h \
            src/secp256k1/src/libsecp256k1-config.h \
-           src/secp256k1/src/num.h \
-           src/secp256k1/src/num_gmp.h \
-           src/secp256k1/src/num_gmp_impl.h \
-           src/secp256k1/src/num_impl.h \
            src/secp256k1/src/scalar.h \
            src/secp256k1/src/scalar_4x64.h \
            src/secp256k1/src/scalar_4x64_impl.h \

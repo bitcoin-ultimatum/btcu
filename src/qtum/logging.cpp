@@ -175,6 +175,7 @@ const CLogCategoryDesc LogCategories[] =
     {BCLog::LEASING, "leasing"},
     {BCLog::ALL, "1"},
     {BCLog::ALL, "all"},
+    {BCLog::SC, "sc"},
 };
 
 bool GetLogCategory(BCLog::LogFlags& flag, const std::string& str)

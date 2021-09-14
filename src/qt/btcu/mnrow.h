@@ -7,6 +7,7 @@
 #define MNROW_H
 
 #include <QWidget>
+#include <QModelIndex>
 
 namespace Ui {
 class MNRow;
@@ -20,15 +21,18 @@ public:
     explicit MNRow(QWidget *parent = nullptr);
     ~MNRow();
 
-    void updateView(QString address, QString label, QString status, bool wasCollateralAccepted);
+    void updateView(std::string name, std::string address, double leasing, int blockHeight, QString type, double profit);
+    void setIndex(QModelIndex index);
+    QModelIndex getIndex();
 
 Q_SIGNALS:
-    void onMenuClicked();
+    void onMenuClicked(QModelIndex index);
 
 private Q_SLOTS:
    void onPbnMenuClicked();
 private:
     Ui::MNRow *ui;
+    QModelIndex index;
 };
 
 #endif // MNROW_H

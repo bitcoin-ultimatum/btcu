@@ -15,11 +15,11 @@
                     "gas" : -1,
                     "value" : -1
                 },
-                "network" : [">=Frontier"],
+                "network" : [">=Istanbul"],
                 "result" : {
                     "0000000000000000000000000000000000000000" : {
                         "balance" : "20",
-                        "code" : "0x6001ff"
+                        "code" : "0x6001ff00"
                     }
                 }
             }

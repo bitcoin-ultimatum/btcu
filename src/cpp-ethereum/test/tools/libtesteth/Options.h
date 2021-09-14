@@ -1,28 +1,14 @@
-/*
-    This file is part of cpp-ethereum.
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2017-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file
- * Class for handling testeth custom options
- */
-
+/// @file
+/// Class for handling testeth custom options
 #pragma once
-#include <test/tools/libtestutils/Common.h>
-#include <test/tools/libtesteth/JsonSpiritHeaders.h>
 #include <libdevcore/Exceptions.h>
-#include <libethereum/Executive.h>
+#include <libethereum/StandardTrace.h>
+#include <test/tools/libtesteth/JsonSpiritHeaders.h>
+#include <test/tools/libtestutils/Common.h>
 
 namespace dev
 {
@@ -44,7 +30,7 @@ public:
     bool exectimelog = false; ///< Print execution time for each test suite
     std::string rCurrentTestSuite; ///< Remember test suite before boost overwrite (for random tests)
     bool statediff = false;///< Fill full post state in General tests
-    bool fulloutput = false;///< Replace large output to just it's length
+    bool fullstate = false;        ///< Replace large state output to it's hash
     bool createRandomTest = false; ///< Generate random test
     boost::optional<uint64_t> randomTestSeed; ///< Define a seed for random test
     bool jsontrace = false; ///< Vmtrace to stdout in json format
@@ -54,8 +40,7 @@ public:
 
     /// Test selection
     /// @{
-    bool singleTest = false;
-    boost::optional<std::string> singleTestFile;
+    std::string singleTestFile;
     std::string singleTestName;
     std::string singleTestNet;
     int trDataIndex;	///< GeneralState data
@@ -71,7 +56,7 @@ public:
 private:
     Options(int argc = 0, const char** argv = 0);
     Options(Options const&) = delete;
-    void setVerbosity(int _level);
+    void setVerbosity(int _level, bool _vmTrace);
 };
 
 } //namespace test

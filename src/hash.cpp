@@ -81,6 +81,15 @@ void BIP32Hash(const ChainCode chainCode, unsigned int nChild, unsigned char hea
     CHMAC_SHA512(chainCode.begin(), chainCode.size()).Write(&header, 1).Write(data, 32).Write(num, 4).Finalize(output);
 }
 
+CHashWriter TaggedHash(const std::string& tag)
+{
+   CHashWriter writer(SER_GETHASH, 0);
+   uint256 taghash;
+   CSHA256().Write((const unsigned char*)tag.data(), tag.size()).Finalize(taghash.begin());
+   writer << taghash << taghash;
+   return writer;
+}
+
 void scrypt_hash(const char* pass, unsigned int pLen, const char* salt, unsigned int sLen, char* output, unsigned int N, unsigned int r, unsigned int p, unsigned int dkLen)
 {
     scrypt(pass, pLen, salt, sLen, output, N, r, p, dkLen);

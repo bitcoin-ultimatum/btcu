@@ -26,29 +26,10 @@ set_target_properties(
 )
 
 include(GNUInstallDirs)
-install(
-    TARGETS scrypt
-    EXPORT libscryptTargets
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
 
 include(CMakePackageConfigHelpers)
 set(config_install_destination ${CMAKE_INSTALL_LIBDIR}/libscrypt/cmake)
 configure_package_config_file(
     libscryptConfig.cmake.in libscryptConfig.cmake
     INSTALL_DESTINATION ${config_install_destination}
-)
-install(
-    EXPORT libscryptTargets
-    DESTINATION ${config_install_destination}
-    NAMESPACE libscrypt::
-)
-install(
-    FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/libscryptConfig.cmake
-    DESTINATION ${config_install_destination}
 )

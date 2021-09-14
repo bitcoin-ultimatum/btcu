@@ -166,7 +166,8 @@ bool initStakeInput(const CBlock& block, std::unique_ptr<CStakeInput>& stake, in
 
         //verify signature and script
         ScriptError serror;
-        if (!VerifyScript(txin.scriptSig, txPrev.vout[txin.prevout.n].scriptPubKey, STANDARD_SCRIPT_VERIFY_FLAGS, TransactionSignatureChecker(&tx, 0), &serror)) {
+        CScriptWitness witness;
+        if (!BTC::VerifyScript(txin.scriptSig, txPrev.vout[txin.prevout.n].scriptPubKey, &witness, STANDARD_SCRIPT_VERIFY_FLAGS, TransactionSignatureChecker(&tx, 0), &serror)) {
             std::string strErr = "";
             if (serror && ScriptErrorString(serror))
                 strErr = strprintf("with the following error: %s", ScriptErrorString(serror));

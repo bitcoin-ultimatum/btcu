@@ -1,11 +1,14 @@
 /* EVMC: Ethereum Client-VM Connector API.
- * Copyright 2018 The EVMC Authors.
- * Licensed under the Apache License, Version 2.0. See the LICENSE file.
+ * Copyright 2018-2019 The EVMC Authors.
+ * Licensed under the Apache License, Version 2.0.
  */
 
 #pragma once
 
 /**
+ * @file
+ * A collection of helper macros to handle some non-portable features of C/C++ compilers.
+ *
  * @addtogroup helpers
  * @{
  */

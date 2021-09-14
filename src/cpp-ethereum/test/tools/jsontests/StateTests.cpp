@@ -1,25 +1,9 @@
-/*
-	This file is part of cpp-ethereum.
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2016-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
-	cpp-ethereum is free software: you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation, either version 3 of the License, or
-	(at your option) any later version.
-
-	cpp-ethereum is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file StateTests.cpp
- * @author Dimitry Khokhlov <dimitry@ethereum.org>
- * @date 2016
- * General State Tests parser.
- */
-
+/// @file
+/// General State Tests parser.
 #include <boost/filesystem/operations.hpp>
 #include <boost/test/unit_test.hpp>
 
@@ -36,6 +20,7 @@ using namespace std;
 using namespace json_spirit;
 using namespace dev;
 using namespace dev::eth;
+using namespace dev::test;
 namespace fs = boost::filesystem;
 
 namespace dev {  namespace test {
@@ -100,9 +85,7 @@ json_spirit::mValue StateTestSuite::doTests(json_spirit::mValue const& _input, b
 				{
 					BOOST_REQUIRE_MESSAGE(exp.type() == obj_type, " post field should contain an array of objects for each network.");
 					if (!Options::get().singleTestNet.empty() && i->first != Options::get().singleTestNet)
-						continue;
-					if (test::isDisabledNetwork(test::stringToNetId(i->first)))
-						continue;
+                        continue;
 					if (importer.checkGeneralTestSection(exp.get_obj(), wrongTransactionsIndexes, i->first))
 						foundResults = true;
 				}
@@ -137,21 +120,6 @@ fs::path StateTestSuite::suiteFillerFolder() const
 
 } }// Namespace Close
 
-class GeneralTestFixture
-{
-public:
-	GeneralTestFixture()
-	{
-		test::StateTestSuite suite;
-		string casename = boost::unit_test::framework::current_test_case().p_name;
-		if (casename == "stQuadraticComplexityTest" && !test::Options::get().all)
-		{
-			std::cout << "Skipping " << casename << " because --all option is not specified.\n";
-			return;
-		}
-		suite.runAllTestsInFolder(casename);
-	}
-};
 
 BOOST_FIXTURE_TEST_SUITE(GeneralStateTests, GeneralTestFixture)
 
@@ -222,4 +190,8 @@ BOOST_AUTO_TEST_CASE(stBadOpcode){}
 //New Tests
 BOOST_AUTO_TEST_CASE(stArgsZeroOneBalance){}
 BOOST_AUTO_TEST_CASE(stEWASMTests){}
+BOOST_AUTO_TEST_CASE(stTimeConsuming) {}
+BOOST_AUTO_TEST_CASE(stChainId) {}
+BOOST_AUTO_TEST_CASE(stSLoadTest) {}
+BOOST_AUTO_TEST_CASE(stSelfBalance) {}
 BOOST_AUTO_TEST_SUITE_END()

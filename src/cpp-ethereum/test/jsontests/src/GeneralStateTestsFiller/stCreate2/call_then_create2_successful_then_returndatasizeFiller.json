@@ -3,7 +3,7 @@
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
             "currentDifficulty" : "0x20000",
-            "currentGasLimit" : "0x0a00000000",
+            "currentGasLimit" : "0x0b00000000",
             "currentNumber" : "0x01",
             "currentTimestamp" : "0x03e8",
             "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
@@ -15,30 +15,15 @@
 		    "gas" : -1,
 		    "value" : -1
 	         },
-		"network" : ["Byzantium"],
+		"network" : [">=Istanbul"],
 		"result" : {
-	 	    "0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6" : {
-                	"storage" : {
-			    "0x00" : "0x01"
-	        	}
-		    }
-		}
-	    },
-	    {
-	        "indexes" : {
-		    "data" : -1,
-		    "gas" : -1,
-		    "value" : -1
-	         },
-		"network" : [">=Constantinople"],
-		"result" : {
-		    "69c6738cb9ceec5b62ae47911b782e1af0b80a3c" : {
-			"code" : "0x0000000000000000000000000000000000000000000000000000000000112233"
+		    "0xc0c06666fad9e52251740536e21fc0f3db0e0fa0" : {
+				"code" : "0x0000000000000000000000000000000000000000000000000000000000112233"
 		    },
 	 	    "0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6" : {
                 	"storage" : {
-			    "0x00" : "0x00"
-	        	}
+					    "0x00" : "0x00"
+	    	    	}
 		    }
 		}
 	    }

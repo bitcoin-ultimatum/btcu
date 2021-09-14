@@ -80,9 +80,9 @@ node_modules/
 
 dependency_graph.svg
 .deps/libbitcoin_common_a-eth-buildinfo.Po
-cpp-ethereum/.dirstamp
-cpp-ethereum/.deps/.dirstamp
-cpp-ethereum/.deps/libbitcoin_common_a-buildinfo.Po
+aleth/.dirstamp
+aleth/.deps/.dirstamp
+aleth/.deps/libbitcoin_common_a-buildinfo.Po
 libaleth-interpreter/.dirstamp
 libaleth-interpreter/.deps/.dirstamp
 libaleth-interpreter/.deps/libbitcoin_common_a-VM.Po
@@ -136,3 +136,4 @@ utils/libscrypt/.deps/crypto_libbitcoin_crypto_base_a-crypto_scrypt-hexconvert.P
 utils/libscrypt/.deps/crypto_libbitcoin_crypto_base_a-crypto_scrypt-nosse.Po
 utils/libscrypt/.deps/crypto_libbitcoin_crypto_base_a-sha256.Po
 utils/libscrypt/.deps/crypto_libbitcoin_crypto_base_a-slowequals.Po
+libbitcoinconsensus_la-CommonData.Plo

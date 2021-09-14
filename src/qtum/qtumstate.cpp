@@ -50,8 +50,8 @@ ResultExecute QtumState::execute(EnvInfo const& _envInfo, SealEngineFace const& 
     const CChainParams& consensusParams = Params();
     try{
         //TO_FIX: Uncomment this check
-        /*if (_t.isCreation() && _t.value())
-            BOOST_THROW_EXCEPTION(CreateWithValue()); */
+        //if (_t.isCreation() && _t.value())
+        //    BOOST_THROW_EXCEPTION(CreateWithValue());
 
         e.initialize(_t);
         // OK - transaction looks valid - execute.
@@ -96,13 +96,8 @@ ResultExecute QtumState::execute(EnvInfo const& _envInfo, SealEngineFace const& 
         printfErrorLog(dev::eth::toTransactionException(_e));
         res.excepted = dev::eth::toTransactionException(_e);
         res.gasUsed = _t.gas();
-        /*if(ChainActive().Height() < consensusParams.nFixUTXOCacheHFHeight  && _p != Permanence::Reverted){
-            deleteAccounts(_sealEngine.deleteAddresses);
-            commit(CommitBehaviour::RemoveEmptyAccounts);
-        } else {
-            m_cache.clear();
-            cacheUTXO.clear();
-        }*/
+        m_cache.clear();
+        cacheUTXO.clear();
     }
 
     if(!_t.isCreation())
@@ -128,8 +123,7 @@ ResultExecute QtumState::execute(EnvInfo const& _envInfo, SealEngineFace const& 
         //make sure to use empty transaction if no vouts made
         return ResultExecute{ex, QtumTransactionReceipt(oldStateRoot, oldUTXORoot, gas, e.logs()), refund.vout.empty() ? CTransaction() : CTransaction(refund)};
     }else{
-        //TO_FIX: set real root hashes
-        return ResultExecute{res, QtumTransactionReceipt(oldStateRoot, oldUTXORoot, startGasUsed + e.gasUsed(), e.logs()), tx ? *tx : CTransaction()};
+        return ResultExecute{res, QtumTransactionReceipt(rootHash(), rootHashUTXO(), startGasUsed + e.gasUsed(), e.logs()), tx ? *tx : CTransaction()};
     }
 }
 

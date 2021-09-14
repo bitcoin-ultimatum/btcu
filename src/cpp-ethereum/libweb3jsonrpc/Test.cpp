@@ -1,29 +1,13 @@
-/*
-    This file is part of cpp-ethereum.
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2016-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file Test.cpp
- * @authors:
- *   Dimitry Khokhlov <dimitry@ethdev.com>
- * @date 2016
- */
 
 #include "Test.h"
 #include <jsonrpccpp/common/errors.h>
 #include <jsonrpccpp/common/exception.h>
 #include <libdevcore/CommonJS.h>
+#include <libethcore/Exceptions.h>
 #include <libethereum/ChainParams.h>
 #include <libethereum/ClientTest.h>
 
@@ -37,6 +21,114 @@ Test::Test(eth::Client& _eth): m_eth(_eth) {}
 
 namespace
 {
+string importResultToErrorMessage(ImportResult _res)
+{
+    switch (_res)
+    {
+    case ImportResult::AlreadyInChain:
+        return "AlreadyInChain";
+    case ImportResult::AlreadyKnown:
+        return "AlreadyKnown";
+    case ImportResult::BadChain:
+        return "BadChain";
+    case ImportResult::FutureTimeKnown:
+        return "FutureTimeKnown";
+    case ImportResult::FutureTimeUnknown:
+        return "FutureTimeUnknown";
+    case ImportResult::Malformed:
+        return "Malformed";
+    case ImportResult::OverbidGasPrice:
+        return "OverbidGasPrice";
+    case ImportResult::Success:
+        return "Success";
+    case ImportResult::UnknownParent:
+        return "UnknownParent";
+    case ImportResult::ZeroSignature:
+        return "ZeroSignature";
+    default:
+        return "ImportResult unhandled case";
+    }
+}
+
+string exceptionToErrorMessage(boost::exception_ptr _e)
+{
+    string ret;
+    try
+    {
+        boost::rethrow_exception(_e);
+    }
+    catch (ExtraDataTooBig const&)
+    {
+        ret = "ExtraData too big.";
+    }
+    catch (InvalidDifficulty const&)
+    {
+        ret = "Invalid Difficulty.";
+    }
+    catch (InvalidGasLimit const&)
+    {
+        ret = "Invalid Block GasLimit.";
+    }
+    catch (BlockGasLimitReached const&)
+    {
+        ret = "Block GasLimit reached.";
+    }
+    catch (TooMuchGasUsed const&)
+    {
+        ret = "Too much gas used.";
+    }
+    catch (InvalidNumber const&)
+    {
+        ret = "Invalid number.";
+    }
+    catch (InvalidLogBloom const&)
+    {
+        ret = "Invalid log bloom.";
+    }
+    catch (InvalidTimestamp const&)
+    {
+        ret = "Invalid timestamp.";
+    }
+    catch (InvalidBlockNonce const&)
+    {
+        ret = "Invalid block nonce.";
+    }
+    catch (UnknownParent const&)
+    {
+        ret = "Unknown parent.";
+    }
+    catch (InvalidUnclesHash const&)
+    {
+        ret = "Invalid uncles hash.";
+    }
+    catch (InvalidTransactionsRoot const&)
+    {
+        ret = "Invalid transactions root.";
+    }
+    catch (InvalidStateRoot const&)
+    {
+        ret = "Invalid state root.";
+    }
+    catch (InvalidGasUsed const&)
+    {
+        ret = "Invalid gas used.";
+    }
+    catch (InvalidReceiptsStateRoot const&)
+    {
+        ret = "Invalid receipts state root.";
+    }
+    catch (InvalidParentHash const&)
+    {
+        ret = "Invalid parent hash.";
+    }
+    catch (...)
+    {
+        ret = "Unknown error.";
+    }
+    return ret;
+}
+
+
 string logEntriesToLogHash(eth::LogEntries const& _logs)
 {
     RLPStream s;
@@ -139,8 +231,23 @@ std::string Test::test_importRawBlock(string const& _blockRLP)
         ClientTest& client = asClientTest(m_eth);
         return toJS(client.importRawBlock(_blockRLP));
     }
-    catch (std::exception const& ex)
+    catch (ImportBlockFailed const& e)
     {
-        BOOST_THROW_EXCEPTION(JsonRpcException(Errors::ERROR_RPC_INTERNAL_ERROR, ex.what()));
+        cwarn << diagnostic_information(e);
+
+        string detailedError;
+        if (auto nested = boost::get_error_info<errinfo_nestedException>(e))
+            detailedError = exceptionToErrorMessage(*nested);
+        else if (auto importResult = boost::get_error_info<errinfo_importResult>(e))
+            detailedError = importResultToErrorMessage(*importResult);
+        else
+            detailedError = "No nested info, no import result info detected on the exception";
+
+        throw JsonRpcException("Block import failed: " + detailedError);
+    }
+    catch (std::exception const& e)
+    {
+        cwarn << e.what();
+        throw JsonRpcException(Errors::ERROR_RPC_INTERNAL_ERROR);
     }
 }

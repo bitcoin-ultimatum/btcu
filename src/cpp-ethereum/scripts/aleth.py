@@ -7,10 +7,10 @@ import os
 
 from dopple import run_daemon, DEFAULT_PROXY_URL, DEFAULT_BACKEND_PATH
 
-DEFAULT_ALETH_EXEC = '/usr/bin/cpp-ethereum'
+DEFAULT_ALETH_EXEC = '/usr/bin/aleth'
 
 parser = argparse.ArgumentParser(add_help=False)
-parser.add_argument('--cpp-ethereum-exec', default=DEFAULT_ALETH_EXEC)
+parser.add_argument('--aleth-exec', default=DEFAULT_ALETH_EXEC)
 parser.add_argument('--rpc', metavar='URL', nargs='?', const=DEFAULT_PROXY_URL, default=False)
 parser.add_argument('-d', '--db-path', help=argparse.SUPPRESS)
 parser.add_argument('--ipcpath', help=argparse.SUPPRESS)
@@ -19,7 +19,7 @@ wrapper_args, aleth_args = parser.parse_known_args()
 aleth_exec = wrapper_args.aleth_exec
 
 if not os.path.isfile(aleth_exec):
-    print("Wrong path to cpp-ethereum executable: {}".format(aleth_exec), file=sys.stderr)
+    print("Wrong path to aleth executable: {}".format(aleth_exec), file=sys.stderr)
     parser.print_usage(sys.stderr)
     exit(1)
 

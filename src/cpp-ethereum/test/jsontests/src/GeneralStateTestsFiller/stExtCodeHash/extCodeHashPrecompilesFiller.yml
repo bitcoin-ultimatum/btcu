@@ -20,7 +20,7 @@ extCodeHashPrecompiles:
       nonce: '0'
       storage: { # set initial values to be overwritten
         0: '0xab',
-        0: '0xab'}
+        1: '0xab'}
     a94f5374fce5edbc8e2a8697c15331677e6ebf0b:
       balance: '1000000000000000000'
       code: '0x'
@@ -32,20 +32,20 @@ extCodeHashPrecompiles:
         gas:  !!int -1
         value: !!int -1
       network:
-        - '>Byzantium'
+        - '>=Istanbul'
       result:
         095e7baea6a6c7c4c2dfeb977efac326af552d87:
           balance: '1000000000000000001'
           storage: {
-            0: '0xd7f7ece59a0c71c5d0e6fd4f298dea11bfbc05b6d5701c7ae9bd2a444d897c27',
-            1: '0x15'
+            0: '0xe5fbfc8ab6f527df72b0a0ea8e0605dcc45e3cea1c7f2437b8c06592f7957451',
+            1: '0x16'
             }
     - indexes:
         data: !!int 1
         gas:  !!int -1
         value: !!int -1
       network:
-        - '>Byzantium'
+        - '>=Istanbul'
       result:
         095e7baea6a6c7c4c2dfeb977efac326af552d87:
           balance: '1000000000000000001'
@@ -58,7 +58,7 @@ extCodeHashPrecompiles:
         gas:  !!int -1
         value: !!int -1
       network:
-        - '>Byzantium'
+        - '>=Istanbul'
       result:
         095e7baea6a6c7c4c2dfeb977efac326af552d87:
           balance: '1000000000000000001'
@@ -71,7 +71,7 @@ extCodeHashPrecompiles:
         gas:  !!int -1
         value: !!int -1
       network:
-        - '>Byzantium'
+        - '>=Istanbul'
       result:
         095e7baea6a6c7c4c2dfeb977efac326af552d87:
           balance: '1000000000000000001'
@@ -84,7 +84,7 @@ extCodeHashPrecompiles:
         gas:  !!int -1
         value: !!int -1
       network:
-        - '>Byzantium'
+        - '>=Istanbul'
       result:
         095e7baea6a6c7c4c2dfeb977efac326af552d87:
           balance: '1000000000000000001'
@@ -97,7 +97,7 @@ extCodeHashPrecompiles:
         gas:  !!int -1
         value: !!int -1
       network:
-        - '>Byzantium'
+        - '>=Istanbul'
       result:
         095e7baea6a6c7c4c2dfeb977efac326af552d87:
           balance: '1000000000000000001'
@@ -110,7 +110,7 @@ extCodeHashPrecompiles:
         gas:  !!int -1
         value: !!int -1
       network:
-        - '>Byzantium'
+        - '>=Istanbul'
       result:
         095e7baea6a6c7c4c2dfeb977efac326af552d87:
           balance: '1000000000000000001'
@@ -123,7 +123,7 @@ extCodeHashPrecompiles:
         gas:  !!int -1
         value: !!int -1
       network:
-        - '>Byzantium'
+        - '>=Istanbul'
       result:
         095e7baea6a6c7c4c2dfeb977efac326af552d87:
           balance: '1000000000000000001'
@@ -136,7 +136,7 @@ extCodeHashPrecompiles:
         gas:  !!int -1
         value: !!int -1
       network:
-        - '>Byzantium'
+        - '>=Istanbul'
       result:
         095e7baea6a6c7c4c2dfeb977efac326af552d87:
           balance: '1000000000000000001'

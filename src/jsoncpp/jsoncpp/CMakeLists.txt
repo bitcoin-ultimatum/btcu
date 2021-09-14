@@ -51,16 +51,6 @@ endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-# ---------------------------------------------------------------------------
-# use ccache if found, has to be done before project()
-# ---------------------------------------------------------------------------
-find_program(CCACHE_EXECUTABLE "ccache" HINTS /usr/local/bin /opt/local/bin)
-if(CCACHE_EXECUTABLE)
-    message(STATUS "use ccache")
-    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_EXECUTABLE}" CACHE PATH "ccache" FORCE)
-    set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_EXECUTABLE}" CACHE PATH "ccache" FORCE)
-endif()
-
 project(jsoncpp
         # Note: version must be updated in three places when doing a release. This
         # annoying process ensures that amalgamate, CMake, and meson all report the
@@ -75,8 +65,8 @@ project(jsoncpp
 message(STATUS "JsonCpp Version: ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}")
 set(PROJECT_SOVERSION 24)
 
-option(JSONCPP_WITH_TESTS "Compile and (for jsoncpp_check) run JsonCpp test executables" OFF)
-option(JSONCPP_WITH_POST_BUILD_UNITTEST "Automatically run unit-tests as a post build step" ON)
+option(JSONCPP_WITH_TESTS "Compile and (for jsoncpp_check) run JsonCpp test executables" ${ENABLE_TESTS})
+option(JSONCPP_WITH_POST_BUILD_UNITTEST "Automatically run unit-tests as a post build step" ${ENABLE_TESTS})
 option(JSONCPP_WITH_WARNING_AS_ERROR "Force compilation to fail if a warning occurs" OFF)
 option(JSONCPP_WITH_STRICT_ISO "Issue all the warnings demanded by strict ISO C and ISO C++" ON)
 option(JSONCPP_WITH_PKGCONFIG_SUPPORT "Generate and install .pc files" ON)
@@ -148,20 +138,13 @@ if(JSONCPP_WITH_PKGCONFIG_SUPPORT)
         "pkg-config/jsoncpp.pc.in"
         "pkg-config/jsoncpp.pc"
         @ONLY)
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/pkg-config/jsoncpp.pc"
-        DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
 endif()
 
 if(JSONCPP_WITH_CMAKE_PACKAGE)
     include(CMakePackageConfigHelpers)
-    install(EXPORT jsoncpp
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/jsoncpp
-        FILE        jsoncppConfig.cmake)
     write_basic_package_version_file("${CMAKE_CURRENT_BINARY_DIR}/jsoncppConfigVersion.cmake"
         VERSION ${PROJECT_VERSION}
         COMPATIBILITY SameMajorVersion)
-    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/jsoncppConfigVersion.cmake
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/jsoncpp)
 endif()
 
 if(JSONCPP_WITH_TESTS)

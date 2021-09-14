@@ -1,21 +1,7 @@
 
-/*
-    This file is part of cpp-ethereum.
-
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2015-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 #include "GenesisInfo.h"
 using namespace dev;
 
@@ -25,20 +11,24 @@ using namespace dev;
 #include "genesis/ropsten.cpp"
 
 //Test configurations
+#include "genesis/test/berlinTest.cpp"
 #include "genesis/test/byzantiumNoProofTest.cpp"
 #include "genesis/test/byzantiumTest.cpp"
 #include "genesis/test/byzantiumTransitionTest.cpp"
+#include "genesis/test/constantinopleFixTest.cpp"
 #include "genesis/test/constantinopleNoProofTest.cpp"
 #include "genesis/test/constantinopleTest.cpp"
-#include "genesis/test/constantinopleFixTest.cpp"
 #include "genesis/test/eip150Test.cpp"
 #include "genesis/test/eip158Test.cpp"
 #include "genesis/test/experimentalTransitionTest.cpp"
 #include "genesis/test/frontierNoProofTest.cpp"
 #include "genesis/test/frontierTest.cpp"
 #include "genesis/test/homesteadTest.cpp"
+#include "genesis/test/istanbulTest.cpp"
+#include "genesis/test/istanbulTransitionTest.cpp"
 #include "genesis/test/mainNetworkNoProofTest.cpp"
 #include "genesis/test/mainNetworkTest.cpp"
+#include "genesis/test/muirGlacierTest.cpp"
 #include "genesis/test/qtumTestNetwork.cpp"
 
 //Transition configurations
@@ -81,6 +71,14 @@ std::string const& dev::eth::genesisInfo(Network _n)
         return c_genesisInfoExperimentalTransitionTest;
     case Network::ConstantinopleFixTest:
         return c_genesisInfoConstantinopleFixTest;
+    case Network::IstanbulTest:
+        return c_genesisInfoIstanbulTest;
+    case Network::IstanbulTransitionTest:
+        return c_genesisInfoIstanbulTransitionTest;
+    case Network::MuirGlacierTest:
+        return c_genesisInfoMuirGlacierTest;
+    case Network::BerlinTest:
+        return c_genesisInfoBerlinTest;
 
 
     //Transition test genesis
@@ -114,7 +112,11 @@ h256 const& dev::eth::genesisStateRoot(Network _n)
     case Network::ByzantiumTest:
     case Network::ConstantinopleTest:
     case Network::ConstantinopleFixTest:
+    case Network::IstanbulTest:
+    case Network::IstanbulTransitionTest:
+    case Network::MuirGlacierTest:
     case Network::ExperimentalTransitionTest:
+    case Network::BerlinTest:
         return c_genesisDefaultStateRoot;
     default:
         throw std::invalid_argument("Invalid network value");

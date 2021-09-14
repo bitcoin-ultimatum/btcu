@@ -1,20 +1,6 @@
-/*
-    This file is part of cpp-ethereum.
-
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2014-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 #pragma once
 
 #include "CommonNet.h"
@@ -24,6 +10,7 @@
 #include <libethcore/BlockHeader.h>
 #include <libethcore/Common.h>
 #include <libethereum/BlockChainSync.h>
+#include <libethereum/VerifiedBlock.h>
 #include <libp2p/Capability.h>
 #include <libp2p/CapabilityHost.h>
 #include <libp2p/Common.h>
@@ -103,10 +90,13 @@ public:
 
     std::string name() const override { return "eth"; }
     unsigned version() const override { return c_protocolVersion; }
+    p2p::CapDesc descriptor() const override { return {name(), version()}; }
     unsigned messageCount() const override { return PacketCount; }
-
-    void onStarting() override;
-    void onStopping() override;
+    char const* packetTypeToString(unsigned _packetType) const override
+    {
+        return ethPacketTypeToString(static_cast<EthSubprotocolPacketType>(_packetType));
+    }
+    std::chrono::milliseconds backgroundWorkInterval() const override;
 
     unsigned protocolVersion() const { return c_protocolVersion; }
     u256 networkId() const { return m_networkId; }
@@ -128,7 +118,7 @@ public:
     BlockQueue const& bq() const { return m_bq; }
     SyncStatus status() const;
 
-    static char const* stateName(SyncState _s) { return s_stateNames[static_cast<int>(_s)]; }
+    static char const* stateName(SyncState _s) { return c_stateNames[static_cast<int>(_s)]; }
 
     static unsigned const c_oldProtocolVersion;
 
@@ -136,25 +126,39 @@ public:
     void onDisconnect(NodeID const& _nodeID) override;
     bool interpretCapabilityPacket(NodeID const& _peerID, unsigned _id, RLP const& _r) override;
 
+    /// Main work loop - sends new transactions and blocks to available peers and disconnects from
+    /// timed out peers
+    void doBackgroundWork() override;
+
     p2p::CapabilityHostFace& capabilityHost() { return *m_host; }
 
     EthereumPeer const& peer(NodeID const& _peerID) const;
     EthereumPeer& peer(NodeID const& _peerID);
     void disablePeer(NodeID const& _peerID, std::string const& _problem);
 
+    /// Remove the supplied transaction hashes from the sent transactions list. Done when
+    /// the transactions have been confirmed to be a part of the blockchain so we no longer
+    /// need to explicitly track them to prevent sending them out to peers. Can be called safely
+    /// from any thread.
+    void removeSentTransactions(std::vector<h256> const& _txHashes);
+
+    /// Send new blocks to peers. Should be done after we've verified the PoW but before we've
+    /// imported the blocks into the chain (in order to reduce the uncle rate). Thread-safe (actual
+    /// sending of blocks is done on the network thread).
+    void propagateNewBlocks(std::shared_ptr<VerifiedBlocks const> const& _newBlocks);
+
 private:
-    static char const* const s_stateNames[static_cast<int>(SyncState::Size)];
+    static char const* const c_stateNames[static_cast<int>(SyncState::Size)];
+    static constexpr std::chrono::milliseconds c_backgroundWorkInterval{1000};
 
     std::vector<NodeID> selectPeers(
         std::function<bool(EthereumPeer const&)> const& _predicate) const;
 
-    std::pair<std::vector<NodeID>, std::vector<NodeID>> randomPartitionPeers(
-        std::vector<NodeID> const& _peers, std::size_t _number) const;
+    std::vector<NodeID> randomPeers(std::vector<NodeID> const& _peers, size_t _count) const;
 
-    void doBackgroundWork();
-
+    /// Send top transactions (by nonce and gas price) to available peers
     void maintainTransactions();
-    void maintainBlocks(h256 const& _currentBlock);
+    void maintainBlockHashes(h256 const& _currentBlock);
     void onTransactionImported(ImportResult _ir, h256 const& _h, h512 const& _nodeId);
 
     /// Initialises the network peer-state, doing the stuff that needs to be once-only. @returns true if it really was first.
@@ -178,6 +182,11 @@ private:
 
     u256 m_networkId;
 
+    // We need to keep track of sent blocks and block hashes separately since we propagate new
+    // blocks after we've verified their PoW (and a few other things i.e. they've been imported into
+    // the block queue and verified) but we propagate new block hashes after blocks have been
+    // imported into the chain
+    h256 m_latestBlockHashSent;
     h256 m_latestBlockSent;
     h256Hash m_transactionsSent;
 
@@ -192,11 +201,11 @@ private:
 
     std::unordered_map<NodeID, EthereumPeer> m_peers;
 
-    std::atomic<bool> m_backgroundWorkEnabled = {false};
-
     mutable std::mt19937_64 m_urng;  // Mersenne Twister psuedo-random number generator
 
     Logger m_logger{createLogger(VerbosityDebug, "ethcap")};
+    Logger m_loggerDetail{createLogger(VerbosityTrace, "ethcap")};
+    Logger m_loggerWarn{createLogger(VerbosityWarning, "ethcap")};
     /// Logger for messages about impolite behaivour of peers.
     Logger m_loggerImpolite{createLogger(VerbosityDebug, "impolite")};
 };

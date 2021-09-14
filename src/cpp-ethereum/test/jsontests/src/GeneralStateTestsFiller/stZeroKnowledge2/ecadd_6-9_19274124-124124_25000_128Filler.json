@@ -155,7 +155,7 @@
                     "value": 0
                 },
                 "network": [
-                    ">=Byzantium"
+                    ">=Istanbul"
                 ],
                 "result": {
                     "24143873e0e0815fdcbcffdbe09c979cbf9ad013": {
@@ -281,6 +281,8 @@
                 }
             }
         ],
-        "explanation": "Puts the points (6, 9) and (19274124, 124124) into the ECADD precompile, truncating or expanding the input data to 128 bytes. Gives the execution 25000 bytes"
+        "_info": { 
+            "comment": "Puts the points (6, 9) and (19274124, 124124) into the ECADD precompile, truncating or expanding the input data to 128 bytes. Gives the execution 25000 bytes"
+        }
     }
 }

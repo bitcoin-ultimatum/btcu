@@ -65,14 +65,14 @@ reasons to make the configuration file and data directory only readable by the
 btcu user and group.  Access to btcu-cli and other btcud rpc clients
 can then be controlled by group membership.
 
-NOTE: When using the systemd .service file, the creation of the aforementioned
+**NOTE:** When using the systemd .service file, the creation of the aforementioned
 directories and the setting of their permissions is automatically handled by
 systemd. Directories are given a permission of 710, giving the btcu group
 access to files under it _if_ the files themselves give permission to the
 btcu group to do so (e.g. when `-sysperms` is specified). This does not allow
 for the listing of files under the directory.
 
-NOTE: It is not currently possible to override `datadir` in
+**NOTE:** It is not currently possible to override `datadir` in
 `/etc/btcu/btcu.conf` with the current systemd, OpenRC, and Upstart init
 files out-of-the-box. This is because the command line options specified in the
 init files take precedence over the configurations in
@@ -100,7 +100,7 @@ Installing this .service file consists of just copying it to
 To test, run `systemctl start btcud` and to enable for system startup run
 `systemctl enable btcud`
 
-NOTE: When installing for systemd in Debian/Ubuntu the .service file needs to be copied to the /lib/systemd/system directory instead.
+**NOTE:** When installing for systemd in Debian/Ubuntu the .service file needs to be copied to the /lib/systemd/system directory instead.
 
 ### OpenRC
 
@@ -116,7 +116,7 @@ Upstart is the default init system for Debian/Ubuntu versions older than 15.04. 
 Drop btcud.conf in /etc/init.  Test by running `service btcud start`
 it will automatically start on reboot.
 
-NOTE: This script is incompatible with CentOS 5 and Amazon Linux 2014 as they
+**NOTE:** This script is incompatible with CentOS 5 and Amazon Linux 2014 as they
 use old versions of Upstart and do not supply the start-stop-daemon utility.
 
 ### CentOS
@@ -134,7 +134,7 @@ running `launchctl load ~/Library/LaunchAgents/org.btcu.btcud.plist`.
 
 This Launch Agent will cause btcud to start whenever the user logs in.
 
-NOTE: This approach is intended for those wanting to run btcud as the current user.
+**NOTE:** This approach is intended for those wanting to run btcud as the current user.
 You will need to modify org.btcu.btcud.plist if you intend to use it as a
 Launch Daemon with a dedicated btcu user.
 

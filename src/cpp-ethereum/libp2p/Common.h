@@ -1,26 +1,10 @@
-/*
-    This file is part of cpp-ethereum.
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2014-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file Common.h
- * @author Gav Wood <i@gavwood.com>
- * @author Alex Leverington <nessence@gmail.com>
- * @date 2014
- *
- * Miscellanea required for the Host/Session/NodeTable classes.
- */
+//
+// Miscellanea required for the Host/Session/NodeTable classes.
+//
 
 #pragma once
 
@@ -32,6 +16,7 @@
 // Make sure boost/asio.hpp is included before windows.h.
 #include <boost/asio.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/steady_timer.hpp>
 
 #include <chrono>
 #include <libdevcrypto/Common.h>
@@ -102,16 +87,16 @@ extern Logger g_netdetailsLogger;
 #define cnetdetails LOG(dev::p2p::g_netdetailsLogger)
 #endif
 
-enum PacketType
+enum P2pPacketType
 {
     HelloPacket = 0,
     DisconnectPacket,
     PingPacket,
     PongPacket,
-    GetPeersPacket,
-    PeersPacket,
     UserPacket = 0x10
 };
+
+char const* p2pPacketTypeToString(P2pPacketType _packetType);
 
 enum DisconnectReason
 {
@@ -133,6 +118,18 @@ enum DisconnectReason
 
 /// @returns the string form of the given disconnection reason.
 std::string reasonOf(DisconnectReason _r);
+
+enum class HandshakeFailureReason
+{
+    NoFailure = 0,
+    UnknownFailure,
+    Timeout,
+    TCPError,
+    FrameDecryptionFailure,
+    InternalError,
+    ProtocolError,
+    DisconnectRequested
+};
 
 using CapDesc = std::pair<std::string, unsigned>;
 using CapDescSet = std::set<CapDesc>;
@@ -256,7 +253,7 @@ public:
 
     NodeID const& address() const { return id; }
 
-    explicit operator bool() const { return bool{id}; }
+    explicit operator bool() const { return static_cast<bool>(id); }
 
     // TODO: make private, give accessors and rename m_...
     NodeID id;
@@ -270,64 +267,46 @@ public:
 };
 
 #ifndef QTUM_BUILD
-boost::log::formatting_ostream& operator<<(boost::log::formatting_ostream& _log, const Node& _node);
+inline boost::log::formatting_ostream& operator<<(
+    boost::log::formatting_ostream& _strm, Node const& _node)
+{
+    return _strm << _node.id << '@' << _node.endpoint;
+}
+
+inline boost::log::formatting_ostream& operator<<(
+    boost::log::formatting_ostream& _strm, Node& _node)
+{
+    auto const& constValue = _node;
+    _strm << constValue;
+    return _strm;
+}
 #endif
 
-class DeadlineOps
+inline std::ostream& operator<<(std::ostream& _strm, NodeID const& _id)
 {
-    // Boost deadline timer wrapper which provides thread-safety
-    class DeadlineOp
-    {
-    public:
-        DeadlineOp(ba::io_service& _io, unsigned _msInFuture, std::function<void(boost::system::error_code const&)> const& _f): m_timer(new ba::deadline_timer(_io)) { m_timer->expires_from_now(boost::posix_time::milliseconds(_msInFuture)); m_timer->async_wait(_f); }
-        ~DeadlineOp() { if (m_timer) m_timer->cancel(); }
-        
-        DeadlineOp(DeadlineOp&& _s): m_timer(_s.m_timer.release()) {}
-        DeadlineOp& operator=(DeadlineOp&& _s)
-        {
-            assert(&_s != this);
-
-            m_timer.reset(_s.m_timer.release());
-            return *this;
-        }
-        
-        bool expired() { Guard l(x_timer); return m_timer->expires_from_now().total_nanoseconds() <= 0; }
-        void wait() { Guard l(x_timer); m_timer->wait(); }
-        
-    private:
-        std::unique_ptr<ba::deadline_timer> m_timer;
-        Mutex x_timer;
-    };
-    
-public:
-    DeadlineOps(ba::io_service& _io, unsigned _reapIntervalMs = 100): m_io(_io), m_reapIntervalMs(_reapIntervalMs), m_stopped(false) { reap(); }
-    ~DeadlineOps() { stop(); }
-
-    void schedule(unsigned _msInFuture, std::function<void(boost::system::error_code const&)> const& _f) { if (m_stopped) return; DEV_GUARDED(x_timers) m_timers.emplace_back(m_io, _msInFuture, _f); }	
-
-    void stop() { m_stopped = true; DEV_GUARDED(x_timers) m_timers.clear(); }
-
-    bool isStopped() const { return m_stopped; }
-    
-protected:
-    void reap();
-    
-private:
-    ba::io_service& m_io;
-    unsigned m_reapIntervalMs;
-    
-    std::vector<DeadlineOp> m_timers;
-    Mutex x_timers;
-    
-    std::atomic<bool> m_stopped;
-};
+    _strm << "##" << _id.abridged();
+    return _strm;
+}
 
 #ifndef QTUM_BUILD
+inline boost::log::formatting_ostream& operator<<(
+    boost::log::formatting_ostream& _strm, PeerSessionInfo const& _peerSessionInfo)
+{
+    _strm << _peerSessionInfo.id << "|" << _peerSessionInfo.clientVersion << "|"
+          << _peerSessionInfo.host << "|" << _peerSessionInfo.port << "|";
+    for (auto const& cap : _peerSessionInfo.caps)
+        _strm << "(" << cap.first << "," << cap.second << ")";
+    return _strm;
+}
+
 /// Simple stream output for a NodeIPEndpoint.
 std::ostream& operator<<(std::ostream& _out, NodeIPEndpoint const& _ep);
 #endif
+
+
+/// Official Ethereum boot nodes
+std::vector<std::pair<Public, const char*>> defaultBootNodes();
 }
-    
 }
 
 /// std::hash for asio::adress
@@ -350,5 +329,4 @@ template <> struct hash<bi::address>
         return std::hash<std::string>()(_a.to_string());
     }
 };
-
-}
+}  // namespace std

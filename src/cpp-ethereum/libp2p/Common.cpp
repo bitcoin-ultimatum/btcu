@@ -1,5 +1,5 @@
 // Aleth: Ethereum C++ client, tools and libraries.
-// Copyright 2019 Aleth Authors.
+// Copyright 2014-2019 Aleth Authors.
 // Licensed under the GNU General Public License, Version 3.
 
 #include "Common.h"
@@ -21,10 +21,26 @@ Logger g_netdetailsLogger(VerbosityTrace, "net");
 const NodeIPEndpoint UnspecifiedNodeIPEndpoint = NodeIPEndpoint{{}, 0, 0};
 const Node UnspecifiedNode = Node{{}, UnspecifiedNodeIPEndpoint};
 
-bool isPublicAddress(std::string const& _addressToCheck)
+char const* p2pPacketTypeToString(P2pPacketType _packetType)
 {
-    return _addressToCheck.empty() ? false :
-                                     isPublicAddress(bi::address::from_string(_addressToCheck));
+    switch (_packetType)
+    {
+    case HelloPacket:
+        return "Hello";
+    case DisconnectPacket:
+        return "Disconnect";
+    case PingPacket:
+        return "Ping";
+    case PongPacket:
+        return "Pong";
+    default:
+        return "Unknown";
+    }
+}
+
+bool isPublicAddress(string const& _addressToCheck)
+{
+    return _addressToCheck.empty() ? false : isPublicAddress(bi::make_address(_addressToCheck));
 }
 
 bool isPublicAddress(bi::address const& _addressToCheck)
@@ -75,10 +91,9 @@ bool isPrivateAddress(bi::address const& _addressToCheck)
     return false;
 }
 
-bool isPrivateAddress(std::string const& _addressToCheck)
+bool isPrivateAddress(string const& _addressToCheck)
 {
-    return _addressToCheck.empty() ? false :
-                                     isPrivateAddress(bi::address::from_string(_addressToCheck));
+    return _addressToCheck.empty() ? false : isPrivateAddress(bi::make_address(_addressToCheck));
 }
 
 // Helper function to determine if an address is localhost
@@ -86,22 +101,21 @@ bool isLocalHostAddress(bi::address const& _addressToCheck)
 {
     // @todo: ivp6 link-local adresses (macos), ex: fe80::1%lo0
     static const set<bi::address> c_rejectAddresses = {
-        {bi::address_v4::from_string(c_localhostIp)},
-        {bi::address_v4::from_string("0.0.0.0")},
-        {bi::address_v6::from_string("::1")},
-        {bi::address_v6::from_string("::")},
+        {bi::make_address_v4(c_localhostIp)},
+        {bi::make_address_v4("0.0.0.0")},
+        {bi::make_address_v6("::1")},
+        {bi::make_address_v6("::")},
     };
 
     return c_rejectAddresses.find(_addressToCheck) != c_rejectAddresses.end();
 }
 
-bool isLocalHostAddress(std::string const& _addressToCheck)
+bool isLocalHostAddress(string const& _addressToCheck)
 {
-    return _addressToCheck.empty() ? false :
-                                     isLocalHostAddress(bi::address::from_string(_addressToCheck));
+    return _addressToCheck.empty() ? false : isLocalHostAddress(bi::make_address(_addressToCheck));
 }
 
-std::string reasonOf(DisconnectReason _r)
+string reasonOf(DisconnectReason _r)
 {
     switch (_r)
     {
@@ -161,28 +175,6 @@ void NodeIPEndpoint::interpretRLP(RLP const& _r)
     m_tcpPort = _r[2].toInt<uint16_t>();
 }
 
-void DeadlineOps::reap()
-{
-    if (m_stopped)
-        return;
-
-    Guard l(x_timers);
-    auto t = m_timers.begin();
-    while (t != m_timers.end())
-        if (t->expired())
-        {
-            t->wait();
-            t = m_timers.erase(t);
-        }
-        else
-            t++;
-
-    m_timers.emplace_back(m_io, m_reapIntervalMs, [this](boost::system::error_code const& ec) {
-        if (!ec && !m_stopped)
-            reap();
-    });
-}
-
 Node::Node(Node const& _original)
   : id(_original.id), endpoint(_original.endpoint), peerType(_original.peerType.load())
 {}
@@ -222,7 +214,7 @@ NodeIPEndpoint NodeSpec::nodeIPEndpoint() const
     return {Network::resolveHost(m_address).address(), m_udpPort, m_tcpPort};
 }
 
-std::string NodeSpec::enode() const
+string NodeSpec::enode() const
 {
     string ret = m_address;
 
@@ -245,7 +237,7 @@ bool NodeSpec::isValid() const
 }
 
 #ifndef QTUM_BUILD
-std::ostream& operator<<(std::ostream& _out, NodeIPEndpoint const& _ep)
+ostream& operator<<(ostream& _out, NodeIPEndpoint const& _ep)
 {
     _out << _ep.address() << ':' << _ep.tcpPort();
     // It rarely happens that TCP and UDP are different, so save space
@@ -254,12 +246,15 @@ std::ostream& operator<<(std::ostream& _out, NodeIPEndpoint const& _ep)
         _out << ":udp" << _ep.udpPort();
     return _out;
 }
-
-boost::log::formatting_ostream& operator<<(boost::log::formatting_ostream& _log, const Node& _node)
-{
-    return _log << _node.id << '@' << _node.endpoint;
-}
 #endif
+
+vector<pair<Public, const char*>> defaultBootNodes()
+{
+    // TODO: Use full string enode representation, maybe via Node, NodeSpec or other type.
+    // clang-format off
+    return {};
+    // clang-format on
+}
 
 }  // namespace p2p
 }  // namespace dev

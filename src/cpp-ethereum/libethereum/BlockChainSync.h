@@ -1,23 +1,6 @@
-/*
-    This file is part of cpp-ethereum.
-
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file BlockChainSync.h
- * @author Gav Wood <i@gavwood.com>
- * @date 2014
- */
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2015-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
 #pragma once
 
@@ -92,7 +75,8 @@ private:
     void continueSync();
 
     /// Enter waiting state
-    void pauseSync();
+    void pauseSync() { m_state = SyncState::Waiting; }
+    bool isSyncPaused() { return m_state == SyncState::Waiting; }
 
     EthereumCapability& host() { return m_host; }
     EthereumCapability const& host() const { return m_host; }
@@ -140,7 +124,12 @@ private:
     };
 
     EthereumCapability& m_host;
-    Handler<> m_bqRoomAvailable;				///< Triggered once block queue has space for more blocks
+
+    // Triggered once blocks have been drained from the block queue,  potentially freeing up space
+    // for more blocks. Note that the block queue can still be full after a drain, depending on how
+    // many blocks are in the queue vs how many are being drained.
+    Handler<> m_bqBlocksDrained;
+
     mutable RecursiveMutex x_sync;
     /// Peers to which we've sent DAO request
     std::set<NodeID> m_daoChallengedPeers;
@@ -166,6 +155,7 @@ private:
     Logger m_logger{createLogger(VerbosityDebug, "sync")};
     Logger m_loggerInfo{createLogger(VerbosityInfo, "sync")};
     Logger m_loggerDetail{createLogger(VerbosityTrace, "sync")};
+    Logger m_loggerWarning{createLogger(VerbosityWarning, "sync")};
 
 private:
     static char const* const s_stateNames[static_cast<int>(SyncState::Size)];

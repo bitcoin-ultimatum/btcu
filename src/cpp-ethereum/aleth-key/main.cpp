@@ -1,7 +1,6 @@
 // Aleth: Ethereum C++ client, tools and libraries.
-// Copyright 2019 Aleth Authors.
+// Copyright 2015-2019 Aleth Authors.
 // Licensed under the GNU General Public License, Version 3.
-
 #include "KeyAux.h"
 
 #include <libdevcore/FileSystem.h>
@@ -27,7 +26,7 @@ namespace po = boost::program_options;
 void version()
 {
     const auto* buildinfo = aleth_get_buildinfo();
-    cout << "cpp-ethereum-key " << buildinfo->project_version << "\nBuild: " << buildinfo->system_name << "/"
+    cout << "aleth-key " << buildinfo->project_version << "\nBuild: " << buildinfo->system_name << "/"
          << buildinfo->build_type << endl;
     exit(AlethErrors::Success);
 }
@@ -75,7 +74,7 @@ int main(int argc, char** argv)
     if (vm.count("help"))
     {
         cout
-            << "Usage cpp-ethereum-key [OPTIONS]" << endl
+            << "Usage aleth-key [OPTIONS]" << endl
             << "Options:" << endl << endl;
         KeyCLI::streamHelp(cout);
         cout << allowedOptions;

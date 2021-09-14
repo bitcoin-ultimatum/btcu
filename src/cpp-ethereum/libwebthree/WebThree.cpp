@@ -1,19 +1,6 @@
-/*
-    This file is part of cpp-ethereum.
-
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2015-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
 #include "WebThree.h"
 
@@ -64,23 +51,23 @@ WebThreeDirect::~WebThreeDirect()
     // eth::Client (owned by us via a unique_ptr) uses eth::EthereumHost (via a weak_ptr).
     // Really need to work out a clean way of organising ownership and guaranteeing startup/shutdown is perfect.
 
-    // Have to call stop here to get the Host to kill its io_service otherwise we end up with left-over reads,
-    // still referencing Sessions getting deleted *after* m_ethereum is reset, causing bad things to happen, since
-    // the guarantee is that m_ethereum is only reset *after* all sessions have ended (sessions are allowed to
-    // use bits of data owned by m_ethereum).
+    // Have to call stop here to get the Host to kill its io_context otherwise we end up with
+    // left-over reads, still referencing Sessions getting deleted *after* m_ethereum is reset,
+    // causing bad things to happen, since the guarantee is that m_ethereum is only reset *after*
+    // all sessions have ended (sessions are allowed to use bits of data owned by m_ethereum).
     m_net.stop();
 }
 
 std::string WebThreeDirect::composeClientVersion(std::string const& _client)
 {
     const auto* buildinfo = aleth_get_buildinfo();
-    return _client + "/" + buildinfo->project_version + "/" + buildinfo->system_name + "/" +
+    return _client + "/v" + buildinfo->project_version + "/" + buildinfo->system_name + "/" +
            buildinfo->compiler_id + buildinfo->compiler_version + "/" + buildinfo->build_type;
 }
 
 std::vector<PeerSessionInfo> WebThreeDirect::peers()
 {
-    return m_net.peerSessionInfo();
+    return m_net.peerSessionInfos();
 }
 
 size_t WebThreeDirect::peerCount() const

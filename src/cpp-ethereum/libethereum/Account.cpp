@@ -1,23 +1,7 @@
-/*
-    This file is part of cpp-ethereum.
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2014-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file Account.cpp
- * @author Gav Wood <i@gavwood.com>
- * @date 2014
- */
 
 #include "Account.h"
 #include "SecureTrieDB.h"
@@ -25,7 +9,6 @@
 #include <libdevcore/JsonUtils.h>
 #include <libdevcore/OverlayDB.h>
 #include <libethcore/ChainOperationParams.h>
-#include <libethcore/Precompiled.h>
 
 using namespace std;
 using namespace dev;
@@ -34,11 +17,25 @@ using namespace dev::eth::validation;
 
 namespace fs = boost::filesystem;
 
-void Account::setCode(bytes&& _code)
+void Account::setCode(bytes&& _code, u256 const& _version)
 {
-    m_codeCache = std::move(_code);
-    m_hasNewCode = true;
-    m_codeHash = sha3(m_codeCache);
+    auto const newHash = sha3(_code);
+    if (newHash != m_codeHash)
+    {
+        m_codeCache = std::move(_code);
+        m_hasNewCode = true;
+        m_codeHash = newHash;
+    }
+    m_version = _version;
+}
+
+void Account::resetCode()
+{
+    m_codeCache.clear();
+    m_hasNewCode = false;
+    m_codeHash = EmptySHA3;
+    // Reset the version, as it was set together with code
+    m_version = 0;
 }
 
 u256 Account::originalStorageValue(u256 const& _key, OverlayDB const& _db) const
@@ -57,57 +54,9 @@ u256 Account::originalStorageValue(u256 const& _key, OverlayDB const& _db) const
 
 namespace js = json_spirit;
 
-namespace
-{
-
-uint64_t toUnsigned(js::mValue const& _v)
-{
-    switch (_v.type())
-    {
-    case js::int_type: return _v.get_uint64();
-    case js::str_type: return fromBigEndian<uint64_t>(fromHex(_v.get_str()));
-    default: return 0;
-    }
-}
-
-PrecompiledContract createPrecompiledContract(js::mObject const& _precompiled)
-{
-    auto n = _precompiled.at("name").get_str();
-    try
-    {
-        u256 startingBlock = 0;
-        if (_precompiled.count("startingBlock"))
-            startingBlock = u256(_precompiled.at("startingBlock").get_str());
-
-        if (!_precompiled.count("linear"))
-            return PrecompiledContract(PrecompiledRegistrar::pricer(n), PrecompiledRegistrar::executor(n), startingBlock);
-
-        auto const& l = _precompiled.at("linear").get_obj();
-        unsigned base = toUnsigned(l.at("base"));
-        unsigned word = toUnsigned(l.at("word"));
-        return PrecompiledContract(base, word, PrecompiledRegistrar::executor(n), startingBlock);
-    }
-    catch (PricerNotFound const&)
-    {
-#ifndef WIN32
-        cwarn << "Couldn't create a precompiled contract account. Missing a pricer called:" << n;
-#endif
-        throw;
-    }
-    catch (ExecutorNotFound const&)
-    {
-#ifndef WIN32
-        // Oh dear - missing a plugin?
-        cwarn << "Couldn't create a precompiled contract account. Missing an executor called:" << n;
-#endif
-        throw;
-    }
-}
-}
-
 // TODO move AccountMaskObj to libtesteth (it is used only in test logic)
 AccountMap dev::eth::jsonToAccountMap(std::string const& _json, u256 const& _defaultNonce,
-    AccountMaskMap* o_mask, PrecompiledContractMap* o_precompiled, const fs::path& _configPath)
+    AccountMaskMap* o_mask, const fs::path& _configPath)
 {
     auto u256Safe = [](std::string const& s) -> u256 {
         bigint ret(s);
@@ -159,7 +108,7 @@ AccountMap dev::eth::jsonToAccountMap(std::string const& _json, u256 const& _def
                         cerr << "Error importing code of account " << a
                              << "! Code needs to be hex bytecode prefixed by \"0x\".";
                     else
-                        ret[a].setCode(fromHex(codeStr));
+                        ret[a].setCode(fromHex(codeStr), 0);
                 }
                 else
                     cerr << "Error importing code of account " << a
@@ -179,7 +128,7 @@ AccountMap dev::eth::jsonToAccountMap(std::string const& _json, u256 const& _def
                     if (code.empty())
                         cerr << "Error importing code of account " << a << "! Code file "
                              << codePath << " empty or does not exist.\n";
-                    ret[a].setCode(std::move(code));
+                    ret[a].setCode(std::move(code), 0);
                 }
                 else
                     cerr << "Error importing code of account " << a
@@ -198,12 +147,6 @@ AccountMap dev::eth::jsonToAccountMap(std::string const& _json, u256 const& _def
             if (!haveStorage && !haveCode && !haveNonce && !haveBalance &&
                 shouldNotExists)  // defined only shouldNotExists field
                 ret[a] = Account(0, 0);
-        }
-
-        if (o_precompiled && accountMaskJson.count(c_precompiled))
-        {
-            js::mObject p = accountMaskJson.at(c_precompiled).get_obj();
-            o_precompiled->insert(make_pair(a, createPrecompiledContract(p)));
         }
     }
 

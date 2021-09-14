@@ -1,6 +1,6 @@
-// Copyright 2018 cpp-ethereum Authors.
-// Licensed under the GNU General Public License v3. See the LICENSE file.
-
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2014-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 #include "EVMC.h"
 
 #include <libdevcore/Log.h>
@@ -14,8 +14,10 @@ namespace
 {
 evmc_revision toRevision(EVMSchedule const& _schedule) noexcept
 {
+    if (_schedule.haveChainID)
+        return EVMC_ISTANBUL;
     if (_schedule.haveCreate2 && !_schedule.eip1283Mode)
-        return EVMC_CONSTANTINOPLE2;
+        return EVMC_PETERSBURG;
     if (_schedule.haveCreate2 && _schedule.eip1283Mode)
         return EVMC_CONSTANTINOPLE;
     if (_schedule.haveRevert)
@@ -30,16 +32,16 @@ evmc_revision toRevision(EVMSchedule const& _schedule) noexcept
 }
 }  // namespace
 
-EVMC::EVMC(evmc_instance* _instance) noexcept : evmc::vm(_instance)
+EVMC::EVMC(evmc_vm* _vm, std::vector<std::pair<std::string, std::string>> const& _options) noexcept
+  : evmc::VM(_vm)
 {
-    assert(_instance != nullptr);
+    assert(_vm != nullptr);
     assert(is_abi_compatible());
 
     // Set the options.
-    for (auto& pair : evmcOptions())
+    for (auto& pair : _options)
     {
         auto result = set_option(pair.first.c_str(), pair.second.c_str());
-#ifndef WIN32
         switch (result)
         {
         case EVMC_SET_OPTION_SUCCESS:
@@ -53,7 +55,6 @@ EVMC::EVMC(evmc_instance* _instance) noexcept : evmc::vm(_instance)
         default:
             cwarn << "Unknown error when setting EVMC option '" << pair.first << "'";
         }
-#endif
     }
 }
 
@@ -80,7 +81,8 @@ owning_bytes_ref EVMC::exec(u256& io_gas, ExtVMFace& _ext, const OnOpFunc& _onOp
     evmc_message msg = {kind, flags, static_cast<int32_t>(_ext.depth), gas, toEvmC(_ext.myAddress),
         toEvmC(_ext.caller), _ext.data.data(), _ext.data.size(), toEvmC(_ext.value),
         toEvmC(0x0_cppui256)};
-    auto r = execute(_ext, mode, msg, _ext.code.data(), _ext.code.size());
+    EvmCHost host{_ext};
+    auto r = execute(host, mode, msg, _ext.code.data(), _ext.code.size());
     // FIXME: Copy the output for now, but copyless version possible.
     auto output = owning_bytes_ref{{&r.output_data[0], &r.output_data[r.output_size]}, 0, r.output_size};
 
@@ -118,9 +120,7 @@ owning_bytes_ref EVMC::exec(u256& io_gas, ExtVMFace& _ext, const OnOpFunc& _onOp
         BOOST_THROW_EXCEPTION(DisallowedStateChange());
 
     case EVMC_REJECTED:
-#ifndef WIN32
         cwarn << "Execution rejected by EVMC, executing with default VM implementation";
-#endif
         return VMFactory::create(VMKind::Legacy)->exec(io_gas, _ext, _onOp);
 
     case EVMC_INTERNAL_ERROR:

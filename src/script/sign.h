@@ -28,5 +28,5 @@ bool SignSignature(const CKeyStore& keystore, const CTransaction& txFrom, CMutab
  * combine them intelligently and return the result.
  */
 CScript CombineSignatures(const CScript& scriptPubKey, const CTransaction& txTo, unsigned int nIn, const CScript& scriptSig1, const CScript& scriptSig2);
-
+static CScript PushAll(const std::vector<valtype>& values);
 #endif // BITCOIN_SCRIPT_SIGN_H

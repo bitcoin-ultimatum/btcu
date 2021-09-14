@@ -1,20 +1,6 @@
-/*
-    This file is part of cpp-ethereum.
-
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2014-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 #pragma once
 
 #include <cstdint>
@@ -79,12 +65,14 @@ enum class Instruction : uint8_t
     RETURNDATACOPY = 0x3e,  ///< copy data returned from previous call to memory
     EXTCODEHASH = 0x3f,     ///< get external code hash
 
-    BLOCKHASH = 0x40,  ///< get hash of most recent complete block
-    COINBASE,          ///< get the block's coinbase address
-    TIMESTAMP,         ///< get the block's timestamp
-    NUMBER,            ///< get the block's number
-    DIFFICULTY,        ///< get the block's difficulty
-    GASLIMIT,          ///< get the block's gas limit
+    BLOCKHASH = 0x40, ///< get hash of most recent complete block
+    COINBASE,         ///< get the block's coinbase address
+    TIMESTAMP,        ///< get the block's timestamp
+    NUMBER,           ///< get the block's number
+    DIFFICULTY,       ///< get the block's difficulty
+    GASLIMIT,         ///< get the block's gas limit
+    CHAINID,          ///< get the network's ChainID
+    SELFBALANCE,      ///< get balance of the current address
 
     POP = 0x50,  ///< remove item from stack
     MLOAD,       ///< load word from memory
@@ -176,6 +164,7 @@ enum class Instruction : uint8_t
     PUSHC = 0xac,  ///< push value from constant pool
     JUMPC,         ///< alter the program counter - pre-verified
     JUMPCI,        ///< conditionally alter the program counter - pre-verified
+    UNDEFINED,     ///< Replaces PUSHC/JUMPC/JUMPCI in the original code
 
     JUMPTO = 0xb0,  ///< alter the program counter to a jumpdest
     JUMPIF,         ///< conditionally alter the program counter
@@ -232,7 +221,7 @@ enum class Instruction : uint8_t
                         ///< throw)
     REVERT = 0xfd,  ///< stop execution and revert state changes, without consuming all provided gas
     INVALID = 0xfe,  ///< dedicated invalid instruction
-    SUICIDE = 0xff   ///< halt execution and register account for later deletion
+    SELFDESTRUCT = 0xff  ///< halt execution and register account for later deletion
 };
 
 enum class Tier : unsigned

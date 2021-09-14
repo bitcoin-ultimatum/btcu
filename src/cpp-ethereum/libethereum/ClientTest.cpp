@@ -1,23 +1,7 @@
-/*
-    This file is part of cpp-ethereum.
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2015-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file ClientTest.cpp
- * @author Dimitry Khokhlov <dimitry@ethdev.com>
- * @date 2016
- */
 
 #include <libdevcore/CommonJS.h>
 #include <libethashseal/Ethash.h>
@@ -47,7 +31,10 @@ ClientTest::ClientTest(ChainParams const& _params, int _networkID, p2p::Host& _h
     TransactionQueue::Limits const& _limits)
   : Client(
         _params, _networkID, _host, _gpForAdoption, _dbPath, std::string(), _forceAction, _limits)
-{}
+{
+    m_bq.setOnBad([this](Exception& _ex) { onBadBlock(_ex); });
+    bc().setOnBad([this](Exception& _ex) { onBadBlock(_ex); });
+}
 
 ClientTest::~ClientTest()
 {
@@ -55,13 +42,27 @@ ClientTest::~ClientTest()
     terminate();
 }
 
+void ClientTest::onBadBlock(Exception& _ex)
+{
+    {
+        Guard guard(m_badBlockMutex);
+        // To preserve original exception type we need to use current_exception().
+        // This assumes we're inside catch.
+        m_lastImportError = boost::current_exception();
+        bytes const* block = boost::get_error_info<errinfo_block>(_ex);
+        m_lastBadBlock = block ? *block : bytes{};
+    }
+
+    Client::onBadBlock(_ex);
+}
+
 void ClientTest::setChainParams(string const& _genesis)
 {
-    ChainParams params;
     try
     {
-        params = params.loadConfig(_genesis);
-        if (params.sealEngineName != NoProof::name() && params.sealEngineName != Ethash::name())
+        ChainParams const params{_genesis};
+        if (params.sealEngineName != NoProof::name() && params.sealEngineName != Ethash::name() &&
+            params.sealEngineName != NoReward::name())
             BOOST_THROW_EXCEPTION(
                 ChainParamsInvalid() << errinfo_comment("Seal engine is not supported!"));
 
@@ -147,9 +148,14 @@ h256 ClientTest::importRawBlock(const string& _blockRLP)
 {
     bytes blockBytes = jsToBytes(_blockRLP, OnFailed::Throw);
     h256 blockHash = BlockHeader::headerHashFromBlock(blockBytes);
+
     ImportResult result = queueBlock(blockBytes, true);
     if (result != ImportResult::Success)
-        BOOST_THROW_EXCEPTION(ImportBlockFailed() << errinfo_importResult(result));
+    {
+        auto ex = ImportBlockFailed{} << errinfo_importResult(result);
+        addNestedBadBlockException(blockBytes, ex);
+        BOOST_THROW_EXCEPTION(ex);
+    }
 
     if (auto h = m_host.lock())
         h->noteNewBlocks();
@@ -160,5 +166,21 @@ h256 ClientTest::importRawBlock(const string& _blockRLP)
         tie(ignore, moreToImport, ignore) = syncQueue(100000);
         this_thread::sleep_for(chrono::milliseconds(100));
     }
+
+    // check that it was really imported and not rejected as invalid
+    if (!bc().isKnown(blockHash))
+    {
+        auto ex = ImportBlockFailed{};
+        addNestedBadBlockException(blockBytes, ex);
+        BOOST_THROW_EXCEPTION(ex);
+    }
+
     return blockHash;
+}
+
+void ClientTest::addNestedBadBlockException(bytes const& _blockBytes, Exception& io_ex)
+{
+    Guard guard(m_badBlockMutex);
+    if (_blockBytes == m_lastBadBlock)
+        io_ex << errinfo_nestedException(m_lastImportError);
 }

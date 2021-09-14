@@ -1,25 +1,9 @@
-/*
-    This file is part of cpp-ethereum.
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2015-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file transactionTests.cpp
- * @author Dmitrii Khokhlov <winsvega@mail.ru>
- * @date 2015
- * Transaction test functions.
- */
-
+/// @file
+/// Transaction test functions.
 #include <libethcore/SealEngine.h>
 #include <libethashseal/GenesisInfo.h>
 #include <libethereum/ChainParams.h>
@@ -59,6 +43,7 @@ mObject getExpectSection(mValue const& _expect, eth::Network _network)
         if (networks.count(test::netIdToString(_network)))
             objVector.push_back(obj);
     }
+    BOOST_REQUIRE_MESSAGE(!objVector.empty(), "Expect network '" + test::netIdToString(_network) + "' not found with getExpectSection()");
     BOOST_REQUIRE_MESSAGE(objVector.size() == 1, "Expect network should occur once in expect section of transaction test filler! (" + test::netIdToString(_network) + ") " + TestOutputHelper::get().testName());
     return objVector.at(0);
 }
@@ -219,9 +204,11 @@ class TransactionTestFixture
 public:
     TransactionTestFixture()
     {
-        string const& casename = boost::unit_test::framework::current_test_case().p_name;
         test::TransactionTestSuite suite;
+        string const casename = boost::unit_test::framework::current_test_case().p_name;
+        boost::filesystem::path suiteFillerPath = suite.getFullPathFiller(casename).parent_path();
         suite.runAllTestsInFolder(casename);
+        test::TestOutputHelper::get().markTestFolderAsFinished(suiteFillerPath, casename);
     }
 };
 
@@ -237,5 +224,6 @@ BOOST_AUTO_TEST_CASE(ttValue){}
 BOOST_AUTO_TEST_CASE(ttVValue){}
 BOOST_AUTO_TEST_CASE(ttSignature){}
 BOOST_AUTO_TEST_CASE(ttWrongRLP){}
+BOOST_AUTO_TEST_CASE(ttEIP2028) {}
 
 BOOST_AUTO_TEST_SUITE_END()

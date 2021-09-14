@@ -1,24 +1,7 @@
-/*
-    This file is part of cpp-ethereum.
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2015-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file Peer.h
- * @author Alex Leverington <nessence@gmail.com>
- * @author Gav Wood <i@gavwood.com>
- * @date 2014
- */
 
 #pragma once
 
@@ -70,6 +53,10 @@ public:
     /// Return true if connection attempt should be made to this peer or false if
     bool shouldReconnect() const;
 
+    /// A peer which should never be reconnected to - e.g. it's running on a different network, we
+    /// don't have any common capabilities
+    bool isUseless() const;
+
     /// Number of times connection has been attempted to peer.
     int failedAttempts() const { return m_failedAttempts; }
 
@@ -80,7 +67,8 @@ public:
     void noteSessionGood() { m_failedAttempts = 0; }
 
 private:
-    /// Returns number of seconds to wait until attempting connection, based on attempted connection history.
+    /// Returns number of seconds to wait until attempting connection, based on attempted connection
+    /// history
     unsigned fallbackSeconds() const;
 
     std::atomic<int> m_score{0};									///< All time cumulative.
@@ -92,6 +80,8 @@ private:
     std::chrono::system_clock::time_point m_lastAttempted;
     std::atomic<unsigned> m_failedAttempts{0};
     DisconnectReason m_lastDisconnect = NoDisconnect;	///< Reason for disconnect that happened last.
+    HandshakeFailureReason m_lastHandshakeFailure =
+        HandshakeFailureReason::NoFailure;  ///< Reason for most recent handshake failure
 
     /// Used by isOffline() and (todo) for peer to emit session information.
     std::weak_ptr<Session> m_session;

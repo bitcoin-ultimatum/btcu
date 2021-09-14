@@ -10,10 +10,11 @@ project(cryptopp)
 
 # In order to make XCode correct build this
 # we need to simplify the process
+option(BUILD_TESTING "Build library tests" ${ENABLE_TESTS})
+
 if (CMAKE_GENERATOR MATCHES "Xcode")
 	set(CRYPTOPP_CROSS_COMPILE 0)
 	option(BUILD_SHARED "Build shared library" ON)
-	option(BUILD_TESTING "Build library tests" ON)
 	# Library headers
 	file(GLOB cryptopp_HEADERS *.h)
 
@@ -69,15 +70,6 @@ if (CMAKE_GENERATOR MATCHES "Xcode")
 	add_library(cryptopp-shared ALIAS cryptopp)
 
 	include(GNUInstallDirs)
-	install(
-		TARGETS cryptopp
-		EXPORT cryptoppTargets
-		LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-		ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-		RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-		INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-		PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-	)
 else()
 	# Make RelWithDebInfo the default (it does e.g. add '-O2 -g -DNDEBUG' for GNU)
 	#   If not in multi-configuration environments, no explicit build type or CXX
@@ -104,13 +96,10 @@ else()
 
 	if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 		option(BUILD_SHARED "Build shared library" OFF)
-		option(BUILD_TESTING "Build library tests" OFF)
 	else()
 		option(BUILD_SHARED "Build shared library" ON)
-		option(BUILD_TESTING "Build library tests" ON)
 	endif()
 
-	option(BUILD_STATIC "Build static library" ON)
 	option(BUILD_DOCUMENTATION "Use Doxygen to create the HTML based API documentation" OFF)
 
 	option(DISABLE_ASM "Disable ASM" OFF)
@@ -404,7 +393,11 @@ else()
 	enable_testing()
 	if(BUILD_TESTING)
 		add_executable(cryptest ${cryptopp_SOURCES_TEST})
-		target_link_libraries(cryptest cryptopp-static)
+		if (BUILD_STATIC)
+			target_link_libraries(cryptest cryptopp-static)
+		else()
+			target_link_libraries(cryptest cryptopp-shared)
+		endif()
 
 		# Setting "cryptest" binary name to "cryptest.exe"
 		if(NOT WIN32)
@@ -454,42 +447,10 @@ else()
 
 	set(export_name "cryptopp-targets")
 
-	# Runtime package
-	if (BUILD_SHARED)
-		install(
-				TARGETS cryptopp-shared
-				EXPORT ${export_name}
-				DESTINATION ${CMAKE_INSTALL_LIBDIR}
-				RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-				LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-				ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-		)
-	endif()
-
-	# Development package
-	if (BUILD_STATIC)
-		install(TARGETS cryptopp-static EXPORT ${export_name} DESTINATION ${CMAKE_INSTALL_LIBDIR})
-	endif()
-	install(FILES ${cryptopp_HEADERS} DESTINATION ${CMAKE_CURRENT_SOURCE_DIR})
-
 	# CMake Package
-	if(NOT CMAKE_VERSION VERSION_LESS 2.8.8)	# CMakePackageConfigHelpers is supported from 2.8.8
+	if(NOT CMAKE_VERSION VERSION_LESS 2.8.8 AND NOT BUILD_STATIC)	# CMakePackageConfigHelpers is supported from 2.8.8
 		include(CMakePackageConfigHelpers)
 		write_basic_package_version_file("${PROJECT_BINARY_DIR}/cryptopp-config-version.cmake" VERSION ${cryptopp_VERSION_MAJOR}.${cryptopp_VERSION_MINOR}.${cryptopp_VERSION_PATCH} COMPATIBILITY SameMajorVersion)
-		install(FILES cryptopp-config.cmake ${PROJECT_BINARY_DIR}/cryptopp-config-version.cmake DESTINATION "lib/cmake/cryptopp")
-		install(EXPORT ${export_name} DESTINATION "lib/cmake/cryptopp")
-	endif()
-
-	# Tests
-	if(BUILD_TESTING)
-		install(TARGETS cryptest DESTINATION ${CMAKE_INSTALL_BINDIR})
-		install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/TestData DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/cryptopp)
-		install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/TestVectors DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/cryptopp)
-	endif()
-
-	# Documentation
-	if(BUILD_DOCUMENTATION)
-		install(DIRECTORY "${out_source_DOCS_DIR}" DESTINATION ${CMAKE_INSTALL_DOCDIR})
 	endif()
 
 	# Print a configuration summary. We want CXX and CXXFLAGS, but they are not includd in ALL.

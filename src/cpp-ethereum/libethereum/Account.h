@@ -1,23 +1,7 @@
-/*
-    This file is part of cpp-ethereum.
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2014-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file Account.h
- * @author Gav Wood <i@gavwood.com>
- * @date 2014
- */
 
 #pragma once
 
@@ -68,17 +52,27 @@ public:
     /// Construct a dead Account.
     Account() {}
 
-    /// Construct an alive Account, with given endowment, for either a normal (non-contract) account or for a
-    /// contract account in the
-    /// conception phase, where the code is not yet known.
+    /// Construct an alive Account, with given endowment, for either a normal (non-contract) account
+    /// or for a contract account in the conception phase, where the code is not yet known.
     Account(u256 _nonce, u256 _balance, Changedness _c = Changed): m_isAlive(true), m_isUnchanged(_c == Unchanged), m_nonce(_nonce), m_balance(_balance) {}
 
     /// Explicit constructor for wierd cases of construction or a contract account.
-    Account(u256 _nonce, u256 _balance, h256 _contractRoot, h256 _codeHash, Changedness _c): m_isAlive(true), m_isUnchanged(_c == Unchanged), m_nonce(_nonce), m_balance(_balance), m_storageRoot(_contractRoot), m_codeHash(_codeHash) { assert(_contractRoot); }
+    Account(u256 const& _nonce, u256 const& _balance, h256 const& _contractRoot,
+        h256 const& _codeHash, u256 const& _version, Changedness _c)
+      : m_isAlive(true),
+        m_isUnchanged(_c == Unchanged),
+        m_nonce(_nonce),
+        m_balance(_balance),
+        m_storageRoot(_contractRoot),
+        m_codeHash(_codeHash),
+        m_version(_version)
+    {
+        assert(_contractRoot);
+    }
 
 
-    /// Kill this account. Useful for the suicide opcode. Following this call, isAlive() returns
-    /// false.
+    /// Kill this account. Useful for the SELFDESTRUCT instruction.
+    /// Following this call, isAlive() returns false.
     void kill()
     {
         m_isAlive = false;
@@ -88,12 +82,13 @@ public:
         m_storageRoot = EmptyTrie;
         m_balance = 0;
         m_nonce = 0;
+        m_version = 0;
         changed();
     }
 
-    /// @returns true iff this object represents an account in the state. Returns false if this object
-    /// represents an account that should no longer exist in the trie (an account that never existed or was
-    /// suicided).
+    /// @returns true iff this object represents an account in the state.
+    /// Returns false if this object represents an account that should no longer exist in the trie
+    /// (an account that never existed or was selfdestructed).
     bool isAlive() const { return m_isAlive; }
 
     /// @returns true if the account is unchanged from creation.
@@ -171,7 +166,10 @@ public:
     bool hasNewCode() const { return m_hasNewCode; }
 
     /// Sets the code of the account. Used by "create" messages.
-    void setCode(bytes&& _code);
+    void setCode(bytes&& _code, u256 const& _version);
+
+    /// Reset the code set by previous setCode
+    void resetCode();
 
     /// Specify to the object what the actual code is for the account. @a _code must have a SHA3
     /// equal to codeHash().
@@ -179,6 +177,8 @@ public:
 
     /// @returns the account's code.
     bytes const& code() const { return m_codeCache; }
+
+    u256 version() const { return m_version; }
 
 private:
     /// Note that we've altered the account.
@@ -210,6 +210,9 @@ private:
      * be called with the correct args.
      */
     h256 m_codeHash = EmptySHA3;
+
+    /// Account's version
+    u256 m_version = 0;
 
     /// The map with is overlaid onto whatever storage is implied by the m_storageRoot in the trie.
     mutable std::unordered_map<u256, u256> m_storageOverlay;
@@ -267,11 +270,7 @@ private:
 using AccountMap = std::unordered_map<Address, Account>;
 using AccountMaskMap = std::unordered_map<Address, AccountMask>;
 
-class PrecompiledContract;
-using PrecompiledContractMap = std::unordered_map<Address, PrecompiledContract>;
-
 AccountMap jsonToAccountMap(std::string const& _json, u256 const& _defaultNonce = 0,
-	AccountMaskMap* o_mask = nullptr, PrecompiledContractMap* o_precompiled = nullptr,
-	const boost::filesystem::path& _configPath = {});
+    AccountMaskMap* o_mask = nullptr, const boost::filesystem::path& _configPath = {});
 }
 }

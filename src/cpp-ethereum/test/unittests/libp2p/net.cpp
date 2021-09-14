@@ -1,5 +1,5 @@
 // Aleth: Ethereum C++ client, tools and libraries.
-// Copyright 2018 Aleth Authors.
+// Copyright 2014-2019 Aleth Authors.
 // Licensed under the GNU General Public License, Version 3.
 
 #include <libdevcore/Assertions.h>
@@ -36,25 +36,31 @@ public:
     ~TestHost() override { m_io.stop(); terminate(); }
     void start() { startWorking(); }
     void doWork() override { m_io.run(); }
-    void doneWorking() override { m_io.reset(); m_io.poll(); m_io.reset(); }
+    void doneWorking() override
+    {
+        m_io.restart();
+        m_io.poll();
+        m_io.restart();
+    }
 
 protected:
-    ba::io_service m_io;
+    ba::io_context m_io;
 };
 
 struct TestNodeTable: public NodeTable
 {
     /// Constructor
     TestNodeTable(
-        ba::io_service& _io, KeyPair _alias, bi::address const& _addr, uint16_t _port = 30311)
-      : NodeTable(_io, _alias, NodeIPEndpoint(_addr, _port, _port), true /* discovery enabled */,
-            true /* allow local discovery */)
+        ba::io_context& _io, KeyPair _alias, bi::address const& _addr, uint16_t _port = 30311)
+      : NodeTable(_io, _alias, NodeIPEndpoint(_addr, _port, _port),
+            IdentitySchemeV4::createENR(_alias.secret(), _addr, _port, _port),
+            true /* discovery enabled */, true /* allow local discovery */)
     {}
 
-    static std::vector<std::pair<Public, uint16_t>> createTestNodes(unsigned _count)
+    static vector<pair<Public, uint16_t>> createTestNodes(unsigned _count)
     {
-        std::vector<std::pair<Public, uint16_t>> ret;
-        asserts(_count <= 1000);
+        vector<pair<Public, uint16_t>> ret;
+        asserts(_count <= 2000);
         
         ret.clear();
         for (unsigned i = 0; i < _count; i++)
@@ -66,25 +72,20 @@ struct TestNodeTable: public NodeTable
         return ret;
     }
 
-    void populateTestNodes(
-        std::vector<std::pair<Public, uint16_t>> const& _testNodes, size_t _count = 0)
+    void populateTestNodes(vector<pair<Public, uint16_t>> const& _testNodes, size_t _count = 0)
     {
         if (!_count)
             _count = _testNodes.size();
 
-        bi::address ourIp = bi::address::from_string(c_localhostIp);
+        bi::address ourIp = bi::make_address(c_localhostIp);
         for (auto& n: _testNodes)
             if (_count--)
             {
                 // manually add node for test
-                {
-                    Guard ln(x_nodes);
-                    m_allNodes[n.first] = make_shared<NodeEntry>(m_hostNodeID, n.first,
-                        NodeIPEndpoint(ourIp, n.second, n.second),
-                        RLPXDatagramFace::secondsSinceEpoch(),
-                        RLPXDatagramFace::secondsSinceEpoch());
-                }
-                noteActiveNode(n.first, bi::udp::endpoint(ourIp, n.second));
+                auto entry = make_shared<NodeEntry>(m_hostNodeIDHash, n.first,
+                    NodeIPEndpoint(ourIp, n.second, n.second),
+                    RLPXDatagramFace::secondsSinceEpoch(), RLPXDatagramFace::secondsSinceEpoch());
+                noteActiveNode(move(entry));
             }
             else
                 break;
@@ -93,24 +94,19 @@ struct TestNodeTable: public NodeTable
     // populate NodeTable until one of the buckets reaches the size of _bucketSize
     // return the index of this bucket
     int populateUntilBucketSize(
-        std::vector<std::pair<Public, uint16_t>> const& _testNodes, size_t _bucketSize)
+        vector<pair<Public, uint16_t>> const& _testNodes, size_t _bucketSize)
     {
         auto testNode = _testNodes.begin();
 
-        bi::address ourIp = bi::address::from_string(c_localhostIp);
+        bi::address ourIp = bi::make_address(c_localhostIp);
         while (testNode != _testNodes.end())
         {
-            unsigned distance = 0;
             // manually add node for test
-            {
-                Guard ln(x_nodes);
-                auto node(make_shared<NodeEntry>(m_hostNodeID, testNode->first,
-                    NodeIPEndpoint(ourIp, testNode->second, testNode->second),
-                    RLPXDatagramFace::secondsSinceEpoch(), RLPXDatagramFace::secondsSinceEpoch()));
-                m_allNodes[node->id] = node;
-                distance = node->distance;
-            }
-            noteActiveNode(testNode->first, bi::udp::endpoint(ourIp, testNode->second));
+            auto node(make_shared<NodeEntry>(m_hostNodeIDHash, testNode->first,
+                NodeIPEndpoint(ourIp, testNode->second, testNode->second),
+                RLPXDatagramFace::secondsSinceEpoch(), RLPXDatagramFace::secondsSinceEpoch()));
+            auto distance = node->distance;
+            noteActiveNode(move(node));
 
             {
                 Guard stateGuard(x_state);
@@ -128,30 +124,27 @@ struct TestNodeTable: public NodeTable
 
     // populate NodeTable until bucket _bucket reaches the size of _bucketSize
     // return true if success, false if not enought test nodes
-    bool populateUntilSpecificBucketSize(std::vector<std::pair<Public, uint16_t>> const& _testNodes,
-        size_t _bucket, size_t _bucketSize)
+    bool populateUntilSpecificBucketSize(
+        vector<pair<Public, uint16_t>> const& _testNodes, size_t _bucket, size_t _bucketSize)
     {
         auto testNode = _testNodes.begin();
 
-        bi::address ourIp = bi::address::from_string(c_localhostIp);
+        bi::address ourIp = bi::make_address(c_localhostIp);
         while (testNode != _testNodes.end() && bucketSize(_bucket) < _bucketSize)
         {
             // manually add node for test
+            // skip the nodes for other buckets
+            size_t const dist = distance(m_hostNodeIDHash, sha3(testNode->first));
+            if (dist != _bucket + 1)
             {
-                // skip the nodes for other buckets
-                size_t const dist = distance(m_hostNodeID, testNode->first);
-                if (dist != _bucket + 1)
-                {
-                    ++testNode;
-                    continue;
-                }
-
-                Guard ln(x_nodes);
-                m_allNodes[testNode->first] = make_shared<NodeEntry>(m_hostNodeID, testNode->first,
-                    NodeIPEndpoint(ourIp, testNode->second, testNode->second),
-                    RLPXDatagramFace::secondsSinceEpoch(), RLPXDatagramFace::secondsSinceEpoch());
+                ++testNode;
+                continue;
             }
-            noteActiveNode(testNode->first, bi::udp::endpoint(ourIp, testNode->second));
+
+            auto entry = make_shared<NodeEntry>(m_hostNodeIDHash, testNode->first,
+                NodeIPEndpoint(ourIp, testNode->second, testNode->second),
+                RLPXDatagramFace::secondsSinceEpoch(), RLPXDatagramFace::secondsSinceEpoch());
+            noteActiveNode(move(entry));
 
             ++testNode;
         }
@@ -198,15 +191,15 @@ struct TestNodeTable: public NodeTable
         return m_buckets[_bucket].nodes.back().lock();
     }
 
-    boost::optional<NodeValidation> nodeValidation(NodeID const& _id)
+    boost::optional<NodeValidation> nodeValidation(bi::udp::endpoint const& _endpoint)
     {
-        std::promise<boost::optional<NodeValidation>> promise;
-        m_timers.schedule(0, [this, &promise, _id](boost::system::error_code const&) {
-            auto validation = m_sentPings.find(_id);
+        promise<boost::optional<NodeValidation>> promise;
+        post(m_io, [this, &promise, _endpoint] {
+            auto validation = m_sentPings.find(_endpoint);
             if (validation != m_sentPings.end())
                 promise.set_value(validation->second);
             else
-                promise.set_value(boost::optional<NodeValidation>{});
+                promise.set_value({});
         });
         return promise.get_future().get();
     }
@@ -223,13 +216,15 @@ struct TestNodeTable: public NodeTable
     concurrent_queue<bytes> packetsReceived;
 
 
-    using NodeTable::m_hostNodeID;
+    using NodeTable::m_allowLocalDiscovery;
     using NodeTable::m_hostNodeEndpoint;
+    using NodeTable::m_hostNodeID;
+    using NodeTable::m_hostNodeIDHash;
     using NodeTable::m_socket;
+    using NodeTable::nearestNodeEntries;
+    using NodeTable::nodeEntry;
     using NodeTable::noteActiveNode;
     using NodeTable::setRequestTimeToLive;
-    using NodeTable::nodeEntry;
-    using NodeTable::m_allowLocalDiscovery;
 };
 
 /**
@@ -244,12 +239,13 @@ struct TestNodeTableHost : public TestHost
         do
         {
             nodeTable.reset(
-                new TestNodeTable(m_io, m_alias, bi::address::from_string(c_localhostIp), _port));
+                new TestNodeTable(m_io, m_alias, bi::make_address(c_localhostIp), _port));
             ++_port;
         } while (!nodeTable->m_socket->isOpen());
     }
     ~TestNodeTableHost()
     {
+        nodeTable->stop();
         m_io.stop();
         terminate();
     }
@@ -266,7 +262,6 @@ struct TestNodeTableHost : public TestHost
         return nodeTable->populateUntilSpecificBucketSize(testNodes, _bucket, _size);
     }
 
-
     void processEvents(boost::system::error_code const& _e)
     {
         if (_e)
@@ -279,7 +274,7 @@ struct TestNodeTableHost : public TestHost
 
     KeyPair m_alias;
     shared_ptr<TestNodeTable> nodeTable;
-    std::vector<std::pair<Public, uint16_t>> testNodes;  // keypair and port
+    vector<pair<Public, uint16_t>> testNodes;  // keypair and port
     ba::deadline_timer timer;
 };
 
@@ -296,7 +291,7 @@ public:
             {
                 socket->connect();
             }
-            catch (std::exception const&)
+            catch (exception const&)
             {
                 port = randomPortNumber();
             }
@@ -320,7 +315,7 @@ public:
     shared_ptr<UDPSocket<TestUDPSocketHost, 1024>> socket;
     uint16_t port = 0;
 
-    std::atomic<bool> success{false};
+    atomic<bool> success{false};
 
     concurrent_queue<bytes> packetsReceived;
 };
@@ -336,13 +331,24 @@ struct TestNodeTableEventHandler : NodeTableEventHandler
     concurrent_queue<NodeID> scheduledForEviction;
 };
 
+template <class ReceiverType>
+std::unique_ptr<DiscoveryDatagram> waitForPacketReceived(ReceiverType& _receiver,
+    std::string const& _receiverType, chrono::seconds const& _timeout = chrono::seconds{5})
+{
+    auto const dataReceived = _receiver.packetsReceived.pop(_timeout);
+    auto datagram = DiscoveryDatagram::interpretUDP(bi::udp::endpoint{}, dev::ref(dataReceived));
+    BOOST_REQUIRE_EQUAL(datagram->typeName(), _receiverType);
+
+    return datagram;
+}
+
 BOOST_AUTO_TEST_CASE(isIPAddressType)
 {
     string wildcard = "0.0.0.0";
-    BOOST_REQUIRE(bi::address::from_string(wildcard).is_unspecified());
+    BOOST_REQUIRE(bi::make_address(wildcard).is_unspecified());
 
     string empty = "";
-    BOOST_REQUIRE_THROW(bi::address::from_string(empty).is_unspecified(), std::exception);
+    BOOST_REQUIRE_THROW(bi::make_address(empty).is_unspecified(), exception);
 
     string publicAddress192 = "192.169.0.0";
     BOOST_REQUIRE(isPublicAddress(publicAddress192));
@@ -373,8 +379,8 @@ BOOST_AUTO_TEST_CASE(isIPAddressType)
 BOOST_AUTO_TEST_CASE(neighboursPacketLength)
 {
     KeyPair k = KeyPair::create();
-    std::vector<std::pair<Public, uint16_t>> testNodes(TestNodeTable::createTestNodes(16));
-    bi::udp::endpoint to(boost::asio::ip::address::from_string(c_localhostIp), randomPortNumber());
+    vector<pair<Public, uint16_t>> testNodes(TestNodeTable::createTestNodes(16));
+    bi::udp::endpoint to(boost::asio::ip::make_address(c_localhostIp), randomPortNumber());
 
     // hash(32), signature(65), overhead: packetSz(3), type(1), nodeListSz(3), ts(5),
     static unsigned constexpr nlimit = (1280 - 109) / 90; // neighbour: 2 + 65 + 3 + 3 + 17
@@ -382,13 +388,12 @@ BOOST_AUTO_TEST_CASE(neighboursPacketLength)
     {
         Neighbours out(to);
 
-        auto limit =
-            nlimit ? std::min(testNodes.size(), (size_t)(offset + nlimit)) : testNodes.size();
+        auto limit = nlimit ? min(testNodes.size(), (size_t)(offset + nlimit)) : testNodes.size();
         for (auto i = offset; i < limit; i++)
         {
-            Node n(testNodes[i].first,
-                NodeIPEndpoint(boost::asio::ip::address::from_string("200.200.200.200"),
-                    testNodes[i].second, testNodes[i].second));
+            Node n(
+                testNodes[i].first, NodeIPEndpoint(boost::asio::ip::make_address("200.200.200.200"),
+                                        testNodes[i].second, testNodes[i].second));
             Neighbours::Neighbour neighbour(n);
             out.neighbours.push_back(neighbour);
         }
@@ -401,14 +406,14 @@ BOOST_AUTO_TEST_CASE(neighboursPacketLength)
 BOOST_AUTO_TEST_CASE(neighboursPacket)
 {
     KeyPair k = KeyPair::create();
-    std::vector<std::pair<Public, uint16_t>> testNodes(TestNodeTable::createTestNodes(16));
-    bi::udp::endpoint to(boost::asio::ip::address::from_string(c_localhostIp), randomPortNumber());
+    vector<pair<Public, uint16_t>> testNodes(TestNodeTable::createTestNodes(16));
+    bi::udp::endpoint to(boost::asio::ip::make_address(c_localhostIp), randomPortNumber());
 
     Neighbours out(to);
     for (auto n: testNodes)
     {
-        Node node(n.first, NodeIPEndpoint(boost::asio::ip::address::from_string("200.200.200.200"),
-                               n.second, n.second));
+        Node node(n.first,
+            NodeIPEndpoint(boost::asio::ip::make_address("200.200.200.200"), n.second, n.second));
         Neighbours::Neighbour neighbour(node);
         out.neighbours.push_back(neighbour);
     }
@@ -417,7 +422,7 @@ BOOST_AUTO_TEST_CASE(neighboursPacket)
     bytesConstRef packet(out.data.data(), out.data.size());
     auto in = DiscoveryDatagram::interpretUDP(to, packet);
     int count = 0;
-    for (auto n: dynamic_cast<Neighbours&>(*in).neighbours)
+    for (auto& n : dynamic_cast<Neighbours&>(*in).neighbours)
     {
         BOOST_REQUIRE_EQUAL(testNodes[count].second, n.endpoint.udpPort());
         BOOST_REQUIRE_EQUAL(testNodes[count].first, n.node);
@@ -435,7 +440,7 @@ BOOST_AUTO_TEST_CASE(kademlia)
     nodes.sort();
     node.nodeTable->reset();
     node.populate(1);
-    this_thread::sleep_for(chrono::milliseconds(2000));
+    this_thread::sleep_for(chrono::seconds(2));
     BOOST_REQUIRE_EQUAL(node.nodeTable->count(), 8);
 }
 
@@ -460,7 +465,7 @@ BOOST_AUTO_TEST_CASE(hostNoCapsNoTcpListener)
 
     {
         // Verify no TCP listener on the host port
-        io::io_service ioService;
+        io::io_context ioService;
         bi::tcp::acceptor tcp4Acceptor{ioService};
         auto const tcpListenPort = Network::tcp4Listen(tcp4Acceptor, NetworkConfig{ c_localhostIp, hostPort});
         BOOST_REQUIRE_EQUAL(tcpListenPort, hostPort);
@@ -470,13 +475,14 @@ BOOST_AUTO_TEST_CASE(hostNoCapsNoTcpListener)
     TestUDPSocketHost nodeSocketHost;
     nodeSocketHost.start();
     auto const sourcePort = nodeSocketHost.port;
-    NodeIPEndpoint sourceEndpoint{ boost::asio::ip::address::from_string(c_localhostIp), sourcePort, sourcePort };
-    NodeIPEndpoint targetEndpoint { boost::asio::ip::address::from_string(c_localhostIp), hostPort, hostPort};
+    NodeIPEndpoint sourceEndpoint{
+        boost::asio::ip::make_address(c_localhostIp), sourcePort, sourcePort};
+    NodeIPEndpoint targetEndpoint{boost::asio::ip::make_address(c_localhostIp), hostPort, hostPort};
     PingNode ping(sourceEndpoint, targetEndpoint);
     ping.sign(KeyPair::create().secret());
     nodeSocketHost.socket->send(ping);
 
-    BOOST_REQUIRE_NO_THROW(nodeSocketHost.packetsReceived.pop(chrono::milliseconds(5000)));
+    BOOST_REQUIRE_NO_THROW(nodeSocketHost.packetsReceived.pop(chrono::seconds(5)));
 }
 
 BOOST_AUTO_TEST_CASE(udpOnce)
@@ -484,7 +490,7 @@ BOOST_AUTO_TEST_CASE(udpOnce)
     TestUDPSocketHost a;
     auto const port = a.port;
     a.start();
-    UDPDatagram d(bi::udp::endpoint(boost::asio::ip::address::from_string(c_localhostIp), port),
+    UDPDatagram d(bi::udp::endpoint(boost::asio::ip::make_address(c_localhostIp), port),
         bytes({65, 65, 65, 65}));
     a.socket->send(d);
     this_thread::sleep_for(chrono::seconds(1));
@@ -497,7 +503,7 @@ BOOST_AUTO_TEST_CASE(noteActiveNodeAppendsNewNode)
     nodeTableHost.populate(1);
 
     auto& nodeTable = nodeTableHost.nodeTable;
-    std::shared_ptr<NodeEntry> newNode = nodeTable->nodeEntry(nodeTableHost.testNodes.front().first);
+    shared_ptr<NodeEntry> newNode = nodeTable->nodeEntry(nodeTableHost.testNodes.front().first);
 
     BOOST_REQUIRE_GT(nodeTable->bucketSize(newNode->distance - 1), 0);
 
@@ -514,7 +520,7 @@ BOOST_AUTO_TEST_CASE(noteActiveNodeUpdatesKnownNode)
     auto& nodeTable = nodeTableHost.nodeTable;
     auto knownNode = nodeTable->bucketFirstNode(bucketIndex);
 
-    nodeTable->noteActiveNode(knownNode->id, knownNode->endpoint);
+    nodeTable->noteActiveNode(knownNode);
 
     // check that node was moved to the back of the bucket
     BOOST_CHECK_NE(nodeTable->bucketFirstNode(bucketIndex), knownNode);
@@ -542,13 +548,13 @@ BOOST_AUTO_TEST_CASE(noteActiveNodeEvictsTheNodeWhenBucketIsFull)
     {
         KeyPair k = KeyPair::create();
         newNodeId = k.pub();
-    } while (NodeTable::distance(nodeTableHost.m_alias.pub(), newNodeId) != bucketIndex + 1);
+    } while (NodeTable::distance(nodeTable->m_hostNodeIDHash, sha3(newNodeId)) != bucketIndex + 1);
 
     auto leastRecentlySeenNode = nodeTable->bucketFirstNode(bucketIndex);
 
     auto const port = randomPortNumber();
     nodeTable->addKnownNode(
-        Node(newNodeId, NodeIPEndpoint(bi::address::from_string(c_localhostIp), port, port)));
+        Node(newNodeId, NodeIPEndpoint(bi::make_address(c_localhostIp), port, port)));
 
     // wait for eviction
     evictEvents.pop();
@@ -558,36 +564,89 @@ BOOST_AUTO_TEST_CASE(noteActiveNodeEvictsTheNodeWhenBucketIsFull)
     // least recently seen node not removed yet
     BOOST_CHECK_EQUAL(nodeTable->bucketFirstNode(bucketIndex), leastRecentlySeenNode);
     // but added to evictions
-    auto evicted = nodeTable->nodeValidation(leastRecentlySeenNode->id);
+    auto evicted = nodeTable->nodeValidation(leastRecentlySeenNode->endpoint());
     BOOST_REQUIRE(evicted.is_initialized());
-    BOOST_REQUIRE(evicted->replacementNodeID);
-    BOOST_CHECK_EQUAL(*evicted->replacementNodeID, newNodeId);
+    BOOST_REQUIRE(evicted->replacementNodeEntry);
+    BOOST_CHECK_EQUAL(evicted->replacementNodeEntry->id(), newNodeId);
 }
 
-BOOST_AUTO_TEST_CASE(noteActiveNodeReplacesNodeInFullBucketWhenEndpointChanged)
+BOOST_AUTO_TEST_CASE(nearestNodeEntriesOneNode)
 {
-    TestNodeTableHost nodeTableHost(512);
-    int const bucketIndex = nodeTableHost.populateUntilBucketSize(16);
-    BOOST_REQUIRE(bucketIndex >= 0);
+    TestNodeTableHost nodeTableHost(1);
+    nodeTableHost.populate(1);
 
     auto& nodeTable = nodeTableHost.nodeTable;
-    auto leastRecentlySeenNodeId = nodeTable->bucketFirstNode(bucketIndex)->id;
+    vector<shared_ptr<NodeEntry>> const nearest = nodeTable->nearestNodeEntries(NodeID::random());
 
-    // addNode will replace the node in the m_allNodes map, because it's the same id with enother
-    // endpoint
-    auto const port = randomPortNumber();
-    NodeIPEndpoint newEndpoint{bi::address::from_string(c_localhostIp), port, port };
-    nodeTable->noteActiveNode(leastRecentlySeenNodeId, newEndpoint);
+    BOOST_REQUIRE_EQUAL(nearest.size(), 1);
+    BOOST_REQUIRE_EQUAL(nearest.front()->id(), nodeTableHost.testNodes.front().first);
+}
 
-    // the bucket is still max size
-    BOOST_CHECK_EQUAL(nodeTable->bucketSize(bucketIndex), 16);
-    // least recently seen node removed
-    BOOST_CHECK_NE(nodeTable->bucketFirstNode(bucketIndex)->id, leastRecentlySeenNodeId);
-    // but added as most recently seen with new endpoint
-    auto mostRecentNodeEntry = nodeTable->bucketLastNode(bucketIndex);
-    BOOST_CHECK_EQUAL(mostRecentNodeEntry->id, leastRecentlySeenNodeId);
-    BOOST_CHECK_EQUAL(mostRecentNodeEntry->endpoint.address(), newEndpoint.address());
-    BOOST_CHECK_EQUAL(mostRecentNodeEntry->endpoint.udpPort(), newEndpoint.udpPort());
+BOOST_AUTO_TEST_CASE(nearestNodeEntriesOneDistantNode)
+{
+    // specific case that was failing - one node in bucket #252, target corresponding to bucket #253
+    unique_ptr<TestNodeTableHost> nodeTableHost;
+    do
+    {
+        nodeTableHost.reset(new TestNodeTableHost(1));
+        nodeTableHost->populate(1);
+    } while (nodeTableHost->nodeTable->bucketSize(252) != 1);
+
+    auto& nodeTable = nodeTableHost->nodeTable;
+
+    h256 const hostNodeIDHash = nodeTable->m_hostNodeIDHash;
+
+    NodeID target = NodeID::random();
+    while (NodeTable::distance(hostNodeIDHash, sha3(target)) != 254)
+        target = NodeID::random();
+
+    vector<shared_ptr<NodeEntry>> const nearest = nodeTable->nearestNodeEntries(target);
+
+    BOOST_REQUIRE_EQUAL(nearest.size(), 1);
+    BOOST_REQUIRE_EQUAL(nearest.front()->id(), nodeTableHost->testNodes.front().first);
+}
+
+BOOST_AUTO_TEST_CASE(nearestNodeEntriesManyNodes)
+{
+    unsigned constexpr nodeCount = 128;
+    TestNodeTableHost nodeTableHost(nodeCount);
+    nodeTableHost.populate(nodeCount);
+
+    auto& nodeTable = nodeTableHost.nodeTable;
+
+    NodeID const target = NodeID::random();
+    vector<shared_ptr<NodeEntry>> nearest = nodeTable->nearestNodeEntries(target);
+
+    BOOST_REQUIRE_EQUAL(nearest.size(), 16);
+
+    // get all nodes sorted by distance to target
+    list<NodeEntry> const allNodeEntries = nodeTable->snapshot();
+    h256 const targetNodeIDHash = sha3(target);
+    vector<pair<unsigned, NodeID>> nodesByDistanceToTarget;
+    for (auto const& nodeEntry : allNodeEntries)
+    {
+        NodeID const& nodeID = nodeEntry.id();
+        nodesByDistanceToTarget.emplace_back(
+            NodeTable::distance(targetNodeIDHash, sha3(nodeID)), nodeID);
+    }
+    // stable sort to keep them in the order as they are in buckets
+    // (the same order they are iterated in nearestNodeEntries implementation)
+    std::stable_sort(nodesByDistanceToTarget.begin(), nodesByDistanceToTarget.end(),
+        [](pair<unsigned, NodeID> const& _n1, pair<unsigned, NodeID> const& _n2) {
+            return _n1.first < _n2.first;
+        });
+    // get 16 with lowest distance
+    std::vector<NodeID> expectedNearestIDs;
+    std::transform(nodesByDistanceToTarget.begin(), nodesByDistanceToTarget.begin() + 16,
+        std::back_inserter(expectedNearestIDs),
+        [](pair<unsigned, NodeID> const& _n) { return _n.second; });
+
+
+    vector<NodeID> nearestIDs;
+    for (auto const& nodeEntry : nearest)
+        nearestIDs.push_back(nodeEntry->id());
+
+    BOOST_REQUIRE(nearestIDs == expectedNearestIDs);
 }
 
 BOOST_AUTO_TEST_CASE(unexpectedPong)
@@ -624,12 +683,15 @@ BOOST_AUTO_TEST_CASE(invalidPong)
     auto const nodePort = nodeSocketHost.port;
 
     // add a node to node table, initiating PING
-    auto nodeEndpoint = NodeIPEndpoint{bi::address::from_string(c_localhostIp), nodePort, nodePort};
-    auto nodeKeyPair = KeyPair::create();
-    auto nodePubKey = nodeKeyPair.pub();
+    auto const nodeEndpoint = NodeIPEndpoint{bi::make_address(c_localhostIp), nodePort, nodePort};
+    auto const nodeKeyPair = KeyPair::create();
+    auto const nodePubKey = nodeKeyPair.pub();
     nodeTable->addNode(Node{nodePubKey, nodeEndpoint});
 
-    // send PONG
+    // validate received ping
+    waitForPacketReceived(nodeSocketHost, "Ping");
+
+    // send invalid pong (pong without ping hash)
     Pong pong(nodeTable->m_hostNodeEndpoint);
     pong.sign(nodeKeyPair.secret());
 
@@ -638,9 +700,10 @@ BOOST_AUTO_TEST_CASE(invalidPong)
     // wait for PONG to be received and handled
     nodeTable->packetsReceived.pop();
 
-    BOOST_REQUIRE(nodeTable->nodeExists(nodePubKey));
-    auto addedNode = nodeTable->nodeEntry(nodePubKey);
-    BOOST_CHECK_EQUAL(addedNode->lastPongReceivedTime, 0);
+    // pending node validation should still be not deleted
+    BOOST_REQUIRE(nodeTable->nodeValidation(nodeEndpoint));
+    // node is not in the node table
+    BOOST_REQUIRE(!nodeTable->nodeExists(nodePubKey));
 }
 
 BOOST_AUTO_TEST_CASE(validPong)
@@ -656,16 +719,14 @@ BOOST_AUTO_TEST_CASE(validPong)
     uint16_t nodePort = nodeSocketHost.port;
 
     // add a node to node table, initiating PING
-    auto nodeEndpoint = NodeIPEndpoint{bi::address::from_string(c_localhostIp), nodePort, nodePort};
+    auto nodeEndpoint = NodeIPEndpoint{bi::make_address(c_localhostIp), nodePort, nodePort};
     auto nodeKeyPair = KeyPair::create();
     auto nodePubKey = nodeKeyPair.pub();
     nodeTable->addNode(Node{nodePubKey, nodeEndpoint});
 
     // handle received PING
-    auto pingDataReceived = nodeSocketHost.packetsReceived.pop();
-    auto pingDatagram =
-        DiscoveryDatagram::interpretUDP(bi::udp::endpoint{}, dev::ref(pingDataReceived));
-    auto ping = dynamic_cast<PingNode const&>(*pingDatagram);
+    auto pingDatagram = waitForPacketReceived(nodeSocketHost, "Ping");
+    auto const& ping = dynamic_cast<PingNode const&>(*pingDatagram);
 
     // send PONG
     Pong pong(nodeTable->m_hostNodeEndpoint);
@@ -681,6 +742,49 @@ BOOST_AUTO_TEST_CASE(validPong)
     BOOST_CHECK(addedNode->lastPongReceivedTime > 0);
 }
 
+BOOST_AUTO_TEST_CASE(pongWithChangedNodeID)
+{
+    // NodeTable sending PING
+    TestNodeTableHost nodeTableHost(0);
+    nodeTableHost.start();
+    auto& nodeTable = nodeTableHost.nodeTable;
+    nodeTable->setRequestTimeToLive(chrono::seconds(1));
+
+    // socket receiving PING
+    TestUDPSocketHost nodeSocketHost{randomPortNumber()};
+    nodeSocketHost.start();
+    uint16_t const nodePort = nodeSocketHost.port;
+
+    // add a node to node table, initiating PING
+    auto const nodeEndpoint = NodeIPEndpoint{bi::make_address(c_localhostIp), nodePort, nodePort};
+    auto const nodeKeyPair = KeyPair::create();
+    auto const nodePubKey = nodeKeyPair.pub();
+    nodeTable->addNode(Node{nodePubKey, nodeEndpoint});
+
+    // handle received PING
+    auto pingDatagram = waitForPacketReceived(nodeSocketHost, "Ping");
+    auto const& ping = dynamic_cast<PingNode const&>(*pingDatagram);
+
+    // send PONG with different NodeID
+    Pong pong(nodeTable->m_hostNodeEndpoint);
+    pong.echo = ping.echo;
+    auto const newNodeKeyPair = KeyPair::create();
+    auto const newNodePubKey = newNodeKeyPair.pub();
+    pong.sign(newNodeKeyPair.secret());
+    nodeSocketHost.socket->send(pong);
+
+    // wait for PONG to be received and handled
+    nodeTable->packetsReceived.pop();
+
+    BOOST_REQUIRE(nodeTable->nodeExists(newNodeKeyPair.pub()));
+    auto const addedNode = nodeTable->nodeEntry(newNodePubKey);
+    BOOST_CHECK(addedNode->lastPongReceivedTime > 0);
+
+    BOOST_CHECK(!nodeTable->nodeExists(nodePubKey));
+    auto const sentPing = nodeTable->nodeValidation(nodeEndpoint);
+    BOOST_CHECK(!sentPing.is_initialized());
+}
+
 BOOST_AUTO_TEST_CASE(pingTimeout)
 {
     // NodeTable sending PING
@@ -688,7 +792,7 @@ BOOST_AUTO_TEST_CASE(pingTimeout)
 
     nodeTableHost.start();
     auto& nodeTable = nodeTableHost.nodeTable;
-    nodeTable->setRequestTimeToLive(std::chrono::seconds(1));
+    nodeTable->setRequestTimeToLive(chrono::seconds(1));
 
     // socket receiving PING
     TestUDPSocketHost nodeSocketHost;
@@ -696,22 +800,20 @@ BOOST_AUTO_TEST_CASE(pingTimeout)
     auto const nodePort = nodeSocketHost.port;
 
     // add a node to node table, initiating PING
-    auto nodeEndpoint = NodeIPEndpoint{bi::address::from_string(c_localhostIp), nodePort, nodePort};
+    auto nodeEndpoint = NodeIPEndpoint{bi::make_address(c_localhostIp), nodePort, nodePort};
     auto nodeKeyPair = KeyPair::create();
     auto nodePubKey = nodeKeyPair.pub();
     nodeTable->addNode(Node{nodePubKey, nodeEndpoint});
 
-    this_thread::sleep_for(std::chrono::seconds(6));
+    this_thread::sleep_for(chrono::seconds(6));
 
     BOOST_CHECK(!nodeTable->nodeExists(nodePubKey));
-    auto sentPing = nodeTable->nodeValidation(nodePubKey);
+    auto sentPing = nodeTable->nodeValidation(nodeEndpoint);
     BOOST_CHECK(!sentPing.is_initialized());
 
     // handle received PING
-    auto pingDataReceived = nodeSocketHost.packetsReceived.pop();
-    auto pingDatagram =
-        DiscoveryDatagram::interpretUDP(bi::udp::endpoint{}, dev::ref(pingDataReceived));
-    auto ping = dynamic_cast<PingNode const&>(*pingDatagram);
+    auto pingDatagram = waitForPacketReceived(nodeSocketHost, "Ping");
+    auto const& ping = dynamic_cast<PingNode const&>(*pingDatagram);
 
     // send PONG after timeout
     Pong pong(nodeTable->m_hostNodeEndpoint);
@@ -720,10 +822,10 @@ BOOST_AUTO_TEST_CASE(pingTimeout)
     nodeSocketHost.socket->send(pong);
 
     // wait for PONG to be received and handled
-    nodeTable->packetsReceived.pop();
+    waitForPacketReceived(*nodeTable, "Pong");
 
     BOOST_CHECK(!nodeTable->nodeExists(nodePubKey));
-    sentPing = nodeTable->nodeValidation(nodePubKey);
+    sentPing = nodeTable->nodeValidation(nodeEndpoint);
     BOOST_CHECK(!sentPing.is_initialized());
 }
 
@@ -735,7 +837,7 @@ BOOST_AUTO_TEST_CASE(invalidPing)
     auto& nodeTable = nodeTableHost.nodeTable;
 
     // port 0 is invalid
-    NodeIPEndpoint endpoint{boost::asio::ip::address::from_string("200.200.200.200"), 0, 0};
+    NodeIPEndpoint endpoint{boost::asio::ip::make_address("200.200.200.200"), 0, 0};
     PingNode ping(endpoint, nodeTable->m_hostNodeEndpoint);
     ping.sign(nodeTableHost.m_alias.secret());
 
@@ -747,7 +849,7 @@ BOOST_AUTO_TEST_CASE(invalidPing)
     nodeTable->packetsReceived.pop();
 
     // Verify that no PONG response is received
-    BOOST_CHECK_THROW(nodeSocketHost.packetsReceived.pop(chrono::milliseconds(3000)), WaitTimeout);
+    BOOST_CHECK_THROW(nodeSocketHost.packetsReceived.pop(chrono::seconds(3)), WaitTimeout);
 }
 
 BOOST_AUTO_TEST_CASE(neighboursSentAfterFindNode)
@@ -766,8 +868,8 @@ BOOST_AUTO_TEST_CASE(neighboursSentAfterFindNode)
     auto const& nodeTable = nodeTableHost.nodeTable;
     KeyPair newNodeKeyPair = KeyPair::create();
     NodeID newNodeId = newNodeKeyPair.pub();
-    nodeTable->addKnownNode(Node(newNodeId,
-        NodeIPEndpoint(bi::address::from_string(c_localhostIp), listenPort, listenPort)));
+    nodeTable->addKnownNode(
+        Node(newNodeId, NodeIPEndpoint(bi::make_address(c_localhostIp), listenPort, listenPort)));
 
     // Create and send the FindNode packet from the new "node"
     KeyPair target = KeyPair::create();
@@ -776,12 +878,10 @@ BOOST_AUTO_TEST_CASE(neighboursSentAfterFindNode)
     nodeSocketHost.socket->send(findNode);
 
     // Wait for FindNode to be received and handled
-    nodeTable->packetsReceived.pop(chrono::milliseconds(5000));
+    nodeTable->packetsReceived.pop(chrono::seconds(5));
 
     // Wait for the Neighbours packet to be received
-    auto packetReceived = nodeSocketHost.packetsReceived.pop(chrono::milliseconds(5000));
-    auto datagram = DiscoveryDatagram::interpretUDP(bi::udp::endpoint{}, dev::ref(packetReceived));
-    BOOST_CHECK_EQUAL(datagram->typeName(), "Neighbours");
+    waitForPacketReceived(nodeSocketHost, "Neighbours");
 
     // TODO: Validate the contents of the neighbours packet
 }
@@ -803,15 +903,15 @@ BOOST_AUTO_TEST_CASE(unexpectedFindNode)
     nodeSocketHost.socket->send(findNode);
 
     // Wait for FindNode to be received
-    nodeTable->packetsReceived.pop(chrono::milliseconds(5000));
+    nodeTable->packetsReceived.pop(chrono::seconds(5));
 
     // Verify that no neighbours response is received
-    BOOST_CHECK_THROW(nodeSocketHost.packetsReceived.pop(chrono::milliseconds(5000)), WaitTimeout);
+    BOOST_CHECK_THROW(nodeSocketHost.packetsReceived.pop(chrono::seconds(5)), WaitTimeout);
 }
 
 BOOST_AUTO_TEST_CASE(evictionWithOldNodeAnswering)
 {
-    TestNodeTableHost nodeTableHost(1000);
+    TestNodeTableHost nodeTableHost(2000);
     auto& nodeTable = nodeTableHost.nodeTable;
 
     // socket receiving PING
@@ -820,7 +920,7 @@ BOOST_AUTO_TEST_CASE(evictionWithOldNodeAnswering)
     auto const nodePort = nodeSocketHost.port;
 
     // add a node to node table
-    auto nodeEndpoint = NodeIPEndpoint{bi::address::from_string(c_localhostIp), nodePort, nodePort};
+    auto nodeEndpoint = NodeIPEndpoint{bi::make_address(c_localhostIp), nodePort, nodePort};
     auto nodeKeyPair = KeyPair::create();
     auto nodeId = nodeKeyPair.pub();
     nodeTable->addKnownNode(Node{nodeId, nodeEndpoint});
@@ -844,25 +944,22 @@ BOOST_AUTO_TEST_CASE(evictionWithOldNodeAnswering)
     {
         KeyPair newNodeKeyPair = KeyPair::create();
         newNodeId = newNodeKeyPair.pub();
-    } while (NodeTable::distance(nodeTableHost.m_alias.pub(), newNodeId) != bucketIndex + 1);
+    } while (NodeTable::distance(nodeTable->m_hostNodeIDHash, sha3(newNodeId)) != bucketIndex + 1);
 
     // add a node to node table, initiating eviction of nodeId
     // port doesn't matter, it won't be pinged because we're adding it as known
-    auto newNodeEndpoint =
-        NodeIPEndpoint{bi::address::from_string(c_localhostIp), nodePort, nodePort};
+    auto newNodeEndpoint = NodeIPEndpoint{bi::make_address(c_localhostIp), nodePort, nodePort};
     nodeTable->addKnownNode(Node{newNodeId, newNodeEndpoint});
 
     // wait for eviction
     evictEvents.pop(chrono::seconds(5));
 
-    auto evicted = nodeTable->nodeValidation(nodeId);
+    auto evicted = nodeTable->nodeValidation(nodeEndpoint);
     BOOST_REQUIRE(evicted.is_initialized());
 
     // handle received PING
-    auto pingDataReceived = nodeSocketHost.packetsReceived.pop();
-    auto pingDatagram =
-        DiscoveryDatagram::interpretUDP(bi::udp::endpoint{}, dev::ref(pingDataReceived));
-    auto ping = dynamic_cast<PingNode const&>(*pingDatagram);
+    auto pingDatagram = waitForPacketReceived(nodeSocketHost, "Ping");
+    auto const& ping = dynamic_cast<PingNode const&>(*pingDatagram);
 
     // send valid PONG
     Pong pong(nodeTable->m_hostNodeEndpoint);
@@ -877,10 +974,10 @@ BOOST_AUTO_TEST_CASE(evictionWithOldNodeAnswering)
     BOOST_REQUIRE(nodeTable->nodeExists(nodeId));
     auto addedNode = nodeTable->nodeEntry(nodeId);
     BOOST_CHECK(addedNode->lastPongReceivedTime);
-    auto sentPing = nodeTable->nodeValidation(nodeId);
+    auto sentPing = nodeTable->nodeValidation(nodeEndpoint);
     BOOST_CHECK(!sentPing.is_initialized());
     // check that old node is most recently seen in the bucket
-    BOOST_CHECK(nodeTable->bucketLastNode(bucketIndex)->id == nodeId);
+    BOOST_CHECK(nodeTable->bucketLastNode(bucketIndex)->id() == nodeId);
     // check that replacement node is dropped
     BOOST_CHECK(!nodeTable->nodeExists(newNodeId));
 }
@@ -892,11 +989,11 @@ BOOST_AUTO_TEST_CASE(evictionWithOldNodeDropped)
     BOOST_REQUIRE(bucketIndex >= 0);
 
     auto& nodeTable = nodeTableHost.nodeTable;
-    nodeTable->setRequestTimeToLive(std::chrono::seconds(1));
+    nodeTable->setRequestTimeToLive(chrono::seconds(1));
 
     nodeTableHost.start();
 
-    auto oldNodeId = nodeTable->bucketFirstNode(bucketIndex)->id;
+    auto oldNode = nodeTable->bucketFirstNode(bucketIndex);
 
     // generate new address for the same bucket
     NodeID newNodeId;
@@ -904,25 +1001,25 @@ BOOST_AUTO_TEST_CASE(evictionWithOldNodeDropped)
     {
         KeyPair newNodeKeyPair = KeyPair::create();
         newNodeId = newNodeKeyPair.pub();
-    } while (NodeTable::distance(nodeTableHost.m_alias.pub(), newNodeId) != bucketIndex + 1);
+    } while (NodeTable::distance(nodeTable->m_hostNodeIDHash, sha3(newNodeId)) != bucketIndex + 1);
 
     // add new node to node table
     // port doesn't matter, it won't be pinged because we're adding it as known
     auto const port = randomPortNumber();
-    auto newNodeEndpoint = NodeIPEndpoint{bi::address::from_string(c_localhostIp), port, port };
+    auto newNodeEndpoint = NodeIPEndpoint{bi::make_address(c_localhostIp), port, port};
     nodeTable->addKnownNode(Node{newNodeId, newNodeEndpoint});
 
     // wait for PING time out
-    this_thread::sleep_for(std::chrono::seconds(6));
+    this_thread::sleep_for(chrono::seconds(6));
 
     // check that old node is evicted
-    BOOST_CHECK(!nodeTable->nodeExists(oldNodeId));
-    BOOST_CHECK(!nodeTable->nodeValidation(oldNodeId).is_initialized());
+    BOOST_CHECK(!nodeTable->nodeExists(oldNode->id()));
+    BOOST_CHECK(!nodeTable->nodeValidation(oldNode->endpoint()).is_initialized());
     // check that replacement node is active
     BOOST_CHECK(nodeTable->nodeExists(newNodeId));
     auto newNode = nodeTable->nodeEntry(newNodeId);
     BOOST_CHECK(newNode->lastPongReceivedTime > 0);
-    BOOST_CHECK(nodeTable->bucketLastNode(bucketIndex)->id == newNodeId);
+    BOOST_CHECK(nodeTable->bucketLastNode(bucketIndex)->id() == newNodeId);
 }
 
 BOOST_AUTO_TEST_CASE(pingFromLocalhost)
@@ -942,7 +1039,7 @@ BOOST_AUTO_TEST_CASE(pingFromLocalhost)
     TestUDPSocketHost nodeSocketHost{randomPortNumber()};
     nodeSocketHost.start();
     auto const nodePort = nodeSocketHost.port;
-    auto nodeEndpoint = NodeIPEndpoint{bi::address::from_string(c_localhostIp), nodePort, nodePort};
+    auto nodeEndpoint = NodeIPEndpoint{bi::make_address(c_localhostIp), nodePort, nodePort};
 
     PingNode ping(nodeEndpoint, nodeTable->m_hostNodeEndpoint);
     ping.sign(KeyPair::create().secret());
@@ -950,19 +1047,20 @@ BOOST_AUTO_TEST_CASE(pingFromLocalhost)
     nodeSocketHost.socket->send(ping);
 
     // Wait for the node table to receive and process the ping
-    nodeTable->packetsReceived.pop(chrono::milliseconds(5000));
+    nodeTable->packetsReceived.pop(chrono::seconds(5));
 
     // Verify the node wasn't added to the node table
     BOOST_REQUIRE(nodeTable->count() == expectedNodeCount);
 
     // Verify that the node table doesn't respond with a pong
     BOOST_REQUIRE_THROW(
-        nodeSocketHost.packetsReceived.pop(chrono::milliseconds(5000)), WaitTimeout);
+        nodeSocketHost.packetsReceived.pop(chrono::seconds(5)), WaitTimeout);
 }
 
 BOOST_AUTO_TEST_CASE(addSelf)
 {
-    TestNodeTableHost nodeTableHost(512);
+    TestNodeTableHost nodeTableHost(0);
+    nodeTableHost.start();
     auto& nodeTable = nodeTableHost.nodeTable;
 
     size_t expectedNodeCount = 0;
@@ -970,50 +1068,51 @@ BOOST_AUTO_TEST_CASE(addSelf)
 
     TestUDPSocketHost nodeSocketHost;
     auto nodePort = nodeSocketHost.port;
-    auto nodeEndpoint = NodeIPEndpoint{ bi::address::from_string(c_localhostIp), nodePort, nodePort };
+    auto nodeEndpoint = NodeIPEndpoint{bi::make_address(c_localhostIp), nodePort, nodePort};
 
-    // Create arbitrary node and verify it can be added to the node table
-    auto nodeKeyPair = KeyPair::create();
-    Node node(nodeKeyPair.pub(), nodeEndpoint);
+    // Create arbitrary node and verify it can be pinged
+    auto nodePubKey = KeyPair::create().pub();
+    Node node(nodePubKey, nodeEndpoint);
     nodeTable->addNode(node);
-    BOOST_CHECK(nodeTable->count() == ++expectedNodeCount);
+    BOOST_CHECK(nodeTable->nodeValidation(nodeEndpoint));
 
-    // Create self node and verify it isn't added to the node table
-    Node self(nodeTableHost.m_alias.pub(), nodeEndpoint);
+    // Create self node and verify it isn't pinged
+    Node self(nodeTableHost.m_alias.pub(), nodeTable->m_hostNodeEndpoint);
     nodeTable->addNode(self);
-    BOOST_CHECK(nodeTable->count() == ++expectedNodeCount - 1);
+    BOOST_CHECK(!nodeTable->nodeValidation(nodeTable->m_hostNodeEndpoint));
 }
 
 BOOST_AUTO_TEST_CASE(findNodeIsSentAfterPong)
 {
-    // Node Table receiving Ping and sending FindNode
-    TestNodeTableHost nodeTableHost1(15);
-    nodeTableHost1.populate();
-    nodeTableHost1.start();
-    auto& nodeTable1 = nodeTableHost1.nodeTable;
+    TestNodeTableHost nodeTableHost(0);
+    nodeTableHost.start();
+    auto& nodeTable = nodeTableHost.nodeTable;
 
-    TestNodeTableHost nodeTableHost2(512, nodeTable1->m_hostNodeEndpoint.udpPort() + 1);
-    nodeTableHost2.populate();
-    nodeTableHost2.start();
-    auto& nodeTable2 = nodeTableHost2.nodeTable;
+    // We use a TestUDPSocketHost rather than another node table because
+    // node tables schedule discovery with timers and run code in other threads
+    // so there's no guarantee that one node table will run discovery before the
+    // other which can cause seemingly random test failures
+    TestUDPSocketHost nodeSocketHost{randomPortNumber()};
+    nodeSocketHost.start();
+    auto const nodePort = nodeSocketHost.port;
+    auto const nodeEndpoint = NodeIPEndpoint{bi::make_address(c_localhostIp), nodePort, nodePort};
+    auto const nodeKeyPair = KeyPair::create();
+    auto const nodeId = nodeKeyPair.pub();
 
-    // add node1 to table2 initiating PING from table2 to table1
-    nodeTable2->addNode(Node{nodeTable1->m_hostNodeID, nodeTable1->m_hostNodeEndpoint});
+    // Add the TestUDPSocketHost to the node table, triggering a ping
+    nodeTable->addNode(Node{nodeId, nodeEndpoint});
 
-    auto packetReceived1 = nodeTable2->packetsReceived.pop();
-    auto datagram1 =
-        DiscoveryDatagram::interpretUDP(bi::udp::endpoint{}, dev::ref(packetReceived1));
-    BOOST_CHECK_EQUAL(datagram1->typeName(), "Pong");
+    auto pingDatagram = waitForPacketReceived(nodeSocketHost, "Ping");
+    auto const& ping = dynamic_cast<PingNode const&>(*pingDatagram);
 
-    auto packetReceived2 = nodeTable2->packetsReceived.pop();
-    auto datagram2 =
-        DiscoveryDatagram::interpretUDP(bi::udp::endpoint{}, dev::ref(packetReceived2));
-    BOOST_CHECK_EQUAL(datagram2->typeName(), "Ping");
+    // Reply to the ping (which should trigger the node table to send a FindNode packet once the
+    // next discovery pass starts)
+    Pong pong(nodeTable->m_hostNodeEndpoint);
+    pong.echo = ping.echo;
+    pong.sign(nodeKeyPair.secret());
+    nodeSocketHost.socket->send(pong);
 
-    auto packetReceived3 = nodeTable2->packetsReceived.pop();
-    auto datagram3 =
-        DiscoveryDatagram::interpretUDP(bi::udp::endpoint{}, dev::ref(packetReceived3));
-    BOOST_CHECK_EQUAL(datagram3->typeName(), "FindNode");
+    waitForPacketReceived(nodeSocketHost, "FindNode", chrono::seconds(20));
 }
 
 BOOST_AUTO_TEST_CASE(pingNotSentAfterPongForKnownNode)
@@ -1030,8 +1129,7 @@ BOOST_AUTO_TEST_CASE(pingNotSentAfterPongForKnownNode)
     TestUDPSocketHost nodeSocketHost2;
     nodeSocketHost2.start();
     auto nodePort2 = nodeSocketHost2.port;
-    auto nodeEndpoint2 =
-        NodeIPEndpoint{bi::address::from_string(c_localhostIp), nodePort2, nodePort2};
+    auto nodeEndpoint2 = NodeIPEndpoint{bi::make_address(c_localhostIp), nodePort2, nodePort2};
 
     // Add node to the node table to trigger ping
     auto nodeKeyPair2 = KeyPair::create();
@@ -1039,10 +1137,7 @@ BOOST_AUTO_TEST_CASE(pingNotSentAfterPongForKnownNode)
     nodeTable1->addNode(node2);
 
     // Verify ping is received
-    auto packetReceived1 = nodeSocketHost2.packetsReceived.pop(chrono::milliseconds(5000));
-    auto datagram1 =
-        DiscoveryDatagram::interpretUDP(bi::udp::endpoint{}, dev::ref(packetReceived1));
-    BOOST_REQUIRE_EQUAL(datagram1->typeName(), "Ping");
+    auto datagram1 = waitForPacketReceived(nodeSocketHost2, "Ping");
 
     // Send pong to trigger endpoint proof in node table
     Pong pong(nodeTable1->m_hostNodeEndpoint);
@@ -1052,10 +1147,7 @@ BOOST_AUTO_TEST_CASE(pingNotSentAfterPongForKnownNode)
     nodeSocketHost2.socket->send(pong);
 
     // Receive FindNode packet
-    auto packetReceived3 = nodeSocketHost2.packetsReceived.pop(chrono::milliseconds(20000));
-    auto datagram3 =
-        DiscoveryDatagram::interpretUDP(bi::udp::endpoint{}, dev::ref(packetReceived3));
-    BOOST_REQUIRE_EQUAL(datagram3->typeName(), "FindNode");
+    waitForPacketReceived(nodeSocketHost2, "FindNode", chrono::seconds{20});
 
     // Ping the node table and verify that a pong is received but no ping is received after
     // (since the endpoint proof has already been completed)
@@ -1063,16 +1155,10 @@ BOOST_AUTO_TEST_CASE(pingNotSentAfterPongForKnownNode)
     ping2.sign(nodeKeyPair2.secret());
     nodeSocketHost2.socket->send(ping2);
 
-    auto packetReceived4 = nodeSocketHost2.packetsReceived.pop(chrono::milliseconds(5000));
-    auto datagram4 =
-        DiscoveryDatagram::interpretUDP(bi::udp::endpoint{}, dev::ref(packetReceived4));
-    BOOST_REQUIRE_EQUAL(datagram4->typeName(), "Pong");
+    waitForPacketReceived(nodeSocketHost2, "Pong");
 
-    // Verify that the next packet received is not a ping
-    auto packetReceived5 = nodeSocketHost2.packetsReceived.pop(chrono::milliseconds(20000));
-    auto datagram5 =
-        DiscoveryDatagram::interpretUDP(bi::udp::endpoint{}, dev::ref(packetReceived5));
-    BOOST_REQUIRE(datagram5->typeName() != "Ping");
+    // Verify that another ping isn't sent
+    BOOST_REQUIRE_THROW(nodeSocketHost2.packetsReceived.pop(chrono::seconds(3)), WaitTimeout);
 
     // Force the endpoint proof to be invalid
     auto newNode = nodeTable1->nodeEntry(nodeKeyPair2.pub());
@@ -1084,17 +1170,261 @@ BOOST_AUTO_TEST_CASE(pingNotSentAfterPongForKnownNode)
     ping3.sign(nodeKeyPair2.secret());
     nodeSocketHost2.socket->send(ping3);
 
-    auto packetReceived6 = nodeSocketHost2.packetsReceived.pop(chrono::milliseconds(5000));
-    auto datagram6 =
-        DiscoveryDatagram::interpretUDP(bi::udp::endpoint{}, dev::ref(packetReceived4));
-    BOOST_CHECK_EQUAL(datagram4->typeName(), "Pong");
+    waitForPacketReceived(nodeSocketHost2, "Pong");
 
-    auto packetReceived7 = nodeSocketHost2.packetsReceived.pop(chrono::milliseconds(5000));
-    auto datagram7 =
-        DiscoveryDatagram::interpretUDP(bi::udp::endpoint{}, dev::ref(packetReceived7));
-    BOOST_REQUIRE(datagram7->typeName() == "Ping");
+    waitForPacketReceived(nodeSocketHost2, "Ping");
 }
 
+BOOST_AUTO_TEST_CASE(addNodePingsNodeOnlyOnce)
+{
+    // NodeTable sending PING
+    TestNodeTableHost nodeTableHost(0);
+    nodeTableHost.start();
+    auto& nodeTable = nodeTableHost.nodeTable;
+
+    // add a node to node table, initiating PING
+    auto const nodePort = randomPortNumber();
+    auto nodeEndpoint = NodeIPEndpoint{bi::make_address(c_localhostIp), nodePort, nodePort};
+    auto nodePubKey = KeyPair::create().pub();
+    nodeTable->addNode(Node{nodePubKey, nodeEndpoint});
+
+    auto sentPing = nodeTable->nodeValidation(nodeEndpoint);
+    BOOST_REQUIRE(sentPing.is_initialized());
+
+    this_thread::sleep_for(chrono::milliseconds(2000));
+
+    // add it for the second time
+    nodeTable->addNode(Node{nodePubKey, nodeEndpoint});
+
+    auto sentPing2 = nodeTable->nodeValidation(nodeEndpoint);
+    BOOST_REQUIRE(sentPing2.is_initialized());
+
+    // check that Ping was sent only once, so Ping hash didn't change
+    BOOST_REQUIRE_EQUAL(sentPing->pingHash, sentPing2->pingHash);
+}
+
+BOOST_AUTO_TEST_CASE(validENRRequest)
+{
+    // NodeTable receiving ENRRequest
+    TestNodeTableHost nodeTableHost(0);
+    nodeTableHost.start();
+    auto& nodeTable = nodeTableHost.nodeTable;
+
+    // socket sending ENRRequest
+    TestUDPSocketHost nodeSocketHost;
+    nodeSocketHost.start();
+    uint16_t const nodePort = nodeSocketHost.port;
+
+    // Exchange Ping/Pongs before sending ENRRequest
+
+    // add a node to node table, initiating PING
+    auto const nodeEndpoint = NodeIPEndpoint{bi::make_address(c_localhostIp), nodePort, nodePort};
+    auto const nodeKeyPair = KeyPair::create();
+    auto const nodePubKey = nodeKeyPair.pub();
+    nodeTable->addNode(Node{nodePubKey, nodeEndpoint});
+
+    // handle received PING
+    auto pingDatagram = waitForPacketReceived(nodeSocketHost, "Ping");
+    auto const& ping = dynamic_cast<PingNode const&>(*pingDatagram);
+
+    // send PONG
+    Pong pong(nodeTable->m_hostNodeEndpoint);
+    pong.echo = ping.echo;
+    pong.sign(nodeKeyPair.secret());
+    nodeSocketHost.socket->send(pong);
+
+    // wait for PONG to be received and handled
+    waitForPacketReceived(*nodeTable, "Pong");
+
+    // send ENRRequest
+    ENRRequest enrRequest(nodeTable->m_hostNodeEndpoint);
+    enrRequest.sign(nodeKeyPair.secret());
+    nodeSocketHost.socket->send(enrRequest);
+
+    // wait for ENRRequest to be received and handled
+    waitForPacketReceived(*nodeTable, "ENRRequest");
+
+    auto datagram = waitForPacketReceived(nodeSocketHost, "ENRResponse");
+
+    auto const& enrResponse = dynamic_cast<ENRResponse const&>(*datagram);
+    auto const& keyValuePairs = enrResponse.enr->keyValuePairs();
+    BOOST_REQUIRE_EQUAL(RLP{keyValuePairs.at("id")}.toString(), "v4");
+    PublicCompressed publicCompressed{RLP{keyValuePairs.at("secp256k1")}.toBytesConstRef()};
+    BOOST_REQUIRE(toPublic(publicCompressed) == nodeTable->m_hostNodeID);
+    bytes const localhostBytes{127, 0, 0, 1};
+    BOOST_REQUIRE(RLP{keyValuePairs.at("ip")}.toBytes() == localhostBytes);
+    BOOST_REQUIRE_EQUAL(
+        RLP{keyValuePairs.at("tcp")}.toInt(), nodeTable->m_hostNodeEndpoint.tcpPort());
+    BOOST_REQUIRE_EQUAL(
+        RLP{keyValuePairs.at("udp")}.toInt(), nodeTable->m_hostNodeEndpoint.udpPort());
+}
+
+BOOST_AUTO_TEST_CASE(changingHostEndpoint)
+{
+    // NodeTable sending PING
+    TestNodeTableHost nodeTableHost(0);
+    nodeTableHost.start();
+    auto& nodeTable = nodeTableHost.nodeTable;
+
+    auto const originalHostEndpoint = nodeTable->m_hostNodeEndpoint;
+    auto const originalHostENR = nodeTable->hostENR();
+    uint16_t const newPort = originalHostEndpoint.udpPort() + 1;
+    auto const newHostEndpoint = NodeIPEndpoint{
+        bi::make_address(c_localhostIp), newPort, nodeTable->m_hostNodeEndpoint.tcpPort()};
+
+    for (int i = 0; i < 10; ++i)
+    {
+        BOOST_CHECK_EQUAL(nodeTable->m_hostNodeEndpoint, originalHostEndpoint);
+        BOOST_CHECK(nodeTable->hostENR().signature() == originalHostENR.signature());
+
+        // socket receiving PING
+        TestUDPSocketHost nodeSocketHost;
+        nodeSocketHost.start();
+        uint16_t nodePort = nodeSocketHost.port;
+
+        // add a node to node table, initiating PING
+        auto nodeEndpoint = NodeIPEndpoint{bi::make_address(c_localhostIp), nodePort, nodePort};
+        auto nodeKeyPair = KeyPair::create();
+        auto nodePubKey = nodeKeyPair.pub();
+        nodeTable->addNode(Node{nodePubKey, nodeEndpoint});
+
+        // handle received PING
+        auto pingDatagram = waitForPacketReceived(nodeSocketHost, "Ping");
+        auto const& ping = dynamic_cast<PingNode const&>(*pingDatagram);
+
+        // send PONG
+        Pong pong(originalHostEndpoint);
+        pong.destination = newHostEndpoint;
+        pong.echo = ping.echo;
+        pong.sign(nodeKeyPair.secret());
+        nodeSocketHost.socket->send(pong);
+
+        // wait for PONG to be received and handled
+        nodeTable->packetsReceived.pop();
+    }
+
+    BOOST_CHECK_EQUAL(nodeTable->m_hostNodeEndpoint, newHostEndpoint);
+
+    ENR const newENR = nodeTable->hostENR();
+    BOOST_CHECK_EQUAL(newENR.ip(), newHostEndpoint.address());
+    BOOST_CHECK_EQUAL(newENR.udpPort(), newHostEndpoint.udpPort());
+    BOOST_CHECK_EQUAL(newENR.tcpPort(), newHostEndpoint.tcpPort());
+}
+
+
+class PacketsWithChangedEndpointFixture : public TestOutputHelperFixture
+{
+public:
+    PacketsWithChangedEndpointFixture()
+    {
+        nodeTableHost.start();
+        nodeSocketHost1.start();
+        nodePort1 = nodeSocketHost1.port;
+        nodeSocketHost2.start();
+        nodePort2 = nodeSocketHost2.port;
+
+        nodeEndpoint1 = NodeIPEndpoint{bi::make_address(c_localhostIp), nodePort1, nodePort1};
+        nodeEndpoint2 = NodeIPEndpoint{bi::make_address(c_localhostIp), nodePort2, nodePort2};
+
+        // add a node to node table, initiating PING
+        nodeTable->addNode(Node{nodePubKey, nodeEndpoint1});
+
+        // handle received PING
+        auto pingDatagram = waitForPacketReceived(nodeSocketHost1, "Ping");
+        auto const& ping = dynamic_cast<PingNode const&>(*pingDatagram);
+
+        // send PONG
+        Pong pong{nodeTable->m_hostNodeEndpoint};
+        pong.echo = ping.echo;
+        pong.sign(nodeKeyPair.secret());
+        nodeSocketHost1.socket->send(pong);
+
+        // wait for PONG to be received and handled
+        nodeTable->packetsReceived.pop(chrono::seconds(5));
+
+        nodeEntry = nodeTable->nodeEntry(nodePubKey);
+    }
+
+    TestNodeTableHost nodeTableHost{0};
+    shared_ptr<TestNodeTable>& nodeTable = nodeTableHost.nodeTable;
+
+    // socket representing initial peer node
+    TestUDPSocketHost nodeSocketHost1;
+    uint16_t nodePort1 = 0;
+
+    // socket representing peer with changed endpoint
+    TestUDPSocketHost nodeSocketHost2;
+    uint16_t nodePort2 = 0;
+
+    NodeIPEndpoint nodeEndpoint1;
+    NodeIPEndpoint nodeEndpoint2;
+    KeyPair nodeKeyPair = KeyPair::create();
+    NodeID nodePubKey = nodeKeyPair.pub();
+
+    shared_ptr<NodeEntry> nodeEntry;
+};
+
+BOOST_FIXTURE_TEST_SUITE(packetsWithChangedEndpointSuite, PacketsWithChangedEndpointFixture)
+
+BOOST_AUTO_TEST_CASE(addNode)
+{
+    // this should initiate Ping to endpoint 2
+    nodeTable->addNode(Node{nodePubKey, nodeEndpoint2});
+
+    // handle received PING
+    auto pingDatagram = waitForPacketReceived(nodeSocketHost2, "Ping");
+    auto const& ping = dynamic_cast<PingNode const&>(*pingDatagram);
+
+    // send PONG
+    Pong pong{nodeTable->m_hostNodeEndpoint};
+    pong.echo = ping.echo;
+    pong.sign(nodeKeyPair.secret());
+    nodeSocketHost2.socket->send(pong);
+
+    // wait for PONG to be received and handled
+    waitForPacketReceived(*nodeTable, "Pong");
+
+    BOOST_REQUIRE_EQUAL(nodeEntry->endpoint(), nodeEndpoint2);
+}
+
+BOOST_AUTO_TEST_CASE(findNode)
+{
+    // Create and send the FindNode packet through endpoint 2
+    FindNode findNode{nodeTable->m_hostNodeEndpoint, KeyPair::create().pub() /* target */};
+    findNode.sign(nodeKeyPair.secret());
+    nodeSocketHost2.socket->send(findNode);
+
+    // Wait for FindNode to be received
+    waitForPacketReceived(*nodeTable, "FindNode");
+
+    // Verify that no neighbours response is received
+    BOOST_CHECK_THROW(nodeSocketHost2.packetsReceived.pop(chrono::seconds(5)), WaitTimeout);
+}
+
+BOOST_AUTO_TEST_CASE(neighbours)
+{
+    // Wait for FindNode arriving to endpoint 1
+    waitForPacketReceived(nodeSocketHost1, "FindNode", chrono::seconds{10});
+
+    // send Neighbours through endpoint 2
+    NodeIPEndpoint neighbourEndpoint{
+        boost::asio::ip::make_address("200.200.200.200"), c_defaultListenPort, c_defaultListenPort};
+    vector<shared_ptr<NodeEntry>> nearest{
+        make_shared<NodeEntry>(nodeTable->m_hostNodeIDHash, KeyPair::create().pub(),
+            neighbourEndpoint, RLPXDatagramFace::secondsSinceEpoch(), 0 /* pongSentTime */)};
+    Neighbours neighbours{nodeTable->m_hostNodeEndpoint, nearest};
+    neighbours.sign(nodeKeyPair.secret());
+    nodeSocketHost2.socket->send(neighbours);
+
+    // Wait for Neighbours to be received
+    waitForPacketReceived(*nodeTable, "Neighbours");
+
+    // no Ping is sent to neighbour
+    auto sentPing = nodeTable->nodeValidation(neighbourEndpoint);
+    BOOST_REQUIRE(!sentPing.is_initialized());
+}
+
+BOOST_AUTO_TEST_SUITE_END()
 BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_FIXTURE_TEST_SUITE(netTypes, TestOutputHelperFixture)
@@ -1114,11 +1444,11 @@ BOOST_FIXTURE_TEST_SUITE(netTypes, TestOutputHelperFixture)
 
 (deadlineTimer)
 {
-    ba::io_service io;
+    ba::io_context io;
     ba::deadline_timer t(io);
     bool start = false;
     boost::system::error_code ec;
-    std::atomic<unsigned> fired(0);
+    atomic<unsigned> fired(0);
 
     thread thread([&](){ while(!start) this_thread::sleep_for(chrono::milliseconds(10)); io.run();
 }); t.expires_from_now(boost::posix_time::milliseconds(200)); start = true;
@@ -1145,9 +1475,12 @@ BOOST_AUTO_TEST_CASE(unspecifiedNode)
 
 BOOST_AUTO_TEST_CASE(nodeTableReturnsUnspecifiedNode)
 {
-    ba::io_service io;
+    ba::io_context io;
     auto const port = randomPortNumber();
-    NodeTable t(io, KeyPair::create(), NodeIPEndpoint(bi::address::from_string(c_localhostIp), port, port));
+    auto const keyPair = KeyPair::create();
+    auto const addr = bi::make_address(c_localhostIp);
+    NodeTable t(io, keyPair, NodeIPEndpoint(addr, port, port),
+        IdentitySchemeV4::createENR(keyPair.secret(), addr, port, port));
     if (Node n = t.node(NodeID()))
         BOOST_REQUIRE(false);
 }

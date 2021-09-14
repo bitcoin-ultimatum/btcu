@@ -3,61 +3,23 @@
         "env" : {
             "currentCoinbase" : "2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
             "currentDifficulty" : "0x20000",
-            "currentGasLimit" : "10000000000",
+            "currentGasLimit" : "11000000000",
             "currentNumber" : "1",
             "currentTimestamp" : "1000",
             "previousHash" : "5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
         },
         "expect" : [
-            {
+    	    {
                 "indexes" : {
                     "data" : -1,
                     "gas" : -1,
                     "value" : -1
                 },
-                "network" : ["Frontier", "Homestead"],
+                "network" : [  ">=Istanbul"],
                 "result" : {
                     "945304eb96065b2a98b57a48a06ae28d285a71b5" : {
                         "storage" : {
-                            "0x00" : "0x0400",
-                            "0x01" : "0x01"
-                        }
-                    },
-                    "a94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
-                        "nonce" : "1"
-                    }
-                }
-            },
-	    {
-                "indexes" : {
-                    "data" : -1,
-                    "gas" : -1,
-                    "value" : -1
-                },
-                "network" : ["EIP150", "Byzantium", ">=ConstantinopleFix"],
-                "result" : {
-                    "945304eb96065b2a98b57a48a06ae28d285a71b5" : {
-                        "storage" : {
-                            "0x00" : "0x012b",
-                            "0x01" : "0x01"
-                        }
-                    },
-                    "a94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
-                        "nonce" : "1"
-                    }
-                }
-            },
-	    {
-                "indexes" : {
-                    "data" : -1,
-                    "gas" : -1,
-                    "value" : -1
-                },
-                "network" : ["Constantinople"],
-                "result" : {
-                    "945304eb96065b2a98b57a48a06ae28d285a71b5" : {
-                        "storage" : {
-                            "0x00" : "0x0140",
+                            "0x00" : "0x013a",
                             "0x01" : "0x01"
                         }
                     },

@@ -1,26 +1,9 @@
-/*
-	This file is part of cpp-ethereum.
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2014-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
-	cpp-ethereum is free software: you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation, either version 3 of the License, or
-	(at your option) any later version.
-
-	cpp-ethereum is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file CommonData.h
- * @author Gav Wood <i@gavwood.com>
- * @date 2014
- *
- * Shared algorithms and data types.
- */
-
+/// @file
+/// Shared algorithms and data types.
 #pragma once
 
 #include <vector>
@@ -344,5 +327,11 @@ template <class V>
 bool contains(std::set<V> const& _set, V const& _v)
 {
     return _set.find(_v) != _set.end();
+}
+
+template <class K, class V>
+bool contains(std::map<K, V> const& _map, K const& _k)
+{
+    return _map.find(_k) != _map.end();
 }
 }

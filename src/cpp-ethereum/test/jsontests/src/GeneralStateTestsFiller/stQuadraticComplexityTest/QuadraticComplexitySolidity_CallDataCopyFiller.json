@@ -15,7 +15,7 @@
                     "gas" : 1,
                     "value" : -1
                 },
-                "network" : ["Homestead", ">=Byzantium"],
+                "network" : [ ">=Istanbul"],
                 "result" : {
                     "2adc25665018aa1fe0e6bc666dac8fc2697ff9ba" : {
                         "balance" : "250000000",
@@ -31,7 +31,7 @@
                         }
                     },
                     "b94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
-                        "code" : "0x61c3506000600037",
+                        "code" : "0x61c350600060003700",
                         "nonce" : "0x00",
                         "storage" : {
                         }
@@ -44,7 +44,7 @@
                     "gas" : 0,
                     "value" : -1
                 },
-                "network" : ["Homestead", ">=Byzantium"],
+                "network" : [ ">=Istanbul"],
                 "result" : {
                     "2adc25665018aa1fe0e6bc666dac8fc2697ff9ba" : {
                         "balance" : "150000",
@@ -60,7 +60,7 @@
                         }
                     },
                     "b94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
-                        "code" : "0x61c3506000600037",
+                        "code" : "0x61c350600060003700",
                         "nonce" : "0x00",
                         "storage" : {
                         }

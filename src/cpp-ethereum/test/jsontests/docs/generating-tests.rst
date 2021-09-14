@@ -36,7 +36,7 @@ For generating consensus tests, an executable ``testeth`` is necessary.  Moreove
 Option 1: Using the docker image
 --------------------------------
 
-There is a `docker image <https://hub.docker.com/r/ethereum/testeth/>`_ available containing the `testeth` tool from the `cpp-ethereum` toolset regularly updated and specifically build for the purpose of test creation.
+There is a `docker image <https://hub.docker.com/r/ethereum/testeth/>`_ available containing the `testeth` tool from the `aleth` toolset regularly updated and specifically build for the purpose of test creation.
 
 * `Install Docker`_
 * Pull the ``testeth`` repository with ``docker pull ethereum/testeth:nightly`` (or an alternative available tag)
@@ -74,7 +74,7 @@ Eventually, you need a tweaked version of ``testeth`` or ``lllc`` when your test
 
 ``testeth`` is distributed in `Aleth`_ and ``lllc`` is distributed in `solidity`_. These executable needs to be installed.
 
-.. _aleth: https://github.com/ethereum/cpp-ethereum
+.. _aleth: https://github.com/ethereum/aleth
 
 .. _solidity: https://github.com/ethereum/solidity
 
@@ -249,7 +249,7 @@ The test filler file is not for consumption.  The filler file needs to be filled
 
 First, if you created a new subdirectory for the filler, you need to edit the source of ``Aleth`` so that ``testeth`` recognizes the new subdirectory.  The file to edit is `StateTests.cpp`_, which lists the names of the subdirectories scanned for GeneralStateTest filters.
 
-.. _`StateTests.cpp`: https://github.com/ethereum/cpp-ethereum/blob/master/test/tools/jsontests/StateTests.cpp
+.. _`StateTests.cpp`: https://github.com/ethereum/aleth/blob/master/test/tools/jsontests/StateTests.cpp
 
 
 After building ``testeth``, you are ready to fill the test.
@@ -288,7 +288,7 @@ Trying the Filled Test
 Trying the Filled Test Locally
 ++++++++++++++++++++++++++++++
 
-For trying the filled test, in ``cpp-ethereum/build`` directory, run the following (with ``ETHEREUM_TEST_PATH`` set):
+For trying the filled test, in ``aleth/build`` directory, run the following (with ``ETHEREUM_TEST_PATH`` set):
 
 .. code:: bash
 
@@ -311,7 +311,7 @@ For trying the filled test(s) on ``Travis CI`` for ``Aleth``, the new test cases
 Preparations on the Aleth side
 ------------------------------
 
-Enter ``cpp-ethereum/test/jsontests`` directory, and checkout the new branch in ``ethereum/tests`` as described in the instructions above. Then go back to the main ``Aleth`` directory and perform ``git add test/jsontests`` followed by ``git commit``.
+Enter ``aleth/test/jsontests`` directory, and checkout the new branch in ``ethereum/tests`` as described in the instructions above. Then go back to the main ``Aleth`` directory and perform ``git add test/jsontests`` followed by ``git commit``.
 
 When you file this commit as a pull request to ``Aleth``, Travis CI should try the newly filled tests.
 

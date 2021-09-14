@@ -40,6 +40,7 @@
 #include <utility>
 #include <vector>
 #include <interfaces/chain.h>
+#include <interfaces/node.h>
 /**
  * Settings
  */
@@ -188,6 +189,7 @@ private:
     int64_t nLastResend;
 
     interfaces::Chain* m_chain;
+    Node* m_node;
 
     /**
      * Used to keep track of spent outpoints, and
@@ -378,7 +380,7 @@ public:
     void ResendWalletTransactions();
 
     CAmount loopTxsBalance(std::function<void(const uint256&, const CWalletTx&, CAmount&)>method) const;
-    CAmount GetBalance() const;
+    CAmount GetBalance(int filter = ISMINE_SPENDABLE_ALL) const;
     CAmount GetColdStakingBalance() const;  // delegated coins for which we have the staking key
     CAmount GetImmatureColdStakingBalance() const;
     CAmount GetLeasingBalance() const;
@@ -411,6 +413,8 @@ public:
         const CTxDestination& signSenderAddress = CNoDestination(),
                            const std::vector<CValidatorRegister> &validatorRegister = std::vector<CValidatorRegister>(),
                            const std::vector<CValidatorVote> &validatorVote = std::vector<CValidatorVote>());
+
+
     bool CreateTransaction(CScript scriptPubKey, const CAmount& nValue, CWalletTx& wtxNew, CReserveKey& reservekey, CAmount& nFeeRet, std::string& strFailReason, const CCoinControl* coinControl = NULL, AvailableCoinsType coin_type = ALL_COINS, bool useIX = false, CAmount nFeePay = 0, bool fIncludeDelegated = false, bool fIncludeLeased = false,
     bool sign = false,
     const CTxDestination& signSenderAddress = CNoDestination(),
@@ -581,6 +585,7 @@ public:
 
     /** Interface for accessing chain state. */
     interfaces::Chain& chain() const { assert(m_chain); return *m_chain; }
+    Node* getNode() const { return m_node; }
 };
 
 struct CRecipient
@@ -841,7 +846,7 @@ public:
     CAmount GetCredit(const isminefilter& filter) const;
     CAmount GetUnspentCredit(const isminefilter& filter) const;
     CAmount GetImmatureCredit(bool fUseCache = true, const isminefilter& filter = ISMINE_SPENDABLE_ALL) const;
-    CAmount GetAvailableCredit(bool fUseCache = true) const;
+    CAmount GetAvailableCredit(bool fUseCache = true, int filter = ISMINE_SPENDABLE_ALL) const;
     // Return sum of unlocked coins
     CAmount GetUnlockedCredit() const;
     // Return sum of unlocked coins

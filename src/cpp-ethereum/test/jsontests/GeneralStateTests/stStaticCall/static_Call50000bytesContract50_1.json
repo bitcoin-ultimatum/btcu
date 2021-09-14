@@ -2,77 +2,38 @@
     "static_Call50000bytesContract50_1" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
-            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
+            "filling-rpc-server" : "Geth-1.9.6-unstable-63b18027-20190920",
+            "filling-tool-version" : "retesteth-0.0.1+commit.0ae18aef.Linux.g++",
+            "lllcversion" : "Version: 0.5.12-develop.2019.9.13+commit.2d601a4f.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stStaticCall/static_Call50000bytesContract50_1Filler.json",
-            "sourceHash" : "ff60d35057046873b55c76bbd6e21cae2cc63869b6c91301a0a55f7057abe13d"
+            "sourceHash" : "10c0b366cb0be258687914e3e161737e887623a8b2323f498326b58451e11efc"
         },
         "env" : {
             "currentCoinbase" : "0xb94f5374fce5edbc8e2a8697c15331677e6ebf0b",
             "currentDifficulty" : "0x020000",
-            "currentGasLimit" : "0xcd79195900",
+            "currentGasLimit" : "0xcfcd253d00",
             "currentNumber" : "0x01",
             "currentTimestamp" : "0x03e8",
             "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
         },
         "post" : {
-            "Byzantium" : [
+            "Istanbul" : [
                 {
-                    "hash" : "0x96a366cfe87cb1cb47987353e4d088bf7367830dc9b7e69fa047f9cc86856265",
                     "indexes" : {
                         "data" : 0,
                         "gas" : 0,
                         "value" : 0
                     },
+                    "hash" : "0xe9f208e8c1f1678a657cf9209499746a418226d8915a5452d465514f558a7ec8",
                     "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
                 },
                 {
-                    "hash" : "0xa08b43c3e259a8d3432cb92b7d2f0c640b484dfc455dc5289d1af966dca167b2",
                     "indexes" : {
                         "data" : 1,
                         "gas" : 0,
                         "value" : 0
                     },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "Constantinople" : [
-                {
-                    "hash" : "0x9cae3dcb17be9761159f8483e1d04a266432f953059fef8ea589be43d967e7ca",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                },
-                {
-                    "hash" : "0xa08b43c3e259a8d3432cb92b7d2f0c640b484dfc455dc5289d1af966dca167b2",
-                    "indexes" : {
-                        "data" : 1,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "ConstantinopleFix" : [
-                {
-                    "hash" : "0x96a366cfe87cb1cb47987353e4d088bf7367830dc9b7e69fa047f9cc86856265",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                },
-                {
-                    "hash" : "0xa08b43c3e259a8d3432cb92b7d2f0c640b484dfc455dc5289d1af966dca167b2",
-                    "indexes" : {
-                        "data" : 1,
-                        "gas" : 0,
-                        "value" : 0
-                    },
+                    "hash" : "0x1c94b4a2b53ad2946b67dacc1815a84f209f7fbeb6ed45aa7d901b350b261496",
                     "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
                 }
             ]
@@ -80,14 +41,14 @@
         "pre" : {
             "0x1000000000000000000000000000000000000000" : {
                 "balance" : "0x00",
-                "code" : "0x6000600060006000346000355af16000555a600155",
+                "code" : "0x6000600060006000346000355af16000555a60015500",
                 "nonce" : "0x00",
                 "storage" : {
                 }
             },
             "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
                 "balance" : "0xffffffffffffffffffffffffffffffff",
-                "code" : "",
+                "code" : "0x",
                 "nonce" : "0x00",
                 "storage" : {
                 }
@@ -101,7 +62,7 @@
             },
             "0xbbbf5374fce5edbc8e2a8697c15331677e6ebf0b" : {
                 "balance" : "0x0fffffffffffff",
-                "code" : "0x5b60326080511015603e57600060006000600073aaa50000fce5edbc8e2a8697c15331677e6ebf0b64148c1c2280fa6000556001608051016080526000565b608051600155",
+                "code" : "0x5b60326080511015603e57600060006000600073aaa50000fce5edbc8e2a8697c15331677e6ebf0b64148c1c2280fa6000556001608051016080526000565b60805160015500",
                 "nonce" : "0x00",
                 "storage" : {
                 }
@@ -115,7 +76,7 @@
             },
             "0xdddf5374fce5edbc8e2a8697c15331677e6ebf0b" : {
                 "balance" : "0x0fffffffffffff",
-                "code" : "0x5b60326080511015603e57600060006000600073ccc50000fce5edbc8e2a8697c15331677e6ebf0b64148c1c2280fa6000526001608051016080526000565b608051602052",
+                "code" : "0x5b60326080511015603e57600060006000600073ccc50000fce5edbc8e2a8697c15331677e6ebf0b64148c1c2280fa6000526001608051016080526000565b60805160205200",
                 "nonce" : "0x00",
                 "storage" : {
                 }

@@ -1,0 +1,15 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Encoding=UTF-8
+Terminal=true
+Type=Application
+Name=btcud
+Name[en_US]=btcud
+Exec=btcud
+Version=1.0
+GenericName=Daemon Launcher
+Comment=Daemon Runner for BTCU Node
+Icon=btcud
+Icon[en_US]=btcud
+Categories=Network;
+StartupNotify=true

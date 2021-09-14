@@ -1,19 +1,6 @@
-/*
-    This file is part of cpp-ethereum.
-
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2015-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
 #include "WarpCapability.h"
 #include "BlockChain.h"
@@ -26,10 +13,31 @@ namespace dev
 {
 namespace eth
 {
+
+std::chrono::milliseconds constexpr WarpCapability::c_backgroundWorkInterval;
+
+char const* warpPacketTypeToString(WarpSubprotocolPacketType _packetType)
+{
+    switch (_packetType)
+    {
+    case WarpStatusPacket:
+        return "WarpStatus";
+    case GetSnapshotManifestPacket:
+        return "GetSnapshotManifest";
+    case SnapshotManifestPacket:
+        return "SnapshotManifest";
+    case GetSnapshotDataPacket:
+        return "GetSnapshotData";
+    case SnapshotDataPacket:
+        return "SnapshotData";
+    default:
+        return "UnknownWarpPacket";
+    }
+}
+
 namespace
 {
-static size_t const c_freePeerBufferSize = 32;
-static int const c_backroundWorkPeriodMs = 1000;
+constexpr size_t c_freePeerBufferSize = 32;
 
 bool validateManifest(RLP const& _manifestRlp)
 {
@@ -115,9 +123,9 @@ public:
                 data.toBytesConstRef());
 
             LOG(m_logger) << "Saved chunk " << hash << " Chunks left: " << m_neededChunks.size()
-                          << " Requested chunks: " << m_requestedChunks.size();
+                          << " (peer: " << _peerID << ")";
             if (m_neededChunks.empty() && m_requestedChunks.empty())
-                LOG(m_logger) << "Snapshot download complete!";
+                LOG(m_logger) << "Snapshot download complete";
         }
         else
             m_neededChunks.push_back(askedHash);
@@ -280,7 +288,7 @@ private:
                 peerID = m_freePeers.value_pop();
             } while (!m_host.requestData(peerID, chunkHash));
 
-            LOG(m_logger) << "Requested chunk " << chunkHash;
+            LOG(m_logger) << "Requested chunk " << chunkHash << " from " << peerID;
 
             m_requestedChunks[peerID] = chunkHash;
             m_neededChunks.pop_front();
@@ -323,38 +331,15 @@ WarpCapability::WarpCapability(std::shared_ptr<p2p::CapabilityHostFace> _host,
 {
 }
 
-void WarpCapability::onStarting()
+std::chrono::milliseconds WarpCapability::backgroundWorkInterval() const
 {
-    m_backgroundWorkEnabled = true;
-    m_host->scheduleExecution(c_backroundWorkPeriodMs, [this]() { doBackgroundWork(); });
-}
-
-void WarpCapability::onStopping()
-{
-    m_backgroundWorkEnabled = false;
+    return c_backgroundWorkInterval;
 }
 
 std::shared_ptr<WarpPeerObserverFace> WarpCapability::createPeerObserver(
     boost::filesystem::path const& _snapshotDownloadPath)
 {
     return std::make_shared<WarpPeerObserver>(*this, m_blockChain, _snapshotDownloadPath);
-}
-
-void WarpCapability::doBackgroundWork()
-{
-    for (auto const& peer : m_peers)
-    {
-        time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-        auto const& status = peer.second;
-        if (now - status.m_lastAsk > 10 && status.m_asking != Asking::Nothing)
-        {
-            // timeout
-            m_host->disconnect(peer.first, p2p::PingTimeout);
-        }
-    }
-
-    if (m_backgroundWorkEnabled)
-        m_host->scheduleExecution(c_backroundWorkPeriodMs, [this]() { doBackgroundWork(); });
 }
 
 void WarpCapability::onConnect(NodeID const& _peerID, u256 const& /* _peerCapabilityVersion */)
@@ -404,28 +389,29 @@ bool WarpCapability::interpretCapabilityPacket(NodeID const& _peerID, unsigned _
             peerStatus.m_snapshotHash = _r[5].toHash<h256>();
             peerStatus.m_snapshotNumber = _r[6].toInt<u256>();
 
-            cnetlog << "Status: "
-                    << " protocol version " << peerStatus.m_protocolVersion << " networkId "
-                    << peerStatus.m_networkId << " genesis hash " << peerStatus.m_genesisHash
-                    << " total difficulty " << peerStatus.m_totalDifficulty << " latest hash "
-                    << peerStatus.m_latestHash << " snapshot hash " << peerStatus.m_snapshotHash
-                    << " snapshot number " << peerStatus.m_snapshotNumber;
+            LOG(m_logger) << "Status (from " << _peerID << "): "
+                          << " protocol version " << peerStatus.m_protocolVersion << " networkId "
+                          << peerStatus.m_networkId << " genesis hash " << peerStatus.m_genesisHash
+                          << " total difficulty " << peerStatus.m_totalDifficulty << " latest hash "
+                          << peerStatus.m_latestHash << " snapshot hash "
+                          << peerStatus.m_snapshotHash << " snapshot number "
+                          << peerStatus.m_snapshotNumber;
             setIdle(_peerID);
             m_peerObserver->onPeerStatus(_peerID);
             break;
         }
-        case GetSnapshotManifest:
+        case GetSnapshotManifestPacket:
         {
             if (!m_snapshot)
                 return false;
 
             RLPStream s;
-            m_host->prep(_peerID, name(), s, SnapshotManifest, 1)
+            m_host->prep(_peerID, name(), s, SnapshotManifestPacket, 1)
                 .appendRaw(m_snapshot->readManifest());
             m_host->sealAndSend(_peerID, s);
             break;
         }
-        case GetSnapshotData:
+        case GetSnapshotDataPacket:
         {
             if (!m_snapshot)
                 return false;
@@ -433,7 +419,7 @@ bool WarpCapability::interpretCapabilityPacket(NodeID const& _peerID, unsigned _
             const h256 chunkHash = _r[0].toHash<h256>(RLP::VeryStrict);
 
             RLPStream s;
-            m_host->prep(_peerID, name(), s, SnapshotData, 1)
+            m_host->prep(_peerID, name(), s, SnapshotDataPacket, 1)
                 .append(m_snapshot->readCompressedChunk(chunkHash));
             m_host->sealAndSend(_peerID, s);
             break;
@@ -452,13 +438,13 @@ bool WarpCapability::interpretCapabilityPacket(NodeID const& _peerID, unsigned _
             m_peerObserver->onPeerBlockHeaders(_peerID, _r);
             break;
         }
-        case SnapshotManifest:
+        case SnapshotManifestPacket:
         {
             setIdle(_peerID);
             m_peerObserver->onPeerManifest(_peerID, _r);
             break;
         }
-        case SnapshotData:
+        case SnapshotDataPacket:
         {
             setIdle(_peerID);
             m_peerObserver->onPeerData(_peerID, _r);
@@ -470,12 +456,13 @@ bool WarpCapability::interpretCapabilityPacket(NodeID const& _peerID, unsigned _
     }
     catch (Exception const&)
     {
-        cnetlog << "Warp Peer causing an Exception: "
-                << boost::current_exception_diagnostic_information() << " " << _r;
+        LOG(m_loggerWarn) << "Warp Peer " << _peerID << " causing an exception: "
+                          << boost::current_exception_diagnostic_information() << " " << _r;
     }
     catch (std::exception const& _e)
     {
-        cnetlog << "Warp Peer causing an exception: " << _e.what() << " " << _r;
+        LOG(m_loggerWarn) << "Warp Peer " << _peerID << " causing an exception: " << _e.what()
+                          << " " << _r;
     }
 
     return true;
@@ -487,6 +474,19 @@ void WarpCapability::onDisconnect(NodeID const& _peerID)
     m_peers.erase(_peerID);
 }
 
+void WarpCapability::doBackgroundWork()
+{
+    for (auto const& peer : m_peers)
+    {
+        time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+        auto const& status = peer.second;
+        if (now - status.m_lastAsk > 10 && status.m_asking != Asking::Nothing)
+        {
+            // timeout
+            m_host->disconnect(peer.first, p2p::PingTimeout);
+        }
+    }
+}
 
 void WarpCapability::requestStatus(NodeID const& _peerID, unsigned _hostProtocolVersion,
     u256 const& _hostNetworkId, u256 const& _chainTotalDifficulty, h256 const& _chainCurrentHash,
@@ -524,7 +524,7 @@ void WarpCapability::requestManifest(NodeID const& _peerID)
     assert(itPeerStatus->second.m_asking == Asking::Nothing);
     setAsking(_peerID, Asking::WarpManifest);
     RLPStream s;
-    m_host->prep(_peerID, name(), s, GetSnapshotManifest);
+    m_host->prep(_peerID, name(), s, GetSnapshotManifestPacket);
     m_host->sealAndSend(_peerID, s);
 }
 
@@ -538,7 +538,7 @@ bool WarpCapability::requestData(NodeID const& _peerID, h256 const& _chunkHash)
     setAsking(_peerID, Asking::WarpData);
     RLPStream s;
 
-    m_host->prep(_peerID, name(), s, GetSnapshotData, 1) << _chunkHash;
+    m_host->prep(_peerID, name(), s, GetSnapshotDataPacket, 1) << _chunkHash;
     m_host->sealAndSend(_peerID, s);
     return true;
 }

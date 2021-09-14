@@ -1,40 +1,23 @@
-/*
-    This file is part of cpp-ethereum.
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2013-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file Block.cpp
- * @author Gav Wood <i@gavwood.com>
- * @date 2014
- */
 
 #include "Block.h"
 
-#include <ctime>
-#include <boost/filesystem.hpp>
-#include <boost/timer.hpp>
-#include <libdevcore/CommonIO.h>
+#include "BlockChain.h"
+#include "Executive.h"
+#include "ExtVM.h"
+#include "GenesisInfo.h"
+#include "TransactionQueue.h"
 #include <libdevcore/Assertions.h>
+#include <libdevcore/CommonIO.h>
 #include <libdevcore/TrieHash.h>
 #include <libethcore/Exceptions.h>
 #include <libethcore/SealEngine.h>
 #include <libevm/VMFactory.h>
-#include "BlockChain.h"
-#include "ExtVM.h"
-#include "Executive.h"
-#include "TransactionQueue.h"
-#include "GenesisInfo.h"
+#include <boost/filesystem.hpp>
+#include <ctime>
 using namespace std;
 using namespace dev;
 using namespace dev::eth;
@@ -153,49 +136,56 @@ void Block::noteChain(BlockChain const& _bc)
     }
 }
 
-PopulationStatistics Block::populateFromChain(BlockChain const& _bc, h256 const& _h, ImportRequirements::value _ir)
+void Block::populateFromChain(BlockChain const& _bc, h256 const& _h)
 {
-    noteChain(_bc);
-
-    PopulationStatistics ret { 0.0, 0.0 };
-
     if (!_bc.isKnown(_h))
     {
-#ifndef WIN32
-        // Might be worth throwing here.
         cwarn << "Invalid block given for state population: " << _h;
-#endif
         BOOST_THROW_EXCEPTION(BlockNotFound() << errinfo_target(_h));
     }
 
-    auto b = _bc.block(_h);
-    BlockHeader bi(b);		// No need to check - it's already in the DB.
-    if (bi.number())
-    {
-        // Non-genesis:
+    auto const& blockBytes = _bc.block(_h);
 
-        // 1. Start at parent's end state (state root).
-        BlockHeader bip(_bc.block(bi.parentHash()));
-        sync(_bc, bi.parentHash(), bip);
+    // Set block headers
+    auto const blockHeader = BlockHeader{blockBytes};
+    m_currentBlock = blockHeader;
 
-        // 2. Enact the block's transactions onto this state.
-        m_author = bi.author();
-        Timer t;
-        auto vb = _bc.verifyBlock(&b, function<void(Exception&)>(), _ir | ImportRequirements::TransactionBasic);
-        ret.verify = t.elapsed();
-        t.restart();
-        enact(vb, _bc);
-        ret.enact = t.elapsed();
-    }
+    if (blockHeader.number())
+        m_previousBlock = _bc.info(blockHeader.parentHash());
     else
+        m_previousBlock = m_currentBlock;
+
+    // Set state root and precommit state
+    //
+    // First check for database corruption by looking up the state root in the state database. Note
+    // that we don't technically need to do this since if the state DB is corrupt setting a new
+    // state root will throw anyway, but checking here enables us to log a user-friendly error
+    // message.
+    if (m_state.db().lookup(blockHeader.stateRoot()).empty())
     {
-        // Genesis required:
-        // We know there are no transactions, so just populate directly.
-        m_state = State(m_state.accountStartNonce(), m_state.db(), BaseState::Empty);	// TODO: try with PreExisting.
-        sync(_bc, _h, bi);
+        cerr << "Unable to populate block " << blockHeader.hash() << " - state root "
+             << blockHeader.stateRoot() << " not found in database.";
+        cerr << "Database corrupt: contains block without state root: " << blockHeader;
+        cerr << "Try rescuing the database by running: eth --rescue";
+        BOOST_THROW_EXCEPTION(InvalidStateRoot() << errinfo_target(blockHeader.stateRoot()));
     }
 
-    return ret;
+    m_state.setRoot(blockHeader.stateRoot());
+    m_precommit = m_state;
+
+    RLP blockRLP{blockBytes};
+    auto const& txListRLP = blockRLP[1];
+    for (auto const& txRLP : txListRLP)
+    {
+        m_transactions.push_back(Transaction{txRLP.data(), CheckTransaction::None});
+        m_transactionSet.insert(m_transactions.back().sha3());
+    }
+    m_receipts = _bc.receipts(_h).receipts;
+
+    m_author = blockHeader.author();
+
+    m_committedToSeal = false;
+    m_sealEngine = _bc.sealEngine();
 }
 
 bool Block::sync(BlockChain const& _bc)
@@ -210,30 +200,6 @@ bool Block::sync(BlockChain const& _bc, h256 const& _block, BlockHeader const& _
     bool ret = false;
     // BLOCK
     BlockHeader bi = _bi ? _bi : _bc.info(_block);
-#if ETH_PARANOIA
-    if (!bi)
-        while (1)
-        {
-            try
-            {
-                auto b = _bc.block(_block);
-                bi.populate(b);
-                break;
-            }
-            catch (Exception const& _e)
-            {
-                // TODO: Slightly nicer handling? :-)
-                cerr << "ERROR: Corrupt block-chain! Delete your block-chain DB and restart." << endl;
-                cerr << diagnostic_information(_e) << endl;
-            }
-            catch (std::exception const& _e)
-            {
-                // TODO: Slightly nicer handling? :-)
-                cerr << "ERROR: Corrupt block-chain! Delete your block-chain DB and restart." << endl;
-                cerr << _e.what() << endl;
-            }
-        }
-#endif
     if (bi == m_currentBlock)
     {
         // We mined the last block.
@@ -255,12 +221,9 @@ bool Block::sync(BlockChain const& _bc, h256 const& _block, BlockHeader const& _
 
         if (m_state.db().lookup(bi.stateRoot()).empty())	// TODO: API in State for this?
         {
-#ifndef WIN32
-            cwarn << "Unable to sync to" << bi.hash() << "; state root" << bi.stateRoot()
-                  << "not found in database.";
+            cwarn << "Unable to sync to" << bi.hash() << "; state root" << bi.stateRoot() << "not found in database.";
             cwarn << "Database corrupt: contains block without stateRoot:" << bi;
             cwarn << "Try rescuing the database by running: eth --rescue";
-#endif
             BOOST_THROW_EXCEPTION(InvalidStateRoot() << errinfo_target(bi.stateRoot()));
         }
         m_previousBlock = bi;
@@ -404,9 +367,7 @@ pair<TransactionReceipts, bool> Block::sync(BlockChain const& _bc, TransactionQu
                 {
                     // Something else went wrong - drop it.
                     _tq.drop(t.sha3());
-#ifndef WIN32
                     cwarn << t.sha3() << "Transaction caused low-level exception :(";
-#endif
                 }
             }
         if (chrono::steady_clock::now() > deadline)
@@ -613,8 +574,8 @@ u256 Block::enact(VerifiedBlockRef const& _block, BlockChain const& _bc)
                 // cB.p^6	-----------/  6
                 // cB.p^7	-------------/
                 // cB.p^8
-                auto expectedUncleParent = _bc.details(m_currentBlock.parentHash()).parent;
-                for (unsigned i = 1; i < depth; expectedUncleParent = _bc.details(expectedUncleParent).parent, ++i) {}
+                auto expectedUncleParent = _bc.details(m_currentBlock.parentHash()).parentHash;
+                for (unsigned i = 1; i < depth; expectedUncleParent = _bc.details(expectedUncleParent).parentHash, ++i) {}
                 if (expectedUncleParent != uncleParent.hash())
                 {
                     UncleParentNotInChain ex;
@@ -661,7 +622,8 @@ u256 Block::enact(VerifiedBlockRef const& _block, BlockChain const& _bc)
     return tdIncrease;
 }
 
-ExecutionResult Block::execute(LastBlockHashesFace const& _lh, Transaction const& _t, Permanence _p, OnOpFunc const& _onOp)
+ExecutionResult Block::execute(
+    LastBlockHashesFace const& _lh, Transaction const& _t, Permanence _p, OnOpFunc const& _onOp)
 {
     if (isSealed())
         BOOST_THROW_EXCEPTION(InvalidOperationOnSealedBlock());
@@ -670,7 +632,9 @@ ExecutionResult Block::execute(LastBlockHashesFace const& _lh, Transaction const
     // transaction as possible.
     uncommitToSeal();
 
-    std::pair<ExecutionResult, TransactionReceipt> resultReceipt = m_state.execute(EnvInfo(info(), _lh, gasUsed()), *m_sealEngine, _t, _p, _onOp);
+    EnvInfo const envInfo{info(), _lh, gasUsed(), m_sealEngine->chainParams().chainID};
+    std::pair<ExecutionResult, TransactionReceipt> resultReceipt =
+        m_state.execute(envInfo, *m_sealEngine, _t, _p, _onOp);
 
     if (_p == Permanence::Committed)
     {
@@ -715,7 +679,8 @@ void Block::updateBlockhashContract()
     if (blockNumber == forkBlock)
     {
         m_state.createContract(c_blockhashContractAddress);
-        m_state.setCode(c_blockhashContractAddress, bytes(c_blockhashContractCode));
+        m_state.setCode(c_blockhashContractAddress, bytes(c_blockhashContractCode),
+            m_sealEngine->evmSchedule(blockNumber).accountVersion);
         m_state.commit(State::CommitBehaviour::KeepEmptyAccounts);
     }
 
@@ -755,9 +720,10 @@ void Block::commitToSeal(BlockChain const& _bc, bytes const& _extraData)
                               << ", parent = " << m_previousBlock.parentHash();
         h256Hash excluded = _bc.allKinFrom(m_currentBlock.parentHash(), 6);
         auto p = m_previousBlock.parentHash();
-        for (unsigned gen = 0; gen < 6 && p != _bc.genesisHash() && unclesCount < 2; ++gen, p = _bc.details(p).parent)
+        for (unsigned gen = 0; gen < 6 && p != _bc.genesisHash() && unclesCount < 2;
+             ++gen, p = _bc.details(p).parentHash)
         {
-            auto us = _bc.details(p).children;
+            auto us = _bc.details(p).childHashes;
             assert(us.size() >= 1);	// must be at least 1 child of our grandparent - it's our own parent!
             for (auto const& u: us)
                 if (!excluded.count(u))	// ignore any uncles/mainline blocks that we know about.
@@ -885,11 +851,9 @@ LogBloom Block::logBloom() const
 
 void Block::cleanup()
 {
-#ifndef WIN32
     // Commit the new trie to disk.
     LOG(m_logger) << "Committing to disk: stateRoot " << m_currentBlock.stateRoot() << " = "
                   << rootHash() << " = " << toHex(asBytes(db().lookup(rootHash())));
-#endif
 
     try
     {
@@ -898,9 +862,7 @@ void Block::cleanup()
     }
     catch (BadRoot const&)
     {
-#ifndef WIN32
         cwarn << "Trie corrupt! :-(";
-#endif
         throw;
     }
 

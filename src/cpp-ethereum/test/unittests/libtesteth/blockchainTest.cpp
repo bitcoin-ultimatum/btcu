@@ -1,23 +1,9 @@
-/*
-    This file is part of cpp-ethereum.
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2014-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file blockchainTest.cpp
- * Unit tests for blockchain test filling/execution.
- */
-
+/// @file
+/// Unit tests for blockchain test filling/execution.
 #include <test/tools/libtesteth/TestOutputHelper.h>
 #include <test/tools/libtesteth/TestHelper.h>
 #include <test/tools/jsontests/BlockChainTests.h>
@@ -84,7 +70,7 @@ BOOST_AUTO_TEST_CASE(fillingExpectationOnMultipleNetworks)
     )";
     json_spirit::mValue input;
     json_spirit::read_string(s, input);
-    BlockchainTestSuite suite;
+    BlockchainValidTestSuite suite;
     json_spirit::mValue output = suite.doTests(input, true);
     BOOST_CHECK_MESSAGE(output.get_obj().size() == 2, "A wrong number of tests were generated.");
 }
@@ -171,7 +157,7 @@ BOOST_AUTO_TEST_CASE(fillingExpectationOnSingleNetwork)
     )";
     json_spirit::mValue input;
     json_spirit::read_string(s, input);
-    BlockchainTestSuite suite;
+    BlockchainValidTestSuite suite;
     json_spirit::mValue output = suite.doTests(input, true);
     const string testname = "fillingExpectationOnSingleNetwork_EIP150";
     BOOST_CHECK_MESSAGE(output.get_obj().size() == 1, "A wrong number of tests were generated.");
@@ -250,7 +236,7 @@ BOOST_AUTO_TEST_CASE(fillingWithWrongExpectation)
     json_spirit::mValue input;
     json_spirit::read_string(s, input);
 
-    BlockchainTestSuite suite;
+    BlockchainValidTestSuite suite;
     json_spirit::mValue output = suite.doTests(input, true);
     BOOST_CHECK_MESSAGE(output.get_obj().size() == 1, "A wrong number of tests were generated.");
 }

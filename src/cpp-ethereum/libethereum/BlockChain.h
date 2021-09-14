@@ -1,23 +1,6 @@
-/*
-    This file is part of cpp-ethereum.
-
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file BlockChain.h
- * @author Gav Wood <i@gavwood.com>
- * @date 2014
- */
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2014-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
 #pragma once
 
@@ -25,22 +8,23 @@
 #include "BlockDetails.h"
 #include "BlockQueue.h"
 #include "ChainParams.h"
+#include "DatabasePaths.h"
 #include "LastBlockHashesFace.h"
 #include "State.h"
 #include "Transaction.h"
 #include "VerifiedBlock.h"
-#include <libdevcore/db.h>
 #include <libdevcore/Exceptions.h>
-#include <libdevcore/Log.h>
 #include <libdevcore/Guards.h>
+#include <libdevcore/Log.h>
+#include <libdevcore/db.h>
 #include <libethcore/BlockHeader.h>
 #include <libethcore/Common.h>
 #include <libethcore/SealEngine.h>
+#include <boost/filesystem/path.hpp>
 #include <chrono>
 #include <deque>
 #include <unordered_map>
 #include <unordered_set>
-#include <boost/filesystem/path.hpp>
 
 namespace std
 {
@@ -118,8 +102,18 @@ public:
     void process();
 
     /// Sync the chain with any incoming blocks. All blocks should, if processed in order.
-    /// @returns fresh blocks, dead blocks and true iff there are additional blocks to be processed waiting.
-    std::tuple<ImportRoute, bool, unsigned> sync(BlockQueue& _bq, OverlayDB const& _stateDB, unsigned _max);
+    /// @returns tuple with three members - the first (ImportRoute) contains hashes of fresh blocks
+    /// and dead blocks as well as a list of imported transactions. The second is a bool which is
+    /// true iff there are additional blocks to be processed. The third is the imported block count.
+    std::tuple<ImportRoute, bool, unsigned> sync(
+        BlockQueue& _bq, OverlayDB const& _stateDB, unsigned _max);
+
+    /// Import the supplied blocks into the chain. Blocks should be processed in order.
+    /// @returns a tuple with three members - the first (ImportRoute) contains fresh blocks, dead
+    /// blocks and imported transactions. The second contains hashes of bad blocks. The third
+    /// contains the imported block count.
+    std::tuple<ImportRoute, h256s, unsigned> sync(
+        VerifiedBlocks const& _blocks, OverlayDB const& _stateDB);
 
     /// Attempt to import the given block directly into the BlockChain and sync with the state DB.
     /// @returns the block hashes of any blocks that came into/went out of the canonical block chain.
@@ -185,6 +179,8 @@ public:
 
     LastBlockHashesFace const& lastBlockHashes() const { return *m_lastBlockHashes;  }
 
+    int chainID() const { return m_params.chainID; }
+
     /** Get the block blooms for a number of blocks. Thread-safe.
      * @returns the object pertaining to the blocks:
      * level 0:
@@ -237,7 +233,8 @@ public:
 
     /// Run through database and verify all blocks by reevaluating.
     /// Will call _progress with the progress in this operation first param done, second total.
-    void rebuild(boost::filesystem::path const& _path, ProgressCallback const& _progress = std::function<void(unsigned, unsigned)>());
+    void rebuild(boost::filesystem::path const& _path,
+        ProgressCallback const& _progress = std::function<void(unsigned, unsigned)>());
 
     /// Alter the head of the chain to some prior block along it.
     void rewind(unsigned _newHead);
@@ -319,8 +316,8 @@ private:
 
     /// Initialise everything and ready for openning the database.
     void init(ChainParams const& _p);
-    /// Open the database.
-    unsigned open(boost::filesystem::path const& _path, WithExisting _we);
+    /// Open the database. Returns whether or not the database needs to be rebuilt.
+    bool open(boost::filesystem::path const& _path, WithExisting _we);
     /// Open the database, rebuilding if necessary.
     void open(boost::filesystem::path const& _path, WithExisting _we, ProgressCallback const& _pc);
     /// Finalise everything and close the database.
@@ -412,13 +409,15 @@ private:
     mutable bytes m_genesisHeaderBytes; // mutable because they're effectively memos.
     mutable h256 m_genesisHash;     // mutable because they're effectively memos.
 
+    std::unique_ptr<DatabasePaths> m_dbPaths; // Paths for various databases (e.g. blocks, extras)
+
     std::function<void(Exception&)> m_onBad;                                    ///< Called if we have a block that doesn't verify.
     std::function<void(BlockHeader const&)> m_onBlockImport;                                        ///< Called if we have imported a new block into the db
 
-    boost::filesystem::path m_dbPath;
-
     mutable Logger m_logger{createLogger(VerbosityDebug, "chain")};
     mutable Logger m_loggerDetail{createLogger(VerbosityTrace, "chain")};
+    mutable Logger m_loggerWarn{createLogger(VerbosityWarning, "chain")};
+    mutable Logger m_loggerInfo{createLogger(VerbosityInfo, "chain")};
     mutable Logger m_loggerError{createLogger(VerbosityError, "chain")};
 
     friend std::ostream& operator<<(std::ostream& _out, BlockChain const& _bc);

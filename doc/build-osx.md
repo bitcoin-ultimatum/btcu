@@ -82,7 +82,7 @@ If you face with an error on `cmake` command like `No CMAKE_C_COMPILER could be 
 
 ## Dependencies
 ```shell
-    brew install automake libtool miniupnpc pkg-config python qt libevent qrencode protobuf snappy zeromq openssl libjson-rpc-cpp google-benchmark googletest cmake git gmp gflags
+    brew install automake libtool miniupnpc pkg-config python qt@5 libevent qrencode protobuf snappy zeromq openssl libjson-rpc-cpp google-benchmark googletest cmake git gmp gflags zlib lz4 bzip2 zstd
     # libscrypt from local since we need a version with cmake support but you still can get it via brew
 ```
 
@@ -107,7 +107,7 @@ To do this please run commands:
 ```shell
     alias nproc="sysctl -n hw.logicalcpu"
 
-    curl https://dl.bintray.com/boostorg/release/1.71.0/source/boost_1_71_0.tar.gz -o boost_1_71_0.tar.gz
+    curl https://boostorg.jfrog.io/artifactory/main/release/1.71.0/source/boost_1_71_0.tar.gz -o boost_1_71_0.tar.gz
     tar -xf boost_1_71_0.tar.gz
 
     cd boost_1_71_0
@@ -206,7 +206,7 @@ It is important: Do not use spaces and other line breaking simbols in a path to 
     make
 ```
 
-Note: There is a supported flag QUIET for more quiet build. It is usefull.
+**Note:** : There is a supported flag QUIET for more quiet build. It is usefull.
 
 4.  It is recommended to build and run the unit tests:
 ```shell
@@ -234,8 +234,7 @@ But you can provide specific certificate name with a flag SIGN_CERT_NAME, e.g.:
     cmake . -DSIGN_DMG=ON -DSIGN_CERT_NAME="Mac Developer: John Smith"
     make osx-dmg
 ```
-
-Important note: In some cases there will be a problem with missed media resources in the signed app. In that case you will have to recompile the app with the flag BUILTIN_QTDEPLOY.
+**Important note:** In some cases there will be a problem with missed media resources in the signed app. In that case you will have to recompile the app with the flag BUILTIN_QTDEPLOY.
 
 The flag BUILTIN_QTDEPLOY will tell cmake that it should use macdeployqt from qt package installed from brew on previous steps and the open source python script `contrib\macdeploy\macdeployqtplus.py` will be used only to create fancy-looking installer from the result.
 

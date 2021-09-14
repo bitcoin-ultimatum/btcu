@@ -1,24 +1,6 @@
-/*
-    This file is part of cpp-ethereum.
-
-    cpp-ethereum is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    cpp-ethereum is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with cpp-ethereum.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/** @file IpcServerBase.cpp
- * @authors:
- *   Arkadiy Paronyan <arkadiy@ethdev.com>
- * @date 2015
- */
+// Aleth: Ethereum C++ client, tools and libraries.
+// Copyright 2015-2019 Aleth Authors.
+// Licensed under the GNU General Public License, Version 3.
 
 #include "IpcServerBase.h"
 #include <cstdlib>
@@ -36,9 +18,7 @@ int const c_bufferSize = 1024;
 template <class S> IpcServerBase<S>::IpcServerBase(string const& _path):
     m_path(_path)
 {
-#ifndef WIN32
     clog(VerbosityInfo, "rpc") << "JSON-RPC socket path: " << _path;
-#endif
 }
 
 template <class S> bool IpcServerBase<S>::StartListening()
@@ -88,9 +68,7 @@ template <class S> bool IpcServerBase<S>::SendResponse(string const& _response, 
         else
             fullyWritten = true;
     } while (!fullyWritten && !errorOccured);
-#ifndef WIN32
     clog(VerbosityTrace, "rpc") << _response;
-#endif
     return fullyWritten && !errorOccured;
 }
 
@@ -141,9 +119,7 @@ template <class S> void IpcServerBase<S>::GenerateResponse(S _connection)
                 {
                     std::string r = request.substr(0, i + 1);
                     request.erase(0, i + 1);
-#ifndef WIN32
                     clog(VerbosityTrace, "rpc") << r;
-#endif
                     OnRequest(r, reinterpret_cast<void*>((intptr_t)_connection));
                     i = 0;
                     continue;
