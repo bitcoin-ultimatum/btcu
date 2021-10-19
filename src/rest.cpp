@@ -182,8 +182,8 @@ static bool rest_headers(HTTPRequest* req,
 
         //Enable CORS in header for browser extensions
         req->WriteHeader("Access-Control-Allow-Origin", "*");
-        req->WriteHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT");
-        req->WriteHeader("Access-Control-Allow-Headers", "*");
+        req->WriteHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+        req->WriteHeader("Access-Control-Allow-Headers", "content-type");
         req->WriteHeader("Access-Control-Allow-Credentials", "true");
 
         req->WriteReply(HTTP_OK, strJSON);
@@ -252,8 +252,8 @@ static bool rest_block(HTTPRequest* req,
 
         //Enable CORS in header for browser extensions
         req->WriteHeader("Access-Control-Allow-Origin", "*");
-        req->WriteHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT");
-        req->WriteHeader("Access-Control-Allow-Headers", "*");
+        req->WriteHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+        req->WriteHeader("Access-Control-Allow-Headers", "content-type");
         req->WriteHeader("Access-Control-Allow-Credentials", "true");
 
         req->WriteReply(HTTP_OK, strJSON);
@@ -295,8 +295,8 @@ static bool rest_chaininfo(HTTPRequest* req, const std::string& strURIPart)
 
         //Enable CORS in header for browser extensions
         req->WriteHeader("Access-Control-Allow-Origin", "*");
-        req->WriteHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT");
-        req->WriteHeader("Access-Control-Allow-Headers", "*");
+        req->WriteHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+        req->WriteHeader("Access-Control-Allow-Headers", "content-type");
         req->WriteHeader("Access-Control-Allow-Credentials", "true");
 
         req->WriteReply(HTTP_OK, strJSON);
@@ -327,8 +327,8 @@ static bool rest_mempool_info(HTTPRequest* req, const std::string& strURIPart)
 
         //Enable CORS in header for browser extensions
         req->WriteHeader("Access-Control-Allow-Origin", "*");
-        req->WriteHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT");
-        req->WriteHeader("Access-Control-Allow-Headers", "*");
+        req->WriteHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+        req->WriteHeader("Access-Control-Allow-Headers", "content-type");
         req->WriteHeader("Access-Control-Allow-Credentials", "true");
 
         req->WriteReply(HTTP_OK, strJSON);
@@ -359,8 +359,8 @@ static bool rest_mempool_contents(HTTPRequest* req, const std::string& strURIPar
 
         //Enable CORS in header for browser extensions
         req->WriteHeader("Access-Control-Allow-Origin", "*");
-        req->WriteHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT");
-        req->WriteHeader("Access-Control-Allow-Headers", "*");
+        req->WriteHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+        req->WriteHeader("Access-Control-Allow-Headers", "content-type");
         req->WriteHeader("Access-Control-Allow-Credentials", "true");
 
         req->WriteReply(HTTP_OK, strJSON);
@@ -418,8 +418,8 @@ static bool rest_tx(HTTPRequest* req, const std::string& strURIPart)
 
         //Enable CORS in header for browser extensions
         req->WriteHeader("Access-Control-Allow-Origin", "*");
-        req->WriteHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT");
-        req->WriteHeader("Access-Control-Allow-Headers", "*");
+        req->WriteHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+        req->WriteHeader("Access-Control-Allow-Headers", "content-type");
         req->WriteHeader("Access-Control-Allow-Credentials", "true");
 
         req->WriteReply(HTTP_OK, strJSON);
@@ -622,8 +622,8 @@ static bool rest_getutxos(HTTPRequest* req, const std::string& strURIPart)
 
         //Enable CORS in header for browser extensions
         req->WriteHeader("Access-Control-Allow-Origin", "*");
-        req->WriteHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT");
-        req->WriteHeader("Access-Control-Allow-Headers", "*");
+        req->WriteHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+        req->WriteHeader("Access-Control-Allow-Headers", "content-type");
         req->WriteHeader("Access-Control-Allow-Credentials", "true");
 
         req->WriteReply(HTTP_OK, strJSON);

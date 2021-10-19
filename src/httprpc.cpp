@@ -78,8 +78,8 @@ static void JSONErrorReply(HTTPRequest* req, const UniValue& objError, const Uni
 
     //Enable CORS in header for browser extensions
     req->WriteHeader("Access-Control-Allow-Origin", "*");
-    req->WriteHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT");
-    req->WriteHeader("Access-Control-Allow-Headers", "*");
+    req->WriteHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+    req->WriteHeader("Access-Control-Allow-Headers", "content-type");
     req->WriteHeader("Access-Control-Allow-Credentials", "true");
 
     req->WriteReply(nStatus, strReply);
@@ -150,8 +150,8 @@ static bool HTTPReq_JSONRPC(HTTPRequest* req, const std::string &)
 
         //Enable CORS in header for browser extensions
         req->WriteHeader("Access-Control-Allow-Origin", "*");
-        req->WriteHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT");
-        req->WriteHeader("Access-Control-Allow-Headers", "*");
+        req->WriteHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+        req->WriteHeader("Access-Control-Allow-Headers", "content-type");
         req->WriteHeader("Access-Control-Allow-Credentials", "true");
 
         req->WriteReply(HTTP_OK, strReply);

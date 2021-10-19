@@ -1589,30 +1589,47 @@ int CWallet::ScanBitcoinStateForWalletTransactions(std::unique_ptr<CCoinsViewIte
             return -1;
         }
         boost::this_thread::interruption_point();
-        try {
-            pCursor->GetTrxHash(trxHash, true);
-            if (count++ % 256 == 0) {
+        try
+        {
+           pCursor->GetTrxHash(trxHash, true);
+           if (count++ % 256 == 0)
+           {
 
-                uint32_t high = 0x100 * *trxHash.begin() + *(trxHash.begin() + 1);
-                int pctDone = (int) (high * 100.0 / 65536.0 + 0.5);
-                if (pctDone != prevPctDone) {
-                    m_node->showProgress(_("Rescanning the chainstate state..."), pctDone);
-                    prevPctDone = pctDone;
-                }
-                if (reportDone < pctDone / 10) {
-                    // report max. every 10% step
-                    LogPrintf("[%d%%]...", pctDone); /* Continued */
-                    reportDone = pctDone / 10;
-                }
-            }
+              uint32_t high = 0x100 * *trxHash.begin() + *(trxHash.begin() + 1);
+              int pctDone = (int) (high * 100.0 / 65536.0 + 0.5);
+              if (pctDone != prevPctDone)
+              {
+                 m_node->showProgress(_("Rescanning the chainstate state..."), pctDone);
+                 prevPctDone = pctDone;
+              }
+              if (reportDone < pctDone / 10)
+              {
+                 // report max. every 10% step
+                 LogPrintf("[%d%%]...", pctDone); /* Continued */
+                 reportDone = pctDone / 10;
+              }
+           }
 
-            pCursor->GetCoins(coins, true);
-            if (coins.nVersion != CTransaction::BITCOIN_VERSION && coins.nVersion != CTransaction::BTCU_START_VERSION) {
-                continue;
-            }
-            if (AddToWalletIfInvolvingMe(CTransaction(trxHash, coins), nullptr, merkleClb, fUpdate)) {
-                ++ret;
-            }
+           pCursor->GetCoins(coins, true);
+           if (coins.nVersion != CTransaction::BITCOIN_VERSION && coins.nVersion != CTransaction::BTCU_START_VERSION)
+           {
+              continue;
+           }
+           if (coins.nVersion == CTransaction::BITCOIN_VERSION)
+           {
+              if (AddToWalletIfInvolvingMe(CTransaction(trxHash, coins), nullptr, merkleClb, fUpdate))
+                 ++ret;
+
+           } else if (coins.nVersion == CTransaction::BTCU_START_VERSION)
+           {
+              // First try finding the transaction in database
+              CTransaction tx; uint256 hashBlock;
+              if (!GetTransaction(trxHash, tx, hashBlock, true))
+                 return -1;
+              if (AddToWalletIfInvolvingMe(tx, nullptr, merkleClb, fUpdate))
+                 ++ret;
+
+           }
 
         } catch (const std::exception& e) {
             error("%s : Deserialize or I/O error - %s", __func__, e.what());

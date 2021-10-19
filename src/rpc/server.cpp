@@ -469,6 +469,7 @@ static const CRPCCommand vRPCCommands[] =
         {"wallet", "sendtocontract", &sendtocontract, true, false, true},
         {"wallet", "listcontracts", &listcontracts, true, false, true},
         {"wallet", "callcontract", &callcontract, true, false, true},
+        {"wallet", "getsha256", &getsha256, true, false, true},
         {"zerocoin", "createrawzerocoinspend", &createrawzerocoinspend, false, false, true},
         {"zerocoin", "getzerocoinbalance", &getzerocoinbalance, false, false, true},
         {"zerocoin", "listmintedzerocoins", &listmintedzerocoins, false, false, true},

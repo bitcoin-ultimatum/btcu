@@ -5488,3 +5488,35 @@ UniValue spendrawzerocoin(const UniValue& params, bool fHelp)
     return DoZbtcuSpend(mint.GetDenominationAsAmount(), vMintsSelected, address_str);
 }
 
+UniValue getsha256(const UniValue& params, bool fHelp)
+{
+    if (fHelp || params.size() != 1)
+        throw std::runtime_error(
+                "getsha256 \"textmessage\" \n"
+                "\nCreate SHA256 checksum from message\n"
+
+                "\nArguments:\n"
+                "1. \"text string\"        (string, required) A zerocoin serial number (hex)\n"
+
+                "\nResult:\n"
+                "\"sha\"             (string) The transaction txid in hex\n"
+
+                "\nExamples\n" +
+                HelpExampleRpc("spendrawzerocoin", "\"f80892e78c30a393ef4ab4d5a9d5a2989de6ebc7b976b241948c7f489ad716a2\", \"a4fd4d7248e6a51f1d877ddd2a4965996154acc6b8de5aa6c83d4775b283b600\", 100, \"xxx\""));
+
+    std::string bytecode=params[0].get_str();
+
+    if(bytecode.size() < 10 )
+        throw JSONRPCError(RPC_TYPE_ERROR, "Line is too short");
+
+    CHashWriter ss(SER_GETHASH, 0);
+    ss << strMessageMagic;
+    ss << bytecode;
+
+    UniValue ret(UniValue::VOBJ);
+    auto t = ss.GetHash();
+    std::string sha256(t.ToStringReverseEndian());
+    ret.pushKV("sha256", sha256);
+    return ret;
+}
+

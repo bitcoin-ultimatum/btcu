@@ -1076,7 +1076,7 @@ void CBudgetManager::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
             if (nProp == 0) {
                 if (pfrom->HasFulfilledRequest("mnvs")) {
                     LogPrint("mnbudget","mnvs - peer already asked me for the list\n");
-                    Misbehaving(pfrom->GetId(), 20);
+                    //Misbehaving(pfrom->GetId(), 20);
                     return;
                 }
                 pfrom->FulfilledRequest("mnvs");

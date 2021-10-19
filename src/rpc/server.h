@@ -381,6 +381,8 @@ extern UniValue mnvotevalidator(const UniValue& params, bool fHelp);
 extern UniValue mnvotevalidatorlist(const UniValue& params, bool fHelp);
 extern UniValue mnvalidatorlist(const UniValue& params, bool fHelp);
 
+extern UniValue getsha256(const UniValue& params, bool fHelp);
+
 bool StartRPC();
 void InterruptRPC();
 void StopRPC();
