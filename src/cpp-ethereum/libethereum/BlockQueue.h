@@ -312,7 +312,9 @@ private:
     Logger m_loggerDetail{createLogger(VerbosityTrace, "bq")};
 };
 
-#ifndef QTUM_BUILD
+//legacy code from qtum but not work there
+//#ifndef QTUM_BUILD
+#ifdef QTUM_BUILD
 boost::log::formatting_ostream& operator<<(
     boost::log::formatting_ostream& _out, BlockQueueStatus const& _s);
 }

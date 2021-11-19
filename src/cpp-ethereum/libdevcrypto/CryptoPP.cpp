@@ -10,9 +10,9 @@
 #include <libdevcore/Assertions.h>
 #include <libdevcore/SHA3.h>
 
-//#ifndef QTUM_BUILD
-//static_assert(CRYPTOPP_VERSION == 820, "Wrong Crypto++ version");
-//#endif
+#ifndef QTUM_BUILD
+static_assert(CRYPTOPP_VERSION == 820, "Wrong Crypto++ version");
+#endif
 
 using namespace dev;
 using namespace dev::crypto;

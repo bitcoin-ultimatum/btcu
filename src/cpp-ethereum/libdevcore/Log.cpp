@@ -7,7 +7,9 @@
 #include <pthread.h>
 #endif
 
-#ifndef QTUM_BUILD
+//legacy code from qtum but not work there
+//#ifndef QTUM_BUILD
+#ifdef QTUM_BUILD
 
 #include <boost/core/null_deleter.hpp>
 #include <boost/log/attributes/clock.hpp>

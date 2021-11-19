@@ -92,6 +92,8 @@ add_custom_target(print-version
   COMMAND "${CMAKE_COMMAND}" -E echo "${PROJECT_VERSION}"
 )
 
+add_definitions(-DQTUM_BUILD=1)
+
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     if (CMAKE_GENERATOR MATCHES "Visual Studio" OR MSVC)
         message(WARNING "Important: Sometimes Visual Studio may get accidental crush due to low RAM memory. Please make sure you have enough free RAM for the build. Also is it recommended to turn off Real time protection of the Windows Defender in a build time.")
@@ -1339,7 +1341,6 @@ set(SERVER_SOURCES
         ./src/cpp-ethereum/libethereum/Transaction.cpp
         ./src/cpp-ethereum/libethereum/Executive.cpp
         ./src/cpp-ethereum/libethereum/ExtVM.cpp
-        ./src/cpp-ethereum/libethereum/Block.cpp
         ./src/cpp-ethereum/libethereum/BlockChain.cpp
         ./src/cpp-ethereum/libethereum/BlockDetails.cpp
         ./src/cpp-ethereum/libethereum/TransactionQueue.cpp

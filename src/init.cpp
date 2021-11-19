@@ -1621,6 +1621,11 @@ bool AppInit2()
                         }
                     }
 
+                    /////////////////////////////////qtum
+                    QtumDGP qtumDGP(globalState.get(), fGettingValuesDGP);
+                    globalSealEngine->setQtumSchedule(qtumDGP.getGasSchedule(chainActive.Height()));
+                    /////////////////////////////////////
+
                     // Zerocoin must check at level 4
                     if (!CVerifyDB().VerifyDB(pcoinsdbview, 4, GetArg("-checkblocks", 10))) {
                         strLoadError = _("Corrupted block database detected");

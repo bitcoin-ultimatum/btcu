@@ -137,6 +137,7 @@ bool AttemptToAddContractToBlock(CTxMemPoolEntry& me, CTransaction& tx, CBlock* 
     uint64_t nBlockSigOpsCost =0;//= pblock->nBlockSigOpsCost;
 
     unsigned int contractflags = SCRIPT_EXEC_BYTE_CODE;//= GetContractScriptFlags(nHeight, chainparams.GetConsensus());
+    contractflags |= SCRIPT_OUTPUT_SENDER;
 
     std::vector<CTransactionRef> blockTransactions;
     for (auto t: pblock->vtx)
@@ -310,7 +311,6 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn, CWallet* pwallet, 
     QtumDGP qtumDGP(globalState.get(), fGettingValuesDGP);
     globalSealEngine->setQtumSchedule(qtumDGP.getGasSchedule(nHeight));
     uint32_t blockSizeDGP = qtumDGP.getBlockSize(nHeight);
-
     minGasPrice = qtumDGP.getMinGasPrice(nHeight);
 
     /*
@@ -326,16 +326,6 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn, CWallet* pwallet, 
     txGasLimit = GetArg("-staker-max-tx-gas-limit", softBlockGasLimit);
 
     //nBlockMaxWeight = blockSizeDGP ? blockSizeDGP * WITNESS_SCALE_FACTOR : nBlockMaxWeight;
-
-    dev::h256 oldHashStateRoot(globalState->rootHash());
-    dev::h256 oldHashUTXORoot(globalState->rootHashUTXO());
-    int nPackagesSelected = 0;
-    int nDescendantsUpdated = 0;
-    //addPackageTxs(nPackagesSelected, nDescendantsUpdated, minGasPrice);
-    pblock->hashStateRoot = uint256(h256Touint(dev::h256(globalState->rootHash())));
-    pblock->hashUTXORoot = uint256(h256Touint(dev::h256(globalState->rootHashUTXO())));
-    globalState->setRoot(oldHashStateRoot);
-    globalState->setRootUTXO(oldHashUTXORoot);
 
     // Largest block you're willing to create:
     unsigned int nBlockMaxSize = GetArg("-blockmaxsize", DEFAULT_BLOCK_MAX_SIZE);
@@ -624,6 +614,27 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn, CWallet* pwallet, 
 
         pblocktemplate->vTxSigOps[0] = GetLegacySigOpCount(pblock->vtx[0]);
 
+        ////////////qtum
+
+
+       dev::h256 oldHashStateRoot(globalState->rootHash());
+       dev::h256 oldHashUTXORoot(globalState->rootHashUTXO());
+       int nPackagesSelected = 0;
+       int nDescendantsUpdated = 0;
+
+       //addPackageTxs(nPackagesSelected, nDescendantsUpdated, minGasPrice);
+       for (CTransaction tx: pblock->vtx){
+          if(tx.HasCreateOrCall()){
+             AttemptToAddContractToBlock(mempool.mapTx.begin()->second, tx,pblock, minGasPrice);
+          }
+       }
+
+       pblock->hashStateRoot = uint256(h256Touint(dev::h256(globalState->rootHash())));
+       pblock->hashUTXORoot = uint256(h256Touint(dev::h256(globalState->rootHashUTXO())));
+       globalState->setRoot(oldHashStateRoot);
+       globalState->setRootUTXO(oldHashUTXORoot);
+       ///////////////////////////////////////////////
+
         if (fProofOfStake) {
             unsigned int nExtraNonce = 0;
             IncrementExtraNonce(pblock, pindexPrev, nExtraNonce);
@@ -638,12 +649,6 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn, CWallet* pwallet, 
                 return nullptr; // TODO: commented just for testing purposes to enable unsigned blocks
             }
         }
-
-        /*for (CTransaction tx: pblock->vtx){
-            if(tx.HasCreateOrCall()){
-                AttemptToAddContractToBlock(mempool.mapTx.begin()->second, tx,pblock,40);
-            }
-        }*/
 
         CValidationState state;
         if (!TestBlockValidity(state, *pblock, pindexPrev, false, false)) {

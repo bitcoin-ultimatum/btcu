@@ -300,7 +300,7 @@ std::pair<State::AddressMap, h256> State::addresses(
 
 void State::setRoot(h256 const& _r)
 {
-    LogPrint("sc","%s: hashStateRoot: %s\n", __func__, _r.hex().c_str());
+    //LogPrint("sc","%s: hashStateRoot: %s\n", __func__, _r.hex().c_str());
     m_cache.clear();
     m_unchangedCacheEntries.clear();
     m_nonExistingAccountsCache.clear();

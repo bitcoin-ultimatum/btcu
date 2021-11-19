@@ -14,6 +14,7 @@
 #include "qtum/qtumDGP.h"
 
 #include "script/interpreter.h"
+#include "chainparams.h"
 
 class CCoinsViewCache;
 class CBlockIndex;
@@ -36,8 +37,8 @@ void ContractStateShutdown();
 
 std::vector<ResultExecute> CallContract(const dev::Address& addrContract, std::vector<unsigned char> opcode, const dev::Address& sender = dev::Address(), uint64_t gasLimit=0);
 
-//bool CheckOpSender(const CTransaction& tx, const CChainParams& chainparams, int nHeight);
-//
+bool CheckOpSender(const CTransaction& tx, const CChainParams& chainparams, int nHeight);
+
 valtype GetSenderAddress(const CTransaction& tx, const CCoinsViewCache* coinsView, const std::vector<CTransactionRef>* blockTxs, int nOut = -1);
 
 bool CheckSenderScript(const CCoinsViewCache& view, const CTransaction& tx);

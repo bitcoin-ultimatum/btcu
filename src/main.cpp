@@ -1124,6 +1124,19 @@ CAmount GetMinRelayFee(const CTransaction& tx, unsigned int nBytes, bool fAllowF
     return nMinFee;
 }
 
+CBlockIndex* LookupBlockIndex(const uint256& hash)
+{
+   AssertLockHeld(cs_main);
+   BlockMap::const_iterator it = mapBlockIndex.find(hash);
+   return it == mapBlockIndex.end() ? nullptr : it->second;
+}
+
+int GetSpendHeight(const CCoinsViewCache& inputs)
+{
+   LOCK(cs_main);
+   CBlockIndex* pindexPrev = LookupBlockIndex(inputs.GetBestBlock());
+   return pindexPrev->nHeight + 1;
+}
 
 bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState& state, const CTransaction& tx, bool fLimitFree, bool* pfMissingInputs, bool fRejectInsaneFee, bool ignoreFees)
 {
@@ -1306,6 +1319,96 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState& state, const CTransa
         double dPriority = 0;
         if (!hasZcSpendInputs)
             view.GetPriority(tx, chainHeight);
+
+
+       //////////////////////////////////////////////////////////// // qtum
+       dev::u256 txMinGasPrice = 0;
+       if(!CheckOpSender(tx, Params(), GetSpendHeight(view))){
+          return state.Invalid(false, REJECT_INVALID, "bad-txns-invalid-sender");
+       }
+       if(tx.HasCreateOrCall()){
+
+          if(!CheckSenderScript(view, tx)){
+             return state.Invalid(false, REJECT_INVALID, "bad-txns-invalid-sender-script");
+          }
+
+          QtumDGP qtumDGP(globalState.get(), fGettingValuesDGP);
+          uint64_t minGasPrice = qtumDGP.getMinGasPrice(::chainActive.Tip()->nHeight + 1);
+          uint64_t blockGasLimit = qtumDGP.getBlockGasLimit(::chainActive.Tip()->nHeight + 1);
+          size_t count = 0;
+          for(const CTxOut& o : tx.vout)
+             count += o.scriptPubKey.HasOpCreate() || o.scriptPubKey.HasOpCall() ? 1 : 0;
+          unsigned int contractflags = SCRIPT_EXEC_BYTE_CODE;//= GetContractScriptFlags(nHeight, chainparams.GetConsensus());
+          contractflags |= SCRIPT_OUTPUT_SENDER;
+          QtumTxConverter converter(tx, NULL, NULL, contractflags);
+          ExtractQtumTX resultConverter;
+          if(!converter.extractionQtumTransactions(resultConverter)){
+             return state.Invalid(error("AcceptToMempool(): Contract transaction of the wrong format"), REJECT_INVALID, "bad-tx-bad-contract-format");
+          }
+          std::vector<QtumTransaction> qtumTransactions = resultConverter.first;
+          std::vector<EthTransactionParams> qtumETP = resultConverter.second;
+
+          dev::u256 sumGas = dev::u256(0);
+          dev::u256 gasAllTxs = dev::u256(0);
+          for(QtumTransaction qtumTransaction : qtumTransactions){
+             sumGas += qtumTransaction.gas() * qtumTransaction.gasPrice();
+
+             if(sumGas > dev::u256(INT64_MAX)) {
+                return state.Invalid(error("AcceptToMempool(): Transaction's gas stipend overflows"), REJECT_INVALID, "bad-tx-gas-stipend-overflow");
+             }
+
+             if(sumGas > dev::u256(nFees)) {
+                return state.Invalid(error("AcceptToMempool(): Transaction fee does not cover the gas stipend"), REJECT_INVALID, "bad-txns-fee-notenough");
+             }
+
+             if(txMinGasPrice != 0) {
+                txMinGasPrice = std::min(txMinGasPrice, qtumTransaction.gasPrice());
+             } else {
+                txMinGasPrice = qtumTransaction.gasPrice();
+             }
+             VersionVM v = qtumTransaction.getVersion();
+             if(v.format!=0)
+                return state.Invalid(error("AcceptToMempool(): Contract execution uses unknown version format"), REJECT_INVALID, "bad-tx-version-format");
+             if(v.rootVM != 1)
+                return state.Invalid(error("AcceptToMempool(): Contract execution uses unknown root VM"), REJECT_INVALID, "bad-tx-version-rootvm");
+             if(v.vmVersion != 0)
+                return state.Invalid(error("AcceptToMempool(): Contract execution uses unknown VM version"), REJECT_INVALID, "bad-tx-version-vmversion");
+             if(v.flagOptions != 0)
+                return state.Invalid(error("AcceptToMempool(): Contract execution uses unknown flag options"), REJECT_INVALID, "bad-tx-version-flags");
+
+             //check gas limit is not less than minimum mempool gas limit
+             if(qtumTransaction.gas() < GetArg("-minmempoolgaslimit", MEMPOOL_MIN_GAS_LIMIT))
+                return state.Invalid(error("AcceptToMempool(): Contract execution has lower gas limit than allowed to accept into mempool"), REJECT_INVALID, "bad-tx-too-little-mempool-gas");
+
+             //check gas limit is not less than minimum gas limit (unless it is a no-exec tx)
+             if(qtumTransaction.gas() < MINIMUM_GAS_LIMIT && v.rootVM != 0)
+                return state.Invalid(error("AcceptToMempool(): Contract execution has lower gas limit than allowed"), REJECT_INVALID, "bad-tx-too-little-gas");
+
+             if(qtumTransaction.gas() > UINT32_MAX)
+                return state.Invalid(error("AcceptToMempool(): Contract execution can not specify greater gas limit than can fit in 32-bits"), REJECT_INVALID, "bad-tx-too-much-gas");
+
+             gasAllTxs += qtumTransaction.gas();
+             if(gasAllTxs > dev::u256(blockGasLimit))
+                return state.Invalid(false, REJECT_INVALID, "bad-txns-gas-exceeds-blockgaslimit");
+
+             //don't allow less than DGP set minimum gas price to prevent MPoS greedy mining/spammers
+             if(v.rootVM!=0 && (uint64_t)qtumTransaction.gasPrice() < minGasPrice)
+                return state.Invalid(error("AcceptToMempool(): Contract execution has lower gas price than allowed"), REJECT_INVALID, "bad-tx-low-gas-price");
+          }
+
+          if(!CheckMinGasPrice(qtumETP, minGasPrice))
+             return state.Invalid(false, REJECT_INVALID, "bad-txns-small-gasprice");
+
+          if(count > qtumTransactions.size())
+             return state.Invalid(false, REJECT_INVALID, "bad-txns-incorrect-format");
+
+          /*if (rawTx && nAbsurdFee && dev::u256(nFees) > dev::u256(nAbsurdFee) + sumGas)
+             return state.Invalid(false,
+                                  REJECT_HIGHFEE, "absurdly-high-fee",
+                                  strprintf("%d > %d", nFees, nAbsurdFee));*/
+       }
+       ////////////////////////////////////////////////////////////
+
 
         CTxMemPoolEntry entry(tx, nFees, GetTime(), dPriority, chainHeight);
         unsigned int nSize = entry.GetTxSize();
@@ -2628,19 +2731,28 @@ static int64_t nTimeIndex = 0;
 static int64_t nTimeCallbacks = 0;
 static int64_t nTimeTotal = 0;
 
-bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pindex, CCoinsViewCache& view, bool fJustCheck, bool fAlreadyChecked)
+bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pindex, CCoinsViewCache& view, bool fJustCheck, bool fAlreadyChecked, bool fVerifyDB)
 {
     AssertLockHeld(cs_main);
     // Check it again in case a previous version let a bad block in
     if (!fAlreadyChecked && !CheckBlock(block, state, !fJustCheck, !fJustCheck))
         return false;
 
-    uint64_t blockGasLimit = 40000000; //= qtumDGP.getBlockGasLimit(::ChainActive().Height());
-    uint64_t minGasPrice = 40;         //CAmount(qtumDGP.getMinGasPrice(::ChainActive().Height()));
-    CAmount nGasPrice = 40;            //(minGasPrice>DEFAULT_GAS_PRICE)?minGasPrice:DEFAULT_GAS_PRICE;
+    //////////////////////////////////////////////////////// qtum
+    QtumDGP qtumDGP(globalState.get(), fGettingValuesDGP);
+    globalSealEngine->setQtumSchedule(qtumDGP.getGasSchedule(pindex->nHeight));
+    uint32_t sizeBlockDGP = qtumDGP.getBlockSize(pindex->nHeight);
+    uint64_t minGasPrice = qtumDGP.getMinGasPrice(pindex->nHeight);
+    uint64_t blockGasLimit = qtumDGP.getBlockGasLimit(pindex->nHeight);
+    dgpMaxBlockSize = sizeBlockDGP ? sizeBlockDGP : dgpMaxBlockSize;
+    updateBlockSizeParams(dgpMaxBlockSize);
+    CBlock checkBlock(block.GetBlockHeader());
+    std::vector<CTxOut> checkVouts;
+    ////////////////////////////////////////////////////////////////
+
 
     // verify that the view's current state corresponds to the previous block
-    // we start from bitcoin chainstate therefore shouldn't check previous for the first block
+    // we start from bitcoin chainstate theundoDummyrefore shouldn't check previous for the first block
     if(pindex->nHeight > 0)
     {
        uint256 hashPrevBlock = pindex->pprev == NULL ? uint256(0): pindex->pprev->GetBlockHash();
@@ -2875,9 +2987,14 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         pos.nTxOffset += ::GetSerializeSize(tx, SER_DISK, CLIENT_VERSION);
 
         bool hasOpSpend = tx.HasOpSpend();
-
         unsigned int contractflags = SCRIPT_EXEC_BYTE_CODE;
-        
+
+       if(!CheckOpSender(tx, Params(), pindex->nHeight)){
+          state.Invalid(false, REJECT_INVALID, "bad-txns-invalid-sender");
+       }
+       if(!tx.HasOpSpend()){
+          checkBlock.vtx.push_back(block.vtx[i]);
+       }
 
         //checks for smart contracts trxs
         bool bSCValidatorFound = true;
@@ -3001,7 +3118,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                  }
               }
 
-              if (fAlreadyChecked) {
+              if (fAlreadyChecked || fVerifyDB) {
 
                  if (!exec.performByteCode()) {
                     return state.Error("ConnectBlock(): Unknown error during contract execution");
@@ -3019,7 +3136,9 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                  for (CTxOut refundVout : bcer.refundOutputs) {
                     gasRefunds += refundVout.nValue;
                  }
-
+                 for(CTransaction& t : bcer.valueTransfers){
+                    checkBlock.vtx.push_back(t);
+                 }
                  if (fRecordLogOpcodes && !fJustCheck) {
                     writeVMlog(resultExec, tx, block);
                  }
@@ -3132,7 +3251,65 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
             return AbortNode(state, "Failed to write transaction index");
 
 
-   /////////////////////////////////////////////////////qtum
+
+   ////////////////////////////////////////////////////////////////// // qtum
+   checkBlock.hashMerkleRoot = BlockMerkleRoot(checkBlock);
+   checkBlock.hashStateRoot = h256Touint(globalState->rootHash());
+   checkBlock.hashUTXORoot = h256Touint(globalState->rootHashUTXO());
+
+   //If this error happens, it probably means that something with AAL created transactions didn't match up to what is expected
+   if((checkBlock.GetHash() != block.GetHash()) && !fJustCheck)
+   {
+      LogPrintf("Actual block data does not match block expected by AAL\n");
+      //Something went wrong with AAL, compare different elements and determine what the problem is
+      if(checkBlock.hashMerkleRoot != block.hashMerkleRoot){
+         //there is a mismatched tx, so go through and determine which txs
+         if(block.vtx.size() > checkBlock.vtx.size()){
+            LogPrintf("Unexpected AAL transactions in block. Actual txs: %i, expected txs: %i\n", block.vtx.size(), checkBlock.vtx.size());
+            for(size_t i=0;i<block.vtx.size();i++){
+               if(i > checkBlock.vtx.size()-1){
+                  LogPrintf("Unexpected transaction: %s\n", block.vtx[i].ToString());
+               }else {
+                  if (block.vtx[i].GetHash() != checkBlock.vtx[i].GetHash()) {
+                     LogPrintf("Mismatched transaction at entry %i\n", i);
+                     LogPrintf("Actual: %s\n", block.vtx[i].ToString());
+                     LogPrintf("Expected: %s\n", checkBlock.vtx[i].ToString());
+                  }
+               }
+            }
+         }else if(block.vtx.size() < checkBlock.vtx.size()){
+            LogPrintf("Actual block is missing AAL transactions. Actual txs: %i, expected txs: %i\n", block.vtx.size(), checkBlock.vtx.size());
+            for(size_t i=0;i<checkBlock.vtx.size();i++){
+               if(i > block.vtx.size()-1){
+                  LogPrintf("Missing transaction: %s\n", checkBlock.vtx[i].ToString());
+               }else {
+                  if (block.vtx[i].GetHash() != checkBlock.vtx[i].GetHash()) {
+                     LogPrintf("Mismatched transaction at entry %i\n", i);
+                     LogPrintf("Actual: %s\n", block.vtx[i].ToString());
+                     LogPrintf("Expected: %s\n", checkBlock.vtx[i].ToString());
+                  }
+               }
+            }
+         }else{
+            //count is correct, but a tx is wrong
+            for(size_t i=0;i<checkBlock.vtx.size();i++){
+               if (block.vtx[i].GetHash() != checkBlock.vtx[i].GetHash()) {
+                  LogPrintf("Mismatched transaction at entry %i\n", i);
+                  LogPrintf("Actual: %s\n", block.vtx[i].ToString());
+                  LogPrintf("Expected: %s\n", checkBlock.vtx[i].ToString());
+               }
+            }
+         }
+      }
+      if(checkBlock.hashUTXORoot != block.hashUTXORoot){
+         LogPrintf("Actual block data does not match hashUTXORoot expected by AAL block\n");
+      }
+      if(checkBlock.hashStateRoot != block.hashStateRoot){
+         LogPrintf("Actual block data does not match hashStateRoot expected by AAL block\n");
+      }
+
+      return state.Invalid(error("ConnectBlock(): Incorrect AAL transactions or hashes (hashStateRoot, hashUTXORoot)"), REJECT_INVALID, "incorrect-transactions-or-hashes-block");
+   }
    if (fJustCheck)
    {
       dev::h256 prevHashStateRoot(dev::sha3(dev::rlp("")));
@@ -4961,7 +5138,7 @@ bool ProcessNewBlock(CValidationState& state, CNode* pfrom, CBlock* pblock, CDis
 
     LogPrintf("%s : ACCEPTED Block %ld in %ld milliseconds with size=%d\n", __func__, GetHeight(), GetTimeMillis() - nStartTime,
               pblock->GetSerializeSize(SER_DISK, CLIENT_VERSION));
-    LogPrint("sc","%s : SC: rootHash: %s, rootHashUTXO: %s\n",__func__, globalState->rootHash().hex().c_str(), globalState->rootHashUTXO().hex().c_str());
+    //LogPrint("sc","%s : SC: rootHash: %s, rootHashUTXO: %s\n",__func__, globalState->rootHash().hex().c_str(), globalState->rootHashUTXO().hex().c_str());
 
 
     return true;
@@ -5273,7 +5450,7 @@ bool CVerifyDB::VerifyDB(CCoinsView* coinsview, int nCheckLevel, int nCheckDepth
             dev::h256 oldHashStateRoot(globalState->rootHash()); // qtum
             dev::h256 oldHashUTXORoot(globalState->rootHashUTXO()); // qtum
 
-            if (!ConnectBlock(block, state, pindex, coins, false)){
+            if (!ConnectBlock(block, state, pindex, coins, false, false, true)){
                 globalState->setRoot(oldHashStateRoot); // qtum
                 globalState->setRootUTXO(oldHashUTXORoot); // qtum
                 return error("VerifyDB() : *** found unconnectable block at %d, hash=%s", pindex->nHeight, pindex->GetBlockHash().ToString());

@@ -32,9 +32,9 @@ void ContractStateInit()
     globalSealEngine = std::unique_ptr<dev::eth::SealEngineFace>(cp.createSealEngine());
 
     if(chainActive.Tip() != nullptr){
-        auto hashStRoot = uintToh256(chainActive.Tip()->hashStateRoot);
-        auto hashUTXORoot = uintToh256(chainActive.Tip()->hashUTXORoot);
-        LogPrint("sc", "%s: chainActive.Tip()->hashStateRoot: %s, chainActive.Tip()->hashUTXORoot: %s\n", __func__, hashStRoot.hex().c_str(), hashUTXORoot.hex().c_str());
+        //auto hashStRoot = uintToh256(chainActive.Tip()->hashStateRoot);
+        //auto hashUTXORoot = uintToh256(chainActive.Tip()->hashUTXORoot);
+        //LogPrint("sc", "%s: chainActive.Tip()->hashStateRoot: %s, chainActive.Tip()->hashUTXORoot: %s\n", __func__, hashStRoot.hex().c_str(), hashUTXORoot.hex().c_str());
 
         //globalState->setRoot(dev::sha3(dev::rlp("")));
         globalState->setRoot(uintToh256(chainActive.Tip()->hashStateRoot));
@@ -278,7 +278,7 @@ valtype GetSenderAddress(const CTransaction& tx, const CCoinsViewCache* coinsVie
     }
     if(!scriptFilled && coinsView){
         auto coins = coinsView->AccessCoins(tx.vin[0].prevout.hash);
-        if (coins && coins->vout.size() > 0) {
+       if (coins && tx.vin[0].prevout.n < coins->vout.size()) {
             script = coins->vout[tx.vin[0].prevout.n].scriptPubKey;
             scriptFilled = true;
         }

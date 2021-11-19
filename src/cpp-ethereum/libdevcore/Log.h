@@ -10,7 +10,9 @@
 #include <string>
 #include <vector>
 
-#ifndef QTUM_BUILD
+//legacy code from qtum but not work there
+//#ifndef QTUM_BUILD
+#ifdef QTUM_BUILD
 
 #include <boost/log/attributes/scoped_attribute.hpp>
 #include <boost/log/sources/global_logger_storage.hpp>

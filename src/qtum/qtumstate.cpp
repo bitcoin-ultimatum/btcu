@@ -3,6 +3,7 @@
 //#include <validation.h>
 #include <chainparams.h>
 #include <qtum/qtumstate.h>
+#include <libevm/VMFace.h>
 
 using namespace std;
 using namespace dev;
@@ -49,18 +50,15 @@ ResultExecute QtumState::execute(EnvInfo const& _envInfo, SealEngineFace const& 
     u256 startGasUsed;
     const CChainParams& consensusParams = Params();
     try{
-        //TO_FIX: Uncomment this check
-        //if (_t.isCreation() && _t.value())
-        //    BOOST_THROW_EXCEPTION(CreateWithValue());
+
+        if (_t.isCreation() && _t.value())
+            BOOST_THROW_EXCEPTION(CreateWithValue());
 
         e.initialize(_t);
         // OK - transaction looks valid - execute.
         startGasUsed = _envInfo.gasUsed();
         if (!e.execute()){
             e.go(onOp);
-            /*if(ChainActive().Height() >= consensusParams.QIP7Height){
-            	validateTransfersWithChangeLog();
-            }*/
             validateTransfersWithChangeLog();
         } else {
             e.revert();
