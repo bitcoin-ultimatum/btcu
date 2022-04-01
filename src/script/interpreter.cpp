@@ -14,7 +14,7 @@
 #include "pubkey.h"
 #include "script/script.h"
 #include "uint256.h"
-
+#include "main.h"
 
 typedef std::vector<unsigned char> valtype;
 
@@ -1234,6 +1234,113 @@ uint256 SignatureHash(const CScript& scriptCode, const CTransaction& txTo, unsig
     CHashWriter ss(SER_GETHASH, 0);
     ss << txTmp << nHashType;
     return ss.GetHash();
+}
+
+namespace BTC {
+
+   uint256 GetPrevoutHash(const CTransaction& txTo) {
+      CHashWriter ss(SER_GETHASH, 0);
+      for (const auto& txin : txTo.vin) {
+         ss << txin.prevout;
+      }
+      return ss.GetHash();
+   }
+
+   uint256 GetSequenceHash(const CTransaction& txTo) {
+      CHashWriter ss(SER_GETHASH, 0);
+      for (const auto& txin : txTo.vin) {
+         ss << txin.nSequence;
+      }
+      return ss.GetHash();
+   }
+
+   uint256 GetOutputsHash(const CTransaction& txTo) {
+      CHashWriter ss(SER_GETHASH, 0);
+      for (const auto& txout : txTo.vout) {
+         ss << txout;
+      }
+      return ss.GetHash();
+   }
+
+   PrecomputedTransactionData::PrecomputedTransactionData(const CTransaction& txTo)
+   {
+      // Cache is calculated only for transactions with witness
+      if (txTo.HasWitness()) {
+         hashPrevouts = GetPrevoutHash(txTo);
+         hashSequence = GetSequenceHash(txTo);
+         hashOutputs = GetOutputsHash(txTo);
+         ready = true;
+      }
+   }
+
+   uint256 SignatureHash(const CScript& scriptCode, const CTransaction& txTo, unsigned int nIn, int nHashType, const CAmount& amount, SigVersion sigversion, const PrecomputedTransactionData* cache)
+   {
+      assert(nIn < txTo.vin.size());
+
+      if (sigversion == SigVersion::WITNESS_V0) {
+         uint256 hashPrevouts;
+         uint256 hashSequence;
+         uint256 hashOutputs;
+         const bool cacheready = cache && cache->ready;
+
+         if (!(nHashType & SIGHASH_ANYONECANPAY)) {
+            hashPrevouts = cacheready ? cache->hashPrevouts : GetPrevoutHash(txTo);
+         }
+
+         if (!(nHashType & SIGHASH_ANYONECANPAY) && (nHashType & 0x1f) != SIGHASH_SINGLE && (nHashType & 0x1f) != SIGHASH_NONE) {
+            hashSequence = cacheready ? cache->hashSequence : GetSequenceHash(txTo);
+         }
+
+
+         if ((nHashType & 0x1f) != SIGHASH_SINGLE && (nHashType & 0x1f) != SIGHASH_NONE) {
+            hashOutputs = cacheready ? cache->hashOutputs : GetOutputsHash(txTo);
+         } else if ((nHashType & 0x1f) == SIGHASH_SINGLE && nIn < txTo.vout.size()) {
+            CHashWriter ss(SER_GETHASH, 0);
+            ss << txTo.vout[nIn];
+            hashOutputs = ss.GetHash();
+         }
+
+         CHashWriter ss(SER_GETHASH, 0);
+         // Version
+         ss << txTo.nVersion;
+         // Input prevouts/nSequence (none/all, depending on flags)
+         ss << hashPrevouts;
+         ss << hashSequence;
+         // The input being signed (replacing the scriptSig with scriptCode + amount)
+         // The prevout may already be contained in hashPrevout, and the nSequence
+         // may already be contain in hashSequence.
+         ss << txTo.vin[nIn].prevout;
+         ss << scriptCode;
+         ss << amount;
+         ss << txTo.vin[nIn].nSequence;
+         // Outputs (none/one/all, depending on flags)
+         ss << hashOutputs;
+         // Locktime
+         ss << txTo.nLockTime;
+         // Sighash type
+         ss << nHashType;
+
+         return ss.GetHash();
+      }
+
+      static const uint256 one(uint256S("0000000000000000000000000000000000000000000000000000000000000001"));
+
+      // Check for invalid use of SIGHASH_SINGLE
+      if ((nHashType & 0x1f) == SIGHASH_SINGLE) {
+         if (nIn >= txTo.vout.size()) {
+            //  nOut out of range
+            return one;
+         }
+      }
+
+      // Wrapper to serialize only the necessary parts of the transaction being signed
+      CTransactionSignatureSerializer txTmp(txTo, scriptCode, nIn, nHashType);
+
+      // Serialize and hash
+      CHashWriter ss(SER_GETHASH, 0);
+      ss << txTmp << nHashType;
+      return ss.GetHash();
+   }
 }
 
 bool TransactionSignatureChecker::VerifyECDSASignature(const std::vector<unsigned char>& vchSig, const CPubKey& pubkey, const uint256& sighash) const
@@ -2476,6 +2583,46 @@ namespace BTC
                   }
                      break;
 
+                  case OP_CHECKLEASELOCKTIMEVERIFY:
+                  {
+                     if (!(flags & SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY))
+                     {
+                        // not enabled; treat as a NOP2
+                        break;
+                     }
+
+                     if (stack.size() < 1)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+
+                     // Note that elsewhere numeric opcodes are limited to
+                     // operands in the range -2**31+1 to 2**31-1, however it is
+                     // legal for opcodes to produce results exceeding that
+                     // range. This limitation is implemented by CScriptNum's
+                     // default 4-byte limit.
+                     //
+                     // If we kept to that limit we'd have a year 2038 problem,
+                     // even though the nLockTime field in transactions
+                     // themselves is uint32 which only becomes meaningless
+                     // after the year 2106.
+                     //
+                     // Thus as a special case we tell CScriptNum to accept up
+                     // to 5-byte bignums, which are good until 2**39-1, well
+                     // beyond the 2**32-1 limit of the nLockTime field itself.
+                     const CScriptNum nLockTime(stacktop(-1), fRequireMinimal, 5);
+
+                     // In the rare event that the argument may be < 0 due to
+                     // some arithmetic being done first, you can always use
+                     // 0 MAX CHECKLOCKTIMEVERIFY.
+                     if (nLockTime < 0)
+                        return set_error(serror, SCRIPT_ERR_NEGATIVE_LOCKTIME);
+
+                     // Actually compare the specified lock time with the transaction.
+                     if (!checker.CheckLeaseLockTime(nLockTime))
+                        return set_error(serror, SCRIPT_ERR_UNSATISFIED_LOCKTIME);
+
+                     break;
+                  }
+
                   default:
                      return set_error(serror, SCRIPT_ERR_BAD_OPCODE);
                }
@@ -2699,7 +2846,7 @@ namespace BTC
    }
 
    bool VerifyScript(const CScript& scriptSig, const CScript& scriptPubKey, const CScriptWitness* witness,
-                        unsigned int flags, const BaseSignatureChecker& checker, ScriptError* serror)
+                        unsigned int flags, const BTC::BaseSignatureChecker& checker, ScriptError* serror)
    {
       static const CScriptWitness emptyWitness;
       if (witness == nullptr)
@@ -2847,5 +2994,184 @@ namespace BTC
 
       return set_success(serror);
    }
+
+
+   bool TransactionSignatureChecker::VerifySignature(const std::vector<unsigned char>& vchSig, const CPubKey& pubkey, const uint256& sighash) const
+   {
+      return pubkey.Verify(sighash, vchSig);
+   }
+
+   bool TransactionSignatureChecker::CheckSig(const std::vector<unsigned char>& vchSigIn, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion) const
+   {
+      CPubKey pubkey(vchPubKey);
+      if (!pubkey.IsValid())
+         return false;
+
+      // Hash type is one byte tacked on to the end of the signature
+      std::vector<unsigned char> vchSig(vchSigIn);
+      if (vchSig.empty())
+         return false;
+      int nHashType = vchSig.back();
+      vchSig.pop_back();
+
+      uint256 sighash = SignatureHash(scriptCode, *txTo, nIn, nHashType, amount, sigversion, this->txdata);
+
+      if (!VerifySignature(vchSig, pubkey, sighash))
+         return false;
+
+      return true;
+   }
+
+   bool TransactionSignatureChecker::CheckLockTime(const CScriptNum& nLockTime) const
+   {
+      // There are two kinds of nLockTime: lock-by-blockheight
+      // and lock-by-blocktime, distinguished by whether
+      // nLockTime < LOCKTIME_THRESHOLD.
+      //
+      // We want to compare apples to apples, so fail the script
+      // unless the type of nLockTime being tested is the same as
+      // the nLockTime in the transaction.
+      if (!(
+      (txTo->nLockTime <  LOCKTIME_THRESHOLD && nLockTime <  LOCKTIME_THRESHOLD) ||
+      (txTo->nLockTime >= LOCKTIME_THRESHOLD && nLockTime >= LOCKTIME_THRESHOLD)
+      ))
+         return false;
+
+      // Now that we know we're comparing apples-to-apples, the
+      // comparison is a simple numeric one.
+      if (nLockTime > (int64_t)txTo->nLockTime)
+         return false;
+
+      // Finally the nLockTime feature can be disabled and thus
+      // CHECKLOCKTIMEVERIFY bypassed if every txin has been
+      // finalized by setting nSequence to maxint. The
+      // transaction would be allowed into the blockchain, making
+      // the opcode ineffective.
+      //
+      // Testing if this vin is not final is sufficient to
+      // prevent this condition. Alternatively we could test all
+      // inputs, but testing just this input minimizes the data
+      // required to prove correct CHECKLOCKTIMEVERIFY execution.
+      if (CTxIn::SEQUENCE_FINAL == txTo->vin[nIn].nSequence)
+         return false;
+
+      return true;
+   }
+
+   bool TransactionSignatureChecker::CheckLeaseLockTime(const CScriptNum& nLockTime) const
+   {
+      //compairing locking time with last block time
+      if (nLockTime > chainActive.Tip()->GetBlockTime())
+         return false;
+
+      return true;
+   }
+
+   bool TransactionSignatureChecker::CheckSequence(const CScriptNum& nSequence) const
+   {
+      // Relative lock times are supported by comparing the passed
+      // in operand to the sequence number of the input.
+      const int64_t txToSequence = (int64_t)txTo->vin[nIn].nSequence;
+
+      // Fail if the transaction's version number is not set high
+      // enough to trigger BIP 68 rules.
+      if (static_cast<uint32_t>(txTo->nVersion) < 2)
+         return false;
+
+      // Sequence numbers with their most significant bit set are not
+      // consensus constrained. Testing that the transaction's sequence
+      // number do not have this bit set prevents using this property
+      // to get around a CHECKSEQUENCEVERIFY check.
+      if (txToSequence & CTxIn::SEQUENCE_LOCKTIME_DISABLE_FLAG)
+         return false;
+
+      // Mask off any bits that do not have consensus-enforced meaning
+      // before doing the integer comparisons
+      const uint32_t nLockTimeMask = CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG | CTxIn::SEQUENCE_LOCKTIME_MASK;
+      const int64_t txToSequenceMasked = txToSequence & nLockTimeMask;
+      const CScriptNum nSequenceMasked = nSequence & nLockTimeMask;
+
+      // There are two kinds of nSequence: lock-by-blockheight
+      // and lock-by-blocktime, distinguished by whether
+      // nSequenceMasked < CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG.
+      //
+      // We want to compare apples to apples, so fail the script
+      // unless the type of nSequenceMasked being tested is the same as
+      // the nSequenceMasked in the transaction.
+      if (!(
+      (txToSequenceMasked <  CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG && nSequenceMasked <  CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG) ||
+      (txToSequenceMasked >= CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG && nSequenceMasked >= CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG)
+      )) {
+         return false;
+      }
+
+      // Now that we know we're comparing apples-to-apples, the
+      // comparison is a simple numeric one.
+      if (nSequenceMasked > txToSequenceMasked)
+         return false;
+
+      return true;
+   }
+
+   bool TransactionSignatureChecker::VerifyECDSASignature(const std::vector<unsigned char>& vchSig, const CPubKey& pubkey, const uint256& sighash) const
+   {
+      return pubkey.Verify(sighash, vchSig);
+   }
+
+   bool TransactionSignatureChecker::VerifySchnorrSignature(Span<const unsigned char> sig, const XOnlyPubKey& pubkey, const uint256& sighash) const
+   {
+      return pubkey.VerifySchnorr(sighash, sig);
+   }
+
+   bool TransactionSignatureChecker::CheckECDSASignature(const std::vector<unsigned char>& vchSigIn, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion) const
+   {
+      CPubKey pubkey(vchPubKey);
+      if (!pubkey.IsValid())
+         return false;
+
+      // Hash type is one byte tacked on to the end of the signature
+      std::vector<unsigned char> vchSig(vchSigIn);
+      if (vchSig.empty())
+         return false;
+      int nHashType = vchSig.back();
+      vchSig.pop_back();
+
+      uint256 sighash = SignatureHash(scriptCode, *txTo, nIn, nHashType);
+      //TODO export new btc method SignatureHash(scriptCode, *txTo, nIn, nHashType, amount, sigversion, this->txdata);
+
+      if (!VerifyECDSASignature(vchSig, pubkey, sighash))
+         return false;
+
+      return true;
+   }
+
+
+   bool TransactionSignatureChecker::CheckSchnorrSignature(Span<const unsigned char> sig, Span<const unsigned char> pubkey_in, SigVersion sigversion, const ScriptExecutionData& execdata, ScriptError* serror) const
+   {
+      assert(sigversion == SigVersion::TAPROOT || sigversion == SigVersion::TAPSCRIPT);
+      // Schnorr signatures have 32-byte public keys. The caller is responsible for enforcing this.
+      assert(pubkey_in.size() == 32);
+      // Note that in Tapscript evaluation, empty signatures are treated specially (invalid signature that does not
+      // abort script execution). This is implemented in EvalChecksigTapscript, which won't invoke
+      // CheckSchnorrSignature in that case. In other contexts, they are invalid like every other signature with
+      // size different from 64 or 65.
+      if (sig.size() != 64 && sig.size() != 65) return set_error(serror, SCRIPT_ERR_SCHNORR_SIG_SIZE);
+
+      XOnlyPubKey pubkey{pubkey_in};
+
+      uint8_t hashtype = SIGHASH_DEFAULT;
+      if (sig.size() == 65) {
+         hashtype = SpanPopBack(sig);
+         if (hashtype == SIGHASH_DEFAULT) return set_error(serror, SCRIPT_ERR_SCHNORR_SIG_HASHTYPE);
+      }
+      uint256 sighash;
+      //assert(this->txdata);
+      //if (!SignatureHashSchnorr(sighash, execdata, *txTo, nIn, hashtype, sigversion, *this->txdata)) {
+      //   return set_error(serror, SCRIPT_ERR_SCHNORR_SIG_HASHTYPE);
+      //}
+      if (!VerifySchnorrSignature(sig, pubkey, sighash)) return set_error(serror, SCRIPT_ERR_SCHNORR_SIG);
+      return true;
+   }
+
 }
 ////////////////////////////////////////////////////

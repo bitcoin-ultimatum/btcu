@@ -55,11 +55,7 @@ TestingSetup::TestingSetup() : BasicTestingSetup()
         pcoinsdbview = new CCoinsViewDB(1 << 23, true);
         pcoinsTip = new CCoinsViewCache(pcoinsdbview);
         InitBlockIndex();
-        {
-            CValidationState state;
-            bool ok = ActivateBestChain(state);
-            BOOST_CHECK(ok);
-        }
+
         namespace fs = boost::filesystem;
         const CChainParams& chainparams = Params();
         dev::eth::NoProof::init();
@@ -72,19 +68,20 @@ TestingSetup::TestingSetup() : BasicTestingSetup()
         auto geni = chainparams.EVMGenesisInfo(dev::eth::Network::qtumMainNetwork);
         dev::eth::ChainParams cp((geni));
         globalSealEngine = std::unique_ptr<dev::eth::SealEngineFace>(cp.createSealEngine());
-
-       // if(chainActive.Tip() != nullptr){
-       //     auto hash = uintToh256(chainActive.Tip()->hashStateRoot);
-       //     globalState->setRoot(hash);
-       //     globalState->setRootUTXO(uintToh256(chainActive.Tip()->hashUTXORoot));
-       // } else {
-            globalState->setRoot(dev::sha3(dev::rlp("")));
-            globalState->setRootUTXO(uintToh256(chainparams.GenesisBlock().hashUTXORoot));
-            globalState->populateFrom(cp.genesisState);
-        //}
+        globalState->setRoot(dev::sha3(dev::rlp("")));
+        globalState->setRootUTXO(uintToh256(chainparams.GenesisBlock().hashUTXORoot));
+        globalState->populateFrom(cp.genesisState);
 
         globalState->db().commit();
         globalState->dbUtxo().commit();
+
+   {
+            CValidationState state;
+            bool ok = ActivateBestChain(state);
+            BOOST_CHECK(ok);
+        }
+
+
 #ifdef ENABLE_WALLET
         bool fFirstRun;
         pwalletMain = new CWallet("wallet.dat");

@@ -31,5 +31,6 @@ sed -i '' 's/'"${1}"'/'"${2}"'/' contrib/debian/control
 sed -i '' 's/'"${1}"'/'"${2}"'/' build-aux/snap/snapcraft.yaml
 
 cp tmpmerge/chainparams.cpp src/chainparams.cpp
+cp tmpmerge/chainparams.h src/chainparams.h
 cp tmpmerge/blockrewards.h src/blockrewards.h
 rm -rf tmpmerge

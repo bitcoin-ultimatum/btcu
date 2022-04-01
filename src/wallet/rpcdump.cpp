@@ -25,6 +25,7 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 
 #include <univalue.h>
+#include <key_io.h>
 
 
 std::string static EncodeDumpTime(int64_t nTime)
@@ -121,10 +122,15 @@ UniValue importprivkey(const UniValue& params, bool fHelp)
         EnsureWalletIsUnlocked();
 
         pwalletMain->MarkDirty();
-        pwalletMain->SetAddressBook(vchAddress, strLabel, (
-                fStakingAddress ?
-                        AddressBook::AddressBookPurpose::COLD_STAKING :
-                        AddressBook::AddressBookPurpose::RECEIVE));
+
+       // We don't know which corresponding address will be used; label them all
+       for (const auto& dest : GetAllDestinationsForKey(pubkey)) {
+          pwalletMain->SetAddressBook(vchAddress, strLabel, (
+          fStakingAddress ?
+          AddressBook::AddressBookPurpose::COLD_STAKING :
+          AddressBook::AddressBookPurpose::RECEIVE));
+       }
+
 
         // Don't throw error in case a key is already there
         if (pwalletMain->HaveKey(vchAddress))
@@ -138,6 +144,8 @@ UniValue importprivkey(const UniValue& params, bool fHelp)
         // whenever a key is imported, we need to scan the whole chain
         pwalletMain->nTimeFirstKey = 1; // 0 would be considered 'no value'
 
+        pwalletMain->LearnAllRelatedScripts(pubkey);
+
         if (fRescan) {
             auto *pIndex = chainActive.Genesis();
             if (fStakingAddress && !Params().IsRegTestNet()) {
@@ -147,8 +155,7 @@ UniValue importprivkey(const UniValue& params, bool fHelp)
             pwalletMain->ScanForWalletTransactions(pcoinsTip->SeekToFirst(), pIndex, true);
         }
     }
-    
-    return CBTCUAddress(vchAddress).ToString();
+    return NullUniValue;
 }
 
 UniValue importaddress(const UniValue& params, bool fHelp)
@@ -372,14 +379,16 @@ UniValue dumpprivkey(const UniValue& params, bool fHelp)
     EnsureWalletIsUnlocked();
 
     std::string strAddress = params[0].get_str();
-    CBTCUAddress address;
-    if (!address.SetString(strAddress))
-        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid BTCU address");
-    CKeyID keyID;
-    if (!address.GetKeyID(keyID))
-        throw JSONRPCError(RPC_TYPE_ERROR, "Address does not refer to a key");
+   CTxDestination dest = DecodeDestination(strAddress);
+   if (!IsValidDestination(dest)) {
+      throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Bitcoin address");
+   }
+   auto keyid = GetKeyForDestination(*pwalletMain, dest);
+   if (keyid.IsNull()) {
+      throw JSONRPCError(RPC_TYPE_ERROR, "Address does not refer to a key");
+   }
     CKey vchSecret;
-    if (!pwalletMain->GetKey(keyID, vchSecret))
+    if (!pwalletMain->GetKey(keyid, vchSecret))
         throw JSONRPCError(RPC_WALLET_ERROR, "Private key for address " + strAddress + " is not known");
     return CBTCUSecret(vchSecret).ToString();
 }

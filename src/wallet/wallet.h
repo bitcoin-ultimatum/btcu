@@ -113,6 +113,16 @@ enum ZerocoinSpendStatus {
     ZBTCU_SPEND_V1_SEC_LEVEL                         // Spend is V1 and security level is not set to 100
 };
 
+enum OutputType : int
+{
+   OUTPUT_TYPE_NONE,
+   OUTPUT_TYPE_LEGACY,
+   OUTPUT_TYPE_P2SH_SEGWIT,
+   OUTPUT_TYPE_BECH32,
+
+   OUTPUT_TYPE_DEFAULT = OUTPUT_TYPE_P2SH_SEGWIT
+};
+
 struct CompactTallyItem {
     CBTCUAddress address;
     CAmount nAmount;
@@ -586,6 +596,20 @@ public:
     /** Interface for accessing chain state. */
     interfaces::Chain& chain() const { assert(m_chain); return *m_chain; }
     Node* getNode() const { return m_node; }
+
+   /**
+* Explicitly make the wallet learn the related scripts for outputs to the
+* given key. This is purely to make the wallet file compatible with older
+* software, as CBasicKeyStore automatically does this implicitly for all
+* keys now.
+*/
+   void LearnRelatedScripts(const CPubKey& key, OutputType);
+
+   /**
+    * Same as LearnRelatedScripts, but when the OutputType is not known (and could
+    * be anything).
+    */
+   void LearnAllRelatedScripts(const CPubKey& key);
 };
 
 struct CRecipient
@@ -1071,5 +1095,8 @@ public:
 private:
     std::vector<char> _ssExtra;
 };
+
+/** Get all destinations (potentially) supported by the wallet for the given key. */
+std::vector<CTxDestination> GetAllDestinationsForKey(const CPubKey& key);
 
 #endif // BITCOIN_WALLET_H

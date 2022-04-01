@@ -153,14 +153,15 @@ isminetype IsMine(const CKeyStore& keystore, const CScript& scriptPubKey, IsMine
             return ISMINE_SPENDABLE_DELEGATED;
         break;
     }
+    case TX_LEASE_CLTV:
     case TX_LEASE: {
         if (sigversion != IsMineSigVersion::TOP) {
             break;
         }
 
-        CKeyID leaserKeyID = CKeyID(uint160(vSolutions[0]));
+        CKeyID leaserKeyID = (whichType == TX_LEASE) ? CKeyID(uint160(vSolutions[0])):CKeyID(uint160(vSolutions[1]));
         bool leaserKeyIsMine = keystore.HaveKey(leaserKeyID);
-        CKeyID ownerKeyID = CKeyID(uint160(vSolutions[1]));
+        CKeyID ownerKeyID = (whichType == TX_LEASE) ? CKeyID(uint160(vSolutions[1])): CKeyID(uint160(vSolutions[2]));
         bool spendKeyIsMine = keystore.HaveKey(ownerKeyID);
 
         if (spendKeyIsMine && leaserKeyIsMine)

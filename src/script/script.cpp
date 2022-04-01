@@ -168,6 +168,7 @@ const char* GetOpName(opcodetype opcode)
     // leasing
     case OP_CHECKLEASEVERIFY       : return "OP_CHECKLEASEVERIFY";
     case OP_LEASINGREWARD          : return "OP_LEASINGREWARD";
+    case OP_CHECKLEASELOCKTIMEVERIFY    : return "OP_CHECKLEASELOCKTIMEVERIFY";
 
     // Opcode added by BIP 342 (Tapscript)
     case OP_CHECKSIGADD            : return "OP_CHECKSIGADD";
@@ -312,13 +313,23 @@ bool CScript::IsPayToColdStaking() const
 bool CScript::IsPayToLeasing() const
 {
     // Extra-fast test for pay-to-leasing CScripts:
-    return (this->size() == 51 &&
+    return ((this->size() == 51 &&
             this->at(2) == OP_ROT &&
             this->at(4) == OP_CHECKLEASEVERIFY &&
             this->at(5) == 0x14 &&
             this->at(27) == 0x14 &&
             this->at(49) == OP_EQUALVERIFY &&
-            this->at(50) == OP_CHECKSIG);
+            this->at(50) == OP_CHECKSIG)
+            ||
+            (this->size() == 58 &&
+            this->at(5) == OP_CHECKLEASELOCKTIMEVERIFY &&
+            this->at(9) == OP_ROT &&
+            this->at(11) == OP_CHECKLEASEVERIFY &&
+            this->at(12) == 0x14 &&
+            this->at(34) == 0x14 &&
+            this->at(56) == OP_EQUALVERIFY &&
+            this->at(57) == OP_CHECKSIG));
+
 }
 
 bool CScript::IsLeasingReward() const {

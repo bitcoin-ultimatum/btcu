@@ -36,6 +36,7 @@
 #include "validation.h"
 #include "coincontrol.h"
 #include "contract.h"
+#include "consensus/validator_tx_verify.h"
 
 int64_t nWalletUnlockTime;
 static CCriticalSection cs_nWalletUnlockTime;
@@ -1352,7 +1353,7 @@ UniValue getaddressesbyaccount(const UniValue& params, bool fHelp)
 
 void SendMoney(const CTxDestination& address, CAmount nValue, CWalletTx& wtxNew, bool fUseIX = false,
         const std::vector<CValidatorRegister> &validatorRegister = std::vector<CValidatorRegister>(),
-        const std::vector<CValidatorVote> &validatorVote = std::vector<CValidatorVote>())
+        const std::vector<CValidatorVote> &validatorVote = std::vector<CValidatorVote>(), CCoinsViewCache* pView = nullptr)
 {
     // Check amount
     if (nValue <= 0)
@@ -1380,6 +1381,19 @@ void SendMoney(const CTxDestination& address, CAmount nValue, CWalletTx& wtxNew,
         LogPrintf("SendMoney() : %s\n", strError);
         throw JSONRPCError(RPC_WALLET_ERROR, strError);
     }
+
+    //check validators before committing
+   std::vector<CTransaction> validatorTransactions;
+   for(auto &t: mempool.mapTx){
+      const CTransaction &valTx = t.second.GetTx();
+      if(valTx.IsValidatorVote() || valTx.IsValidatorRegister())
+         validatorTransactions.push_back(valTx);
+   }
+   CValidationState state;
+   // nHeight is +1 due to current transaction should be included at least into the next block
+   if(!CheckValidatorTransaction(wtxNew, state, pView, chainActive.Height() + 1, validatorTransactions))
+      throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Failed CheckValidatorTransaction(): %s", state.GetRejectReason()));
+
     if (!pwalletMain->CommitTransaction(wtxNew, reservekey, (!fUseIX ? "tx" : "ix")))
         throw JSONRPCError(RPC_WALLET_ERROR, "Error: The transaction was rejected! This might happen if some of the coins in your wallet were already spent, such as if you used a copy of wallet.dat and coins were spent in the copy but not marked as spent here.");
 }
@@ -1643,8 +1657,8 @@ UniValue CreateLeasingTransaction(const UniValue& params, CWalletTx& wtxNew, CRe
 
     // Check that Leasing has been enforced or fForceNotEnabled = true
     bool fForceNotEnabled = false;
-    if (params.size() > 4 && !params[4].isNull())
-        fForceNotEnabled = params[4].get_bool();
+    if (params.size() > 5 && !params[5].isNull())
+        fForceNotEnabled = params[5].get_bool();
 
     if (!sporkManager.IsSporkActive(SPORK_1017_LEASING_ENFORCEMENT) && !fForceNotEnabled) {
         std::string errMsg = "Leasing disabled with SPORK 1017.\n"
@@ -1674,18 +1688,27 @@ UniValue CreateLeasingTransaction(const UniValue& params, CWalletTx& wtxNew, CRe
     std::string strError;
     EnsureWalletIsUnlocked();
 
+    int64_t nLockTime = -1;
+    //Get timestamp leasing lock until
+    if (params.size() > 2 && !params[2].isNull())
+    {
+       nLockTime = params[2].get_int64();
+       if (nLockTime < 0 || nLockTime > std::numeric_limits<uint32_t>::max())
+          throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, locktime out of range");
+    }
+
     // Get Owner Address
     CBTCUAddress ownerAddr;
     CKeyID ownerKey;
-    if (params.size() > 2 && !params[2].isNull() && !params[2].get_str().empty()) {
+    if (params.size() > 3 && !params[3].isNull() && !params[3].get_str().empty()) {
         // Address provided
-        ownerAddr.SetString(params[2].get_str());
+        ownerAddr.SetString(params[3].get_str());
         if (!ownerAddr.IsValid())
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid BTCU spending address");
         if (!ownerAddr.GetKeyID(ownerKey))
             throw JSONRPCError(RPC_WALLET_ERROR, "Unable to get spend pubkey hash from owneraddress");
         // Check that the owner address belongs to this wallet, or fForceExternalAddr is true
-        bool fForceExternalAddr = params.size() > 3 && !params[3].isNull() ? params[3].get_bool() : false;
+        bool fForceExternalAddr = params.size() > 4 && !params[4].isNull() ? params[4].get_bool() : false;
         if (!fForceExternalAddr && !pwalletMain->HaveKey(ownerKey)) {
             std::string errMsg = strprintf("The provided owneraddress \"%s\" is not present in this wallet.\n"
                                            "Set 'fExternalOwner' argument to true, in order to force the leasing to an external owner address.\n"
@@ -1703,7 +1726,7 @@ UniValue CreateLeasingTransaction(const UniValue& params, CWalletTx& wtxNew, CRe
     }
 
     // Get P2L script for addresses
-    CScript scriptPubKey = GetScriptForLeasing(leaserKey, ownerKey);
+    CScript scriptPubKey = (nLockTime > 0) ? GetScriptForLeasingCLTV(leaserKey, ownerKey, nLockTime):GetScriptForLeasing(leaserKey, ownerKey);
 
     // Create the transaction
     CAmount nFeeRequired;
@@ -1731,11 +1754,12 @@ UniValue leasetoaddress(const UniValue& params, bool fHelp)
             "\nArguments:\n"
             "1. \"leasingaddress\"      (string, required) The btcu leasing address to lease.\n"
             "2. \"amount\"              (numeric, required) The amount in BTCU to lease for mining. eg 100\n"
-            "3. \"owneraddress\"        (string, optional) The btcu address corresponding to the key that will be able to spend the rewards. \n"
+            "3. \"timestamp\"           (numeric, optional) The lock time, until leased utxo will be locked\n"
+            "4. \"owneraddress\"        (string, optional) The btcu address corresponding to the key that will be able to spend the rewards. \n"
             "                               If not provided, or empty string, a new wallet address is generated.\n"
-            "4. \"fExternalOwner\"      (boolean, optional, default = false) use the provided 'owneraddress' anyway, even if not present in this wallet.\n"
+            "5. \"fExternalOwner\"      (boolean, optional, default = false) use the provided 'owneraddress' anyway, even if not present in this wallet.\n"
             "                               WARNING: The owner of the keys to 'owneraddress' will be the only one allowed to spend these rewards.\n"
-            "5. \"fForceNotEnabled\"    (boolean, optional, default = false) force the creation even if SPORK 1017 is disabled (for tests)."
+            "6. \"fForceNotEnabled\"    (boolean, optional, default = false) force the creation even if SPORK 1017 is disabled (for tests)."
 
             "\nResult:\n"
             "{\n"

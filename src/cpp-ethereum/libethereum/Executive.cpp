@@ -15,6 +15,7 @@
 #include <libethcore/CommonJS.h>
 #include <libevm/LegacyVM.h>
 #include <libevm/VMFactory.h>
+#include "util.h"
 
 using namespace std;
 using namespace dev;
@@ -143,8 +144,7 @@ bool Executive::execute()
     // Entry point for a user-executed transaction.
 
     // Pay...
-    LOG(m_detailsLogger) << "Paying " << formatBalance(m_gasCost) << " from sender for gas ("
-                         << m_t.gas() << " gas at " << formatBalance(m_t.gasPrice()) << ")";
+    LogPrintf("Paying %s from sender for gas (%d gas at %s)\n",formatBalance(m_gasCost), m_t.gas(), formatBalance(m_t.gasPrice()));
     m_s.subBalance(m_t.sender(), m_gasCost);
 
     assert(m_t.gas() >= (u256)m_baseGasRequired);
@@ -389,7 +389,7 @@ bool Executive::go(OnOpFunc const& _onOp)
         }
         catch (VMException const& _e)
         {
-            LOG(m_detailsLogger) << "Safe VM Exception. " << diagnostic_information(_e);
+            LogPrintf("Safe VM Exception: %s", diagnostic_information(_e).c_str());
             m_gas = 0;
             m_excepted = toTransactionException(_e);
             revert();

@@ -190,11 +190,14 @@ btcu.xcodeproj/
 CPackConfig.cmake
 CPackSourceConfig.cmake
 
-/src/cpp-ethereum/ethash/test/benchmarks/CMakeFiles/
-/src/cpp-ethereum/ethash/test/fakeminer/CMakeFiles/
-/src/cpp-ethereum/ethash/test/integration/compilation/CMakeFiles/
-/src/cpp-ethereum/ethash/test/tools/CMakeFiles/
-/src/cpp-ethereum/ethash/test/unittests/CMakeFiles/
-/src/cpp-ethereum/ethash/CMakeFiles/
-/src/cpp-ethereum/ethash/test/CMakeFiles/
-/src/cpp-ethereum/ethash/test/integration/CMakeFiles/
+src/cpp-ethereum/ethash/test/benchmarks/CMakeFiles/
+src/cpp-ethereum/ethash/test/fakeminer/CMakeFiles/
+src/cpp-ethereum/ethash/test/integration/compilation/CMakeFiles/
+src/cpp-ethereum/ethash/test/tools/CMakeFiles/
+src/cpp-ethereum/ethash/test/unittests/CMakeFiles/
+src/cpp-ethereum/ethash/CMakeFiles/
+src/cpp-ethereum/ethash/test/CMakeFiles/
+src/cpp-ethereum/ethash/test/integration/CMakeFiles/
+src/cpp-ethereum/ethash/test/ethash-bench
+src/cpp-ethereum/ethash/test/ethash-test
+src/cpp-ethereum/ethash/test/kiss99-tester

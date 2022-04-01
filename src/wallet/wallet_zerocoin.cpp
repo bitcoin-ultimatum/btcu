@@ -202,10 +202,19 @@ bool CWallet::CreateZerocoinMintTransaction(const CAmount nValue,
     // Sign
     int nIn = 0;
     for (const std::pair<const CWalletTx*, unsigned int>& coin : setCoins) {
-        if (!SignSignature(*this, *coin.first, txNew, nIn++)) {
-            strFailReason = _("Signing transaction failed");
-            return false;
-        }
+       SignatureData sigdata;
+       assert(nIn < txNew.vin.size());
+       CTxIn& txin = txNew.vin[nIn];
+       assert(txin.prevout.n < coin.first->vout.size());
+       const CTxOut& txout = coin.first->vout[txin.prevout.n];
+       if (!BTC::ProduceSignature(BTC::MutableTransactionSignatureCreator(this, &txNew, nIn, txout.nValue, SIGHASH_ALL), txout.scriptPubKey, sigdata))
+       {
+          strFailReason = _("Signing transaction failed");
+          return false;
+       } else {
+          BTC::UpdateTransaction(txNew, nIn, sigdata);
+       }
+       nIn++;
     }
 
     return true;

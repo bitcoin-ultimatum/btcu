@@ -59,7 +59,8 @@ static const unsigned int STANDARD_SCRIPT_VERIFY_FLAGS = MANDATORY_SCRIPT_VERIFY
                                                          SCRIPT_VERIFY_STRICTENC |
                                                          SCRIPT_VERIFY_MINIMALDATA |
                                                          SCRIPT_VERIFY_NULLDUMMY |
-                                                         SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS;
+                                                         SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS |
+                                                         SCRIPT_VERIFY_WITNESS_PUBKEYTYPE;
 
 /**
  * Standard script verification flags that standard transactions will comply
@@ -105,7 +106,8 @@ enum txnouttype
     TX_WITNESS_V0_SCRIPTHASH,
     TX_WITNESS_V0_KEYHASH,
     TX_LEASE,
-    TX_LEASINGREWARD
+    TX_LEASINGREWARD,
+    TX_LEASE_CLTV
 };
 
 class CNoDestination {
@@ -202,6 +204,7 @@ CScript GetScriptForRawPubKey(const CPubKey& pubkey);
 CScript GetScriptForMultisig(int nRequired, const std::vector<CPubKey>& keys);
 CScript GetScriptForStakeDelegation(const CKeyID& stakingKey, const CKeyID& spendingKey);
 CScript GetScriptForLeasing(const CKeyID& leaserKey, const CKeyID& ownerKey);
+CScript GetScriptForLeasingCLTV(const CKeyID& leaserKey, const CKeyID& ownerKey, uint32_t nLockTime);
 CScript GetScriptForLeasingReward(const COutPoint& outPoint, const CTxDestination& dest);
 
 /**

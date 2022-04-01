@@ -18,6 +18,14 @@
 #include <list>
 #include <memory>
 
+/**
+ * A flag that is ORed into the protocol version to designate that a transaction
+ * should be (un)serialized without witness data.
+ * Make sure that this does not collide with any of the values in `version.h`
+ * or with `ADDRV2_FORMAT`.
+ */
+static const int SERIALIZE_TRANSACTION_NO_WITNESS = 0x40000000;
+
 class CTransaction;
 
 
@@ -81,10 +89,74 @@ public:
 
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion){
+
+        const bool fAllowWitness = !(s.nVersion & SERIALIZE_TRANSACTION_NO_WITNESS);
+        unsigned char flags = 0;
         READWRITE(*const_cast<int32_t*>(&this->nVersion));
         nVersion = this->nVersion;
-        READWRITE(*const_cast<std::vector<CTxIn>*>(&vin));
-        READWRITE(*const_cast<std::vector<CTxOut>*>(&vout));
+
+        //Perform witness read\write action
+        if (ser_action.ForRead()){
+          //unserialize actiom (read)
+
+          /* Try to read the vin. In case the dummy is there, this will be read as an empty vector. */
+          READWRITE(*const_cast<std::vector<CTxIn>*>(&vin));
+
+          //witness transaction must to be version 2
+          if (vin.size() == 0 && fAllowWitness && this->nVersion != CTransaction::BITCOIN_VERSION) {
+             /* We read a dummy or an empty vin. */
+
+             READWRITE(*const_cast<unsigned char*>(&flags));
+             if (flags != 0) {
+                READWRITE(*const_cast<std::vector<CTxIn>*>(&vin));
+                READWRITE(*const_cast<std::vector<CTxOut>*>(&vout));
+             }
+          } else {
+             /* We read a non-empty vin. Assume a normal vout follows. */
+             READWRITE(*const_cast<std::vector<CTxOut>*>(&vout));
+          }
+          if ((flags & 1) && fAllowWitness) {
+             /* The witness flag is present, and we support witnesses. */
+             flags ^= 1;
+             for (size_t i = 0; i < vin.size(); i++) {
+                READWRITE(*const_cast<std::vector<std::vector<unsigned char>>*>(&vin[i].scriptWitness.stack));
+             }
+             if (!HasWitness()) {
+                /* It's illegal to encode witnesses when all witness stacks are empty. */
+                throw std::ios_base::failure("Superfluous witness record");
+             }
+          }
+          if (flags) {
+             /* Unknown flag in the serialization */
+             throw std::ios_base::failure("Unknown transaction optional data");
+          }
+
+       }
+        else{
+          //serialize actiom (write)
+
+          // Consistency check
+          if (fAllowWitness) {
+             /* Check whether witnesses need to be serialized. */
+             if (HasWitness()) {
+                flags |= 1;
+             }
+          }
+          if (flags) {
+             /* Use extended format in case witnesses are to be serialized. */
+             std::vector<CTxIn> vinDummy;
+             READWRITE(*const_cast<std::vector<CTxIn>*>(&vinDummy));
+             READWRITE(*const_cast<unsigned char*>(&flags));
+          }
+          READWRITE(*const_cast<std::vector<CTxIn>*>(&vin));
+          READWRITE(*const_cast<std::vector<CTxOut>*>(&vout));
+          if (flags & 1) {
+             for (size_t i = 0; i < vin.size(); i++) {
+                READWRITE(*const_cast<std::vector<std::vector<unsigned char>>*>(&vin[i].scriptWitness.stack));
+             }
+          }
+       }
+
         READWRITE(*const_cast<uint32_t*>(&nLockTime));
         if (nVersion >= BTCU_START_VERSION && nVersion <= CURRENT_VERSION) {
             READWRITE(*const_cast<std::vector<CValidatorRegister>*>(&validatorRegister));
@@ -172,6 +244,16 @@ public:
 
     std::string ToString() const;
 
+   bool HasWitness() const
+   {
+      for (size_t i = 0; i < vin.size(); i++) {
+         if (!vin[i].scriptWitness.IsNull()) {
+            return true;
+         }
+      }
+      return false;
+   }
+
 };
 
 /** A mutable version of CTransaction. */
@@ -209,6 +291,17 @@ struct CMutableTransaction
     uint256 GetHash() const;
     bool HasOpSender() const;
     std::string ToString() const;
+
+   bool HasWitness() const
+   {
+      for (size_t i = 0; i < vin.size(); i++) {
+         if (!vin[i].scriptWitness.IsNull()) {
+            return true;
+         }
+      }
+      return false;
+   }
+
 };
 
 typedef std::shared_ptr<const CTransaction> CTransactionRef;

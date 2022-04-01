@@ -254,7 +254,7 @@ void QtumState::printfErrorLog(const dev::eth::TransactionException er){
     std::stringstream ss;
     ss << er;
 #ifndef WIN32
-    clog(dev::VerbosityWarning, "exec") << "VM exception:" << ss.str();
+    LogPrintf("VM exception: %s", ss.str().c_str());
 #endif
 }
 

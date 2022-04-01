@@ -213,6 +213,7 @@ enum opcodetype
     // leasing
     OP_CHECKLEASEVERIFY = 0xd7,
     OP_LEASINGREWARD = 0xd8,
+    OP_CHECKLEASELOCKTIMEVERIFY = 0xd9,
 
     // Execute EXT byte code. (qtum sc)
     OP_CREATE = 0xe1,

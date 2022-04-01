@@ -18,6 +18,10 @@
 #include "libzerocoin/Params.h"
 #include <vector>
 
+///Validator period is separated parameters for each network
+///this file are non mergable between repositories (added in pre-(post)merge.sh scripts)
+#define VALIDATORS_VOTING_PERIOD_LENGTH 80
+
 typedef unsigned char MessageStartChars[MESSAGE_START_SIZE];
 
 struct CDNSSeedData {

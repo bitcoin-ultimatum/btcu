@@ -723,13 +723,15 @@ UniValue signrawtransaction(const UniValue& params, bool fHelp)
 
             // if redeemScript given and not using the local wallet (private keys
             // given), add redeemScript to the tempKeystore so it can be signed:
-            if (fGivenKeys && scriptPubKey.IsPayToScriptHash()) {
+            if (fGivenKeys && (scriptPubKey.IsPayToScriptHash() || scriptPubKey.IsPayToWitnessScriptHash())) {
                 RPCTypeCheckObj(prevOut, boost::assign::map_list_of("txid", UniValue::VSTR)("vout", UniValue::VNUM)("scriptPubKey", UniValue::VSTR)("redeemScript",UniValue::VSTR));
                 UniValue v = find_value(prevOut, "redeemScript");
                 if (!v.isNull()) {
                     std::vector<unsigned char> rsData(ParseHexV(v, "redeemScript"));
                     CScript redeemScript(rsData.begin(), rsData.end());
                     tempKeystore.AddCScript(redeemScript);
+                    // Automatically also add the P2WSH wrapped version of the script (to deal with P2SH-P2WSH).
+                    tempKeystore.AddCScript(GetScriptForWitness(redeemScript));
                 }
             }
         }
@@ -760,7 +762,7 @@ UniValue signrawtransaction(const UniValue& params, bool fHelp)
 
     // Script verification errors
     UniValue vErrors(UniValue::VARR);
-
+    const CTransaction txConst(mergedTx);
     // Sign what we can:
     for (unsigned int i = 0; i < mergedTx.vin.size(); i++) {
         CTxIn& txin = mergedTx.vin[i];
@@ -795,17 +797,25 @@ UniValue signrawtransaction(const UniValue& params, bool fHelp)
             fLeasing = !bool(IsMine(keystore, prevPubKey) & ISMINE_LEASED);
         }
 
+        const CAmount& amount = coins->vout[txin.prevout.n].nValue;
+        SignatureData sigdata;
         // Only sign SIGHASH_SINGLE if there's a corresponding output:
         if (!fHashSingle || (i < mergedTx.vout.size()))
-            SignSignature(keystore, prevPubKey, mergedTx, i, nHashType, fColdStake, fLeasing, fForceLeaserSign);
+           BTC::ProduceSignature(BTC::MutableTransactionSignatureCreator(&keystore, &mergedTx, i, amount, nHashType), prevPubKey, sigdata, fColdStake, fLeasing, fForceLeaserSign);
 
         // ... and merge in other signatures:
         for (const CMutableTransaction& txv : txVariants) {
-            txin.scriptSig = CombineSignatures(prevPubKey, mergedTx, i, txin.scriptSig, txv.vin[i].scriptSig);
+           sigdata = BTC::CombineSignatures(prevPubKey, BTC::TransactionSignatureChecker(&txConst, i, amount), sigdata, BTC::DataFromTransaction(mergedTx, i));
+           BTC::UpdateTransaction(mergedTx, i, sigdata);
         }
-        ScriptError serror = SCRIPT_ERR_OK;
-        CScriptWitness witness;
-        if (!BTC::VerifyScript(txin.scriptSig, prevPubKey, &witness, STANDARD_SCRIPT_VERIFY_FLAGS, MutableTransactionSignatureChecker(&mergedTx, i), &serror)) {
+
+       // amount must be specified for valid segwit signature
+       if (amount == MAX_MONEY_OUT && !txin.scriptWitness.IsNull()) {
+          throw JSONRPCError(RPC_TYPE_ERROR, strprintf("Missing amount for %s", coins->vout[txin.prevout.n].ToString()));
+       }
+
+       ScriptError serror = SCRIPT_ERR_OK;
+       if (!BTC::VerifyScript(txin.scriptSig, prevPubKey, &txin.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, BTC::TransactionSignatureChecker(&txConst, i, amount), &serror)) {
             TxInErrorToJSON(txin, vErrors, ScriptErrorString(serror));
         }
     }

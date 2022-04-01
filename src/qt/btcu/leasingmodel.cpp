@@ -60,7 +60,7 @@ struct LeasingModel::Impl {
         int nRequired;
         const auto& out = utxo.tx->vout[utxo.i];
 
-        if (!ExtractDestinations(out.scriptPubKey, type, addresses, nRequired) || type != TX_LEASE || addresses.size() != 2)
+        if (!ExtractDestinations(out.scriptPubKey, type, addresses, nRequired) || type != TX_LEASE || type != TX_LEASE_CLTV || addresses.size() != 2)
             return error("%s : Error extracting P2L destinations for utxo: %s-%d", __func__, utxo.tx->GetHash().GetHex(), utxo.i);
 
         leasing.leaserKeyID = boost::get<CKeyID>(addresses[0]);

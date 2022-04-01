@@ -17,9 +17,12 @@ namespace {
 class TxInputStream
 {
 public:
+   int nType;
+   int nVersion;
+
     TxInputStream(int nTypeIn, int nVersionIn, const unsigned char *txTo, size_t txToLen) :
-    m_type(nTypeIn),
-    m_version(nVersionIn),
+    nType(nTypeIn),
+    nVersion(nVersionIn),
     m_data(txTo),
     m_remaining(txToLen)
     {}
@@ -44,13 +47,11 @@ public:
     template<typename T>
     TxInputStream& operator>>(T& obj)
     {
-        ::Unserialize(*this, obj, m_type, m_version);
+        ::Unserialize(*this, obj, nType, nVersion);
         return *this;
     }
 
 private:
-    const int m_type;
-    const int m_version;
     const unsigned char* m_data;
     size_t m_remaining;
 };
@@ -87,9 +88,8 @@ int bitcoinconsensus_verify_script(const unsigned char *scriptPubKey, unsigned i
          // Regardless of the verification result, the tx did not error.
          set_error(err, bitcoinconsensus_ERR_OK);
 
-        CScriptWitness witness;
-
-        return BTC::VerifyScript(tx.vin[nIn].scriptSig, CScript(scriptPubKey, scriptPubKey + scriptPubKeyLen), &witness, flags, TransactionSignatureChecker(&tx, nIn), NULL);
+        CAmount am(0);
+        return BTC::VerifyScript(tx.vin[nIn].scriptSig, CScript(scriptPubKey, scriptPubKey + scriptPubKeyLen), &tx.vin[nIn].scriptWitness, flags, BTC::TransactionSignatureChecker(&tx, nIn, am), NULL);
     } catch (const std::exception&) {
         return set_error(err, bitcoinconsensus_ERR_TX_DESERIALIZE); // Error deserializing
     }

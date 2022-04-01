@@ -10,7 +10,6 @@
 #include "crypter.h"
 #include "key.h"
 #include "script/script.h"
-#include "script/standard.h"
 #include "util.h"
 
 
@@ -158,4 +157,26 @@ bool CBasicKeyStore::GetKey(const CKeyID& address, CKey& keyOut) const
         }
     }
     return false;
+}
+
+CKeyID GetKeyForDestination(const CKeyStore& store, const CTxDestination& dest)
+{
+   // Only supports destinations which map to single public keys, i.e. P2PKH,
+   // P2WPKH, and P2SH-P2WPKH.
+   if (auto id = boost::get<CKeyID>(&dest)) {
+      return *id;
+   }
+   if (auto witness_id = boost::get<WitnessV0KeyHash>(&dest)) {
+      return CKeyID(*witness_id);
+   }
+   if (auto script_id = boost::get<CScriptID>(&dest)) {
+      CScript script;
+      CTxDestination inner_dest;
+      if (store.GetCScript(*script_id, script) && ExtractDestination(script, inner_dest)) {
+         if (auto inner_witness_id = boost::get<WitnessV0KeyHash>(&inner_dest)) {
+            return CKeyID(*inner_witness_id);
+         }
+      }
+   }
+   return CKeyID();
 }

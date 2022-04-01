@@ -118,7 +118,7 @@ UniValue getgenerate(const UniValue& params, bool fHelp)
 
 UniValue generate(const UniValue& params, bool fHelp)
 {
-    if (fHelp || params.size() < 1 || params.size() > 1)
+    if (fHelp || params.size() < 1 || params.size() > 2)
         throw std::runtime_error(
             "generate numblocks\n"
             "\nMine blocks immediately (before the RPC call returns)\n"
@@ -138,10 +138,17 @@ UniValue generate(const UniValue& params, bool fHelp)
     if (!Params().MineBlocksOnDemand())
         throw JSONRPCError(RPC_METHOD_NOT_FOUND, "This method can only be used on regtest");
     
-    //Only regtest: setting genesis validator private key for validator's signing
-    UniValue params_(UniValue::VType::VARR);
-    params_.push_back("cTQ9SoEvbb41ctdf7Q7UFPogivXGcN88WBkowWQ5L1NWDiF9fahy");
-    importprivkey(params_, false).get_str();
+    //if second parameter set to true then don't use genesis validator private key
+    bool fForceCustomValidator = false;
+    if (params.size() > 1 && !params[1].isNull())
+       fForceCustomValidator = params[1].get_bool();
+    if(!fForceCustomValidator)
+    {
+       //Only regtest: setting genesis validator private key for validator's signing
+       UniValue params_(UniValue::VType::VARR);
+       params_.push_back("cTQ9SoEvbb41ctdf7Q7UFPogivXGcN88WBkowWQ5L1NWDiF9fahy");
+       importprivkey(params_, false);
+    }
     
     const int nGenerate = params[0].get_int();
     int nHeightEnd = 0;

@@ -11,6 +11,7 @@
 #include "key.h"
 #include "pubkey.h"
 #include "sync.h"
+#include "script/standard.h"
 
 #include <boost/signals2/signal.hpp>
 
@@ -93,5 +94,8 @@ public:
 
 typedef std::vector<unsigned char, secure_allocator<unsigned char> > CKeyingMaterial;
 typedef std::map<CKeyID, std::pair<CPubKey, std::vector<unsigned char> > > CryptedKeyMap;
+
+/** Return the CKeyID of the key involved in a script (if there is a unique one). */
+CKeyID GetKeyForDestination(const CKeyStore& store, const CTxDestination& dest);
 
 #endif // BITCOIN_KEYSTORE_H

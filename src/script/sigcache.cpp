@@ -12,79 +12,76 @@
 #include "uint256.h"
 #include "util.h"
 
+#include <cuckoocache.h>
 #include <boost/thread.hpp>
 #include <boost/tuple/tuple_comparison.hpp>
 
-namespace {
-
+namespace BTC {
+   namespace {
 /**
  * Valid signature cache, to avoid doing expensive ECDSA signature checking
  * twice for every transaction (once when accepted into memory pool, and
  * again when accepted into the block chain)
  */
-class CSignatureCache
-{
-private:
-     //! sigdata_type is (signature hash, signature, public key):
-    typedef boost::tuple<uint256, std::vector<unsigned char>, CPubKey> sigdata_type;
-    std::set< sigdata_type> setValid;
-    boost::shared_mutex cs_sigcache;
+      class CSignatureCache
+      {
+      private:
+         //! Entries are SHA256(nonce || signature hash || public key || signature):
+         uint256 nonce;
+         typedef CuckooCache::cache<uint256, BTC::SignatureCacheHasher> map_type;
+         map_type setValid;
+         boost::shared_mutex cs_sigcache;
 
-public:
-    bool
-    Get(const uint256 &hash, const std::vector<unsigned char>& vchSig, const CPubKey& pubKey)
-    {
-        boost::shared_lock<boost::shared_mutex> lock(cs_sigcache);
+      public:
+         CSignatureCache()
+         {
+            GetRandBytes(nonce.begin(), 32);
+         }
 
-        sigdata_type k(hash, vchSig, pubKey);
-        std::set<sigdata_type>::iterator mi = setValid.find(k);
-        if (mi != setValid.end())
-            return true;
-        return false;
-    }
+         void
+         ComputeEntry(uint256& entry, const uint256 &hash, const std::vector<unsigned char>& vchSig, const CPubKey& pubkey)
+         {
+            CSHA256().Write(nonce.begin(), 32).Write(hash.begin(), 32).Write(&pubkey[0], pubkey.size()).Write(&vchSig[0], vchSig.size()).Finalize(entry.begin());
+         }
 
-    void Set(const uint256 &hash, const std::vector<unsigned char>& vchSig, const CPubKey& pubKey)
-    {
-        // DoS prevention: limit cache size to less than 10MB
-        // (~200 bytes per cache entry times 50,000 entries)
-        // Since there are a maximum of 20,000 signature operations per block
-        // 50,000 is a reasonable default.
-        int64_t nMaxCacheSize = GetArg("-maxsigcachesize", 50000);
-        if (nMaxCacheSize <= 0) return;
+         bool
+         Get(const uint256& entry, const bool erase)
+         {
+            boost::shared_lock<boost::shared_mutex> lock(cs_sigcache);
+            return setValid.contains(entry, erase);
+         }
 
-        boost::unique_lock<boost::shared_mutex> lock(cs_sigcache);
+         void Set(uint256& entry)
+         {
+            boost::unique_lock<boost::shared_mutex> lock(cs_sigcache);
+            setValid.insert(entry);
+         }
+         uint32_t setup_bytes(size_t n)
+         {
+            return setValid.setup_bytes(n);
+         }
+      };
 
-        while (static_cast<int64_t>(setValid.size()) > nMaxCacheSize)
-        {
-            // Evict a random entry. Random because that helps
-            // foil would-be DoS attackers who might try to pre-generate
-            // and re-use a set of valid signatures just-slightly-greater
-            // than our cache size.
-            uint256 randomHash = GetRandHash();
-            std::set<sigdata_type>::iterator it = setValid.lower_bound(sigdata_type(randomHash));
-            if (it == setValid.end())
-                it = setValid.begin();
-            setValid.erase(*it);
-        }
+/* In previous versions of this code, signatureCache was a local static variable
+ * in CachingTransactionSignatureChecker::VerifySignature.  We initialize
+ * signatureCache outside of VerifySignature to avoid the atomic operation per
+ * call overhead associated with local static variables even though
+ * signatureCache could be made local to VerifySignature.
+*/
+      static CSignatureCache signatureCache;
+   } // namespace
 
-        sigdata_type k(hash, vchSig, pubKey);
-        setValid.insert(k);
-    }
-};
+   bool CachingTransactionSignatureChecker::VerifySignature(const std::vector<unsigned char>& vchSig, const CPubKey& pubkey, const uint256& sighash) const
+   {
+      uint256 entry;
+      signatureCache.ComputeEntry(entry, sighash, vchSig, pubkey);
+      if (signatureCache.Get(entry, !store))
+         return true;
+      if (!TransactionSignatureChecker::VerifySignature(vchSig, pubkey, sighash))
+         return false;
+      if (store)
+         signatureCache.Set(entry);
+      return true;
+   }
 
-}
-
-bool CachingTransactionSignatureChecker::VerifySignature(const std::vector<unsigned char>& vchSig, const CPubKey& pubkey, const uint256& sighash) const
-{
-    static CSignatureCache signatureCache;
-
-    if (signatureCache.Get(sighash, vchSig, pubkey))
-        return true;
-
-    if (!TransactionSignatureChecker::VerifySignature(vchSig, pubkey, sighash))
-        return false;
-
-    if (store)
-        signatureCache.Set(sighash, vchSig, pubkey);
-    return true;
 }

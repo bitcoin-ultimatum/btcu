@@ -27,7 +27,7 @@
 
 static bool fCreateBlank;
 static std::map<std::string, UniValue> registers;
-CClientUIInterface uiInterface;
+//CClientUIInterface uiInterface;
 
 static bool AppInitRawTx(int argc, char* argv[])
 {
@@ -415,6 +415,7 @@ static void MutateTxSign(CMutableTransaction& tx, const std::string& flagStr)
 
     bool fHashSingle = ((nHashType & ~SIGHASH_ANYONECANPAY) == SIGHASH_SINGLE);
 
+    const CTransaction txConst(mergedTx);
     // Sign what we can:
     for (unsigned int i = 0; i < mergedTx.vin.size(); i++) {
         CTxIn& txin = mergedTx.vin[i];
@@ -426,16 +427,20 @@ static void MutateTxSign(CMutableTransaction& tx, const std::string& flagStr)
         const CScript& prevPubKey = coins->vout[txin.prevout.n].scriptPubKey;
 
         txin.scriptSig.clear();
-        CScriptWitness witness;
+       const CAmount& amount = coins->vout[txin.prevout.n].nValue;
+       SignatureData sigdata;
         // Only sign SIGHASH_SINGLE if there's a corresponding output:
         if (!fHashSingle || (i < mergedTx.vout.size()))
-            SignSignature(keystore, prevPubKey, mergedTx, i, nHashType);
+           BTC::ProduceSignature(BTC::MutableTransactionSignatureCreator(&keystore, &mergedTx, i, amount, nHashType), prevPubKey, sigdata);
 
         // ... and merge in other signatures:
         for (const CTransaction& txv : txVariants) {
-            txin.scriptSig = CombineSignatures(prevPubKey, mergedTx, i, txin.scriptSig, txv.vin[i].scriptSig);
+           sigdata = BTC::CombineSignatures(prevPubKey, BTC::TransactionSignatureChecker(&txConst, i, amount), sigdata, BTC::DataFromTransaction(mergedTx, i));
+           BTC::UpdateTransaction(mergedTx, i, sigdata);
+           //txin.scriptSig = CombineSignatures(prevPubKey, mergedTx, i, txin.scriptSig, txv.vin[i].scriptSig);
         }
-        if (!BTC::VerifyScript(txin.scriptSig, prevPubKey, &witness, STANDARD_SCRIPT_VERIFY_FLAGS, MutableTransactionSignatureChecker(&mergedTx, i)))
+       ScriptError serror = SCRIPT_ERR_OK;
+       if (!BTC::VerifyScript(txin.scriptSig, prevPubKey, &txin.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, BTC::TransactionSignatureChecker(&txConst, i, amount), &serror))
             fComplete = false;
     }
 

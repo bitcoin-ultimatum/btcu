@@ -20,7 +20,7 @@ std::vector<std::pair<int, CTxIn>> CountVotes()
             auto countIter = std::find_if(count.begin(), count.end(), isVin);
             
             if(countIter == count.end()){
-                count.emplace_back(v.vote, vote.vin);
+                count.emplace_back(v.vote, v.vin);
             } else {
                 countIter->first += v.vote;
             }
@@ -182,4 +182,31 @@ bool CheckValidator(const CBlock& block, const CCoinsViewCache &view)
     
     // for a regular validator a VIN should be unspent and signature can be checked only if validator is in g_ValidatorsList (public key is retrieved from it)
     return (vinIsUnspent && CheckValidatorSignature(block));
+}
+
+bool isAddressValidator(const CKeyID &address)
+{
+   bool bSCValidatorFound = false;
+   //genesis validators
+   auto genesisValidators = Params().GenesisBlock().vtx[0].validatorRegister;
+   for(auto &gv : genesisValidators){
+      if(address == gv.pubKey.GetID()){
+         bSCValidatorFound = true;
+         break;
+      }
+   }
+
+   //voted validators
+   if(!bSCValidatorFound)
+   {
+      auto validatorsRegistrationList = g_ValidatorsState.get_validators();
+      for (auto& rv: validatorsRegistrationList)
+      {
+         if(address == rv.pubKey.GetID()){
+            bSCValidatorFound = true;
+            break;
+         }
+      }
+   }
+   return bSCValidatorFound;
 }

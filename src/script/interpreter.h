@@ -147,6 +147,20 @@ enum class SigVersion
    TAPSCRIPT = 3,   //!< Witness v1 with 32-byte program, not BIP16 P2SH-wrapped, script path spending, leaf version 0xc0; see BIP 342
 };
 
+namespace BTC
+{
+   struct PrecomputedTransactionData
+   {
+      uint256 hashPrevouts, hashSequence, hashOutputs;
+      bool ready = false;
+
+      explicit PrecomputedTransactionData(const CTransaction& tx);
+   };
+
+   uint256 SignatureHash(const CScript& scriptCode, const CTransaction& txTo, unsigned int nIn, int nHashType, const CAmount& amount, SigVersion sigversion, const PrecomputedTransactionData* cache);
+}
+
+
 struct ScriptExecutionData
 {
    //! Whether m_tapleaf_hash is initialized.
@@ -264,11 +278,92 @@ bool VerifyScript(const CScript& scriptSig, const CScript& scriptPubKey, unsigne
 
 namespace BTC
 {
+
+   uint256 SignatureHash(const CScript &scriptCode, const CTransaction& txTo, unsigned int nIn, int nHashType, const CAmount& amount, SigVersion sigversion, const PrecomputedTransactionData* cache = nullptr);
+
+   class BaseSignatureChecker
+   {
+   public:
+      virtual bool CheckECDSASignature(const std::vector<unsigned char>& scriptSig, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion) const
+      {
+         return false;
+      }
+      virtual bool CheckSchnorrSignature(Span<const unsigned char> sig, Span<const unsigned char> pubkey, SigVersion sigversion, const ScriptExecutionData& execdata, ScriptError* serror = nullptr) const
+      {
+         return false;
+      }
+      virtual bool CheckSig(const std::vector<unsigned char>& scriptSig, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion) const
+      {
+         return false;
+      }
+
+      virtual bool CheckLockTime(const CScriptNum& nLockTime) const
+      {
+         return false;
+      }
+
+      virtual bool CheckLeaseLockTime(const CScriptNum& nLockTime) const
+      {
+         return false;
+      }
+
+      virtual bool CheckSequence(const CScriptNum& nSequence) const
+      {
+         return false;
+      }
+
+      virtual bool CheckColdStake(const CScript& script) const
+      {
+         return false;
+      }
+
+      virtual ~BaseSignatureChecker() {}
+   };
+
+class TransactionSignatureChecker : public BTC::BaseSignatureChecker
+   {
+   private:
+      const CTransaction* txTo;
+      unsigned int nIn;
+      const CAmount amount;
+      const PrecomputedTransactionData* txdata;
+
+   protected:
+      virtual bool VerifySignature(const std::vector<unsigned char>& vchSig, const CPubKey& vchPubKey, const uint256& sighash) const;
+      virtual bool VerifyECDSASignature(const std::vector<unsigned char>& vchSig, const CPubKey& pubkey, const uint256& sighash) const;
+      virtual bool VerifySchnorrSignature(Span<const unsigned char> sig, const XOnlyPubKey& pubkey, const uint256& sighash) const;
+
+   public:
+      TransactionSignatureChecker(const CTransaction* txToIn, unsigned int nInIn, const CAmount& amountIn) : txTo(txToIn), nIn(nInIn), amount(amountIn), txdata(nullptr) {}
+      TransactionSignatureChecker(const CTransaction* txToIn, unsigned int nInIn, const CAmount& amountIn, const PrecomputedTransactionData& txdataIn) : txTo(txToIn), nIn(nInIn), amount(amountIn), txdata(&txdataIn) {}
+
+   //BTC
+   bool CheckECDSASignature(const std::vector<unsigned char>& vchSigIn, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion) const override;
+   bool CheckSchnorrSignature(Span<const unsigned char> sig, Span<const unsigned char> pubkey_in, SigVersion sigversion, const ScriptExecutionData& execdata, ScriptError* serror) const override;
+      bool CheckSig(const std::vector<unsigned char>& scriptSig, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion) const override;
+      bool CheckLockTime(const CScriptNum& nLockTime) const override;
+      bool CheckLeaseLockTime(const CScriptNum& nLockTime) const override;
+      bool CheckSequence(const CScriptNum& nSequence) const override;
+      bool CheckColdStake(const CScript& script) const override {
+         return txTo->CheckColdStake(script);
+   }
+   };
+
+class MutableTransactionSignatureChecker : public BTC::TransactionSignatureChecker
+   {
+   private:
+      const CTransaction txTo;
+
+   public:
+      MutableTransactionSignatureChecker(const CMutableTransaction* txToIn, unsigned int nInIn, const CAmount& amountIn) : TransactionSignatureChecker(&txTo, nInIn, amountIn), txTo(*txToIn) {}
+   };
+
    int FindAndDelete(CScript& script, const CScript& b);
    bool VerifyScript(const CScript& scriptSig, const CScript& scriptPubKey, const CScriptWitness* witness,
-                        unsigned int flags, const BaseSignatureChecker& checker, ScriptError* serror = nullptr);
+                     unsigned int flags, const BaseSignatureChecker& checker, ScriptError* serror = nullptr);
    bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& script, unsigned int flags,
-                   const BaseSignatureChecker& checker, SigVersion sigversion, ScriptError* serror);
+                   const BTC::BaseSignatureChecker& checker, SigVersion sigversion, ScriptError* serror = nullptr);
+
 }
 
 #endif // BITCOIN_SCRIPT_INTERPRETER_H

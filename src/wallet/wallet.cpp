@@ -26,6 +26,7 @@
 
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/thread.hpp>
+#include <key_io.h>
 
 /**
  * Settings
@@ -2624,188 +2625,235 @@ bool CWallet::CreateTransaction(const std::vector<std::pair<CScript,
         {
             nFeeRet = 0;
             if (nFeePay > 0) nFeeRet = nFeePay;
-            while (true) {
-                txNew.vin.clear();
-                txNew.vout.clear();
-                wtxNew.fFromMe = true;
+            while (true)
+            {
+               txNew.vin.clear();
+               txNew.vout.clear();
+               wtxNew.fFromMe = true;
 
-                CAmount nTotalValue = nValue + nFeeRet;
-                double dPriority = 0;
+               CAmount nTotalValue = nValue + nFeeRet;
+               double dPriority = 0;
 
-                // vouts to the payees
-                if (coinControl && !coinControl->fSplitBlock) {
-                    for (const PAIRTYPE(CScript, CAmount) & s : vecSend) {
-                        CTxOut txout(s.second, s.first);
-                        if (txout.IsDust(::minRelayTxFee) && !txout.scriptPubKey.HasOpCreate() && !txout.scriptPubKey.HasOpCall()) {
-                            strFailReason = _("Transaction amount too small");
-                            return false;
-                        }
-                        txNew.vout.push_back(txout);
-                    }
-                } else //UTXO Splitter Transaction
-                {
-                    int nSplitBlock;
-
-                    if (coinControl)
-                        nSplitBlock = coinControl->nSplitBlock;
-                    else
-                        nSplitBlock = 1;
-
-                    for (const PAIRTYPE(CScript, CAmount) & s : vecSend) {
-                        for (int i = 0; i < nSplitBlock; i++) {
-                            if (i == nSplitBlock - 1) {
-                                uint64_t nRemainder = s.second % nSplitBlock;
-                                txNew.vout.push_back(CTxOut((s.second / nSplitBlock) + nRemainder, s.first));
-                            } else
-                                txNew.vout.push_back(CTxOut(s.second / nSplitBlock, s.first));
-                        }
-                    }
-                }
-
-                // Choose coins to use
-                std::set<std::pair<const CWalletTx*, unsigned int> > setCoins;
-                CAmount nValueIn = 0;
-
-                if (!SelectCoins(nTotalValue, setCoins, nValueIn, coinControl, coin_type, useIX, false, fIncludeDelegated, fIncludeLeased)) {
-                    if (coin_type == ALL_COINS) {
-                        strFailReason = _("Insufficient funds.");
-                    } else if (coin_type == ONLY_NOT1000IFMN) {
-                        strFailReason = _("Unable to locate enough funds for this transaction that are not equal 1000 BTCU.");
-                    } else if (coin_type == ONLY_NONDENOMINATED_NOT1000IFMN) {
-                        strFailReason = _("Unable to locate enough Obfuscation non-denominated funds for this transaction that are not equal 1000 BTCU.");
-                    } else {
-                        strFailReason = _("Unable to locate enough Obfuscation denominated funds for this transaction.");
-                        strFailReason += " " + _("Obfuscation uses exact denominated amounts to send funds, you might simply need to anonymize some more coins.");
-                    }
-
-                    if (useIX) {
-                        strFailReason += " " + _("SwiftX requires inputs with at least 6 confirmations, you might need to wait a few minutes and try again.");
-                    }
-
-                    return false;
-                }
-
-
-                for (PAIRTYPE(const CWalletTx*, unsigned int) pcoin : setCoins) {
-                    if (pcoin.first->vout[pcoin.second].scriptPubKey.IsPayToColdStaking())
-                        wtxNew.fStakeDelegationVoided = true;
-                    CAmount nCredit = pcoin.first->vout[pcoin.second].nValue;
-                    //The coin age after the next block (depth+1) is used instead of the current,
-                    //reflecting an assumption the user would accept a bit more delay for
-                    //a chance at a free transaction.
-                    //But mempool inputs might still be in the mempool, so their age stays 0
-                    int age = pcoin.first->GetDepthInMainChain();
-                    assert(age >= 0);
-                    if (age != 0)
-                        age += 1;
-                    dPriority += (double)nCredit * age;
-                }
-
-                CAmount nChange = nValueIn - nValue - nFeeRet;
-
-                //over pay for denominated transactions
-                if (coin_type == ONLY_DENOMINATED) {
-                    nFeeRet += nChange;
-                    nChange = 0;
-                    wtxNew.mapValue["DS"] = "1";
-                }
-
-                if (nChange > 0) {
-                    // Fill a vout to ourself
-                    // TODO: pass in scriptChange instead of reservekey so
-                    // change transaction isn't always pay-to-btcu-address
-                    CScript scriptChange;
-                    bool combineChange = false;
-
-                    // coin control: send change to custom address
-                    if (coinControl && !boost::get<CNoDestination>(&coinControl->destChange)) {
-                        scriptChange = GetScriptForDestination(coinControl->destChange);
-
-                        std::vector<CTxOut>::iterator it = txNew.vout.begin();
-                        while (it != txNew.vout.end()) {
-                            if (scriptChange == it->scriptPubKey) {
-                                it->nValue += nChange;
-                                nChange = 0;
-                                reservekey.ReturnKey();
-                                combineChange = true;
-                                break;
-                            }
-                            ++it;
-                        }
-                    }
-
-                    // no coin control: send change to newly generated address
-                    else {
-                        // Note: We use a new key here to keep it from being obvious which side is the change.
-                        //  The drawback is that by not reusing a previous key, the change may be lost if a
-                        //  backup is restored, if the backup doesn't have the new private key for the change.
-                        //  If we reused the old key, it would be possible to add code to look for and
-                        //  rediscover unknown transactions that were written with keys of ours to recover
-                        //  post-backup change.
-
-                        // Reserve a new key pair from key pool
-                        CPubKey vchPubKey;
-                        bool ret;
-                        ret = reservekey.GetReservedKey(vchPubKey);
-                        assert(ret); // should never fail, as we just unlocked
-
-                        scriptChange = GetScriptForDestination(vchPubKey.GetID());
-                    }
-
-                    if (!combineChange) {
-                        CTxOut newTxOut(nChange, scriptChange);
-
-                        // Never create dust outputs; if we would, just
-                        // add the dust to the fee.
-                        if (newTxOut.IsDust(::minRelayTxFee)) {
-                            nFeeRet += nChange;
-                            nChange = 0;
-                            reservekey.ReturnKey();
-                        } else {
-                            // Insert change txn at random position:
-                            std::vector<CTxOut>::iterator position = txNew.vout.begin() + GetRandInt(txNew.vout.size() + 1);
-                            txNew.vout.insert(position, newTxOut);
-                        }
-                    }
-                } else
-                    reservekey.ReturnKey();
-
-                // Fill vin
-                for (const PAIRTYPE(const CWalletTx*, unsigned int) & coin : setCoins)
-                    txNew.vin.push_back(CTxIn(coin.first->GetHash(), coin.second));
-
-                if (sign) {
-                    // Signing transaction outputs
-                    int nOut = 0;
-                    for (const auto& output : txNew.vout) {
-                        if (output.scriptPubKey.HasOpSender()) {
-                            const CScript& scriptPubKey = GetScriptForDestination(signSenderAddress);
-                            //SignatureData sigdata;
-
-                            if (!SignSignature(*pwalletMain, scriptPubKey, txNew, nOut, SIGHASH_ALL, false))
-                            //if (!ProduceSignature(*pwalletMain, MutableTransactionSignatureOutputCreator(&txNew, nOut, output.nValue, SIGHASH_ALL), scriptPubKey, sigdata))
-                            {
-                                strFailReason = _("Signing transaction output failed");
-                                return false;
-                            } else {
-                                /*
-                                if(!UpdateOutput(txNew.vout.at(nOut), sigdata))
-                                {
-                                    strFailReason = _("Update transaction output failed");
-                                    return false;
-                                }*/
-                            }
-                            nOut++;
-                        }
-                    }
-                }
-                // Sign
-                int nIn = 0;
-                for (const PAIRTYPE(const CWalletTx*, unsigned int) & coin : setCoins)
-                    if (!SignSignature(*this, *coin.first, txNew, nIn++)) {
-                        strFailReason = _("Signing transaction failed");
+               // vouts to the payees
+               if (coinControl && !coinControl->fSplitBlock)
+               {
+                  for (const PAIRTYPE(CScript, CAmount)& s : vecSend)
+                  {
+                     CTxOut txout(s.second, s.first);
+                     if (txout.IsDust(::minRelayTxFee) && !txout.scriptPubKey.HasOpCreate() &&
+                         !txout.scriptPubKey.HasOpCall())
+                     {
+                        strFailReason = _("Transaction amount too small");
                         return false;
-                    }
+                     }
+                     txNew.vout.push_back(txout);
+                  }
+               }
+               else //UTXO Splitter Transaction
+               {
+                  int nSplitBlock;
+
+                  if (coinControl)
+                     nSplitBlock = coinControl->nSplitBlock;
+                  else
+                     nSplitBlock = 1;
+
+                  for (const PAIRTYPE(CScript, CAmount)& s : vecSend)
+                  {
+                     for (int i = 0; i < nSplitBlock; i++)
+                     {
+                        if (i == nSplitBlock - 1)
+                        {
+                           uint64_t nRemainder = s.second % nSplitBlock;
+                           txNew.vout.push_back(CTxOut((s.second / nSplitBlock) + nRemainder, s.first));
+                        }
+                        else
+                           txNew.vout.push_back(CTxOut(s.second / nSplitBlock, s.first));
+                     }
+                  }
+               }
+
+               // Choose coins to use
+               std::set<std::pair<const CWalletTx*, unsigned int> > setCoins;
+               CAmount nValueIn = 0;
+
+               if (!SelectCoins(nTotalValue, setCoins, nValueIn, coinControl, coin_type, useIX, false,
+                                fIncludeDelegated, fIncludeLeased))
+               {
+                  if (coin_type == ALL_COINS)
+                  {
+                     strFailReason = _("Insufficient funds.");
+                  }
+                  else if (coin_type == ONLY_NOT1000IFMN)
+                  {
+                     strFailReason = _(
+                     "Unable to locate enough funds for this transaction that are not equal 1000 BTCU.");
+                  }
+                  else if (coin_type == ONLY_NONDENOMINATED_NOT1000IFMN)
+                  {
+                     strFailReason = _(
+                     "Unable to locate enough Obfuscation non-denominated funds for this transaction that are not equal 1000 BTCU.");
+                  }
+                  else
+                  {
+                     strFailReason = _("Unable to locate enough Obfuscation denominated funds for this transaction.");
+                     strFailReason += " " + _(
+                     "Obfuscation uses exact denominated amounts to send funds, you might simply need to anonymize some more coins.");
+                  }
+
+                  if (useIX)
+                  {
+                     strFailReason += " " + _(
+                     "SwiftX requires inputs with at least 6 confirmations, you might need to wait a few minutes and try again.");
+                  }
+
+                  return false;
+               }
+
+
+               for (PAIRTYPE(const CWalletTx*, unsigned int) pcoin : setCoins)
+               {
+                  if (pcoin.first->vout[pcoin.second].scriptPubKey.IsPayToColdStaking())
+                     wtxNew.fStakeDelegationVoided = true;
+                  CAmount nCredit = pcoin.first->vout[pcoin.second].nValue;
+                  //The coin age after the next block (depth+1) is used instead of the current,
+                  //reflecting an assumption the user would accept a bit more delay for
+                  //a chance at a free transaction.
+                  //But mempool inputs might still be in the mempool, so their age stays 0
+                  int age = pcoin.first->GetDepthInMainChain();
+                  assert(age >= 0);
+                  if (age != 0)
+                     age += 1;
+                  dPriority += (double) nCredit * age;
+               }
+
+               CAmount nChange = nValueIn - nValue - nFeeRet;
+
+               //over pay for denominated transactions
+               if (coin_type == ONLY_DENOMINATED)
+               {
+                  nFeeRet += nChange;
+                  nChange = 0;
+                  wtxNew.mapValue["DS"] = "1";
+               }
+
+               if (nChange > 0)
+               {
+                  // Fill a vout to ourself
+                  // TODO: pass in scriptChange instead of reservekey so
+                  // change transaction isn't always pay-to-btcu-address
+                  CScript scriptChange;
+                  bool combineChange = false;
+
+                  // coin control: send change to custom address
+                  if (coinControl && !boost::get<CNoDestination>(&coinControl->destChange))
+                  {
+                     scriptChange = GetScriptForDestination(coinControl->destChange);
+
+                     std::vector<CTxOut>::iterator it = txNew.vout.begin();
+                     while (it != txNew.vout.end())
+                     {
+                        if (scriptChange == it->scriptPubKey)
+                        {
+                           it->nValue += nChange;
+                           nChange = 0;
+                           reservekey.ReturnKey();
+                           combineChange = true;
+                           break;
+                        }
+                        ++it;
+                     }
+                  }
+
+                     // no coin control: send change to newly generated address
+                  else
+                  {
+                     // Note: We use a new key here to keep it from being obvious which side is the change.
+                     //  The drawback is that by not reusing a previous key, the change may be lost if a
+                     //  backup is restored, if the backup doesn't have the new private key for the change.
+                     //  If we reused the old key, it would be possible to add code to look for and
+                     //  rediscover unknown transactions that were written with keys of ours to recover
+                     //  post-backup change.
+
+                     // Reserve a new key pair from key pool
+                     CPubKey vchPubKey;
+                     bool ret;
+                     ret = reservekey.GetReservedKey(vchPubKey);
+                     assert(ret); // should never fail, as we just unlocked
+
+                     scriptChange = GetScriptForDestination(vchPubKey.GetID());
+                  }
+
+                  if (!combineChange)
+                  {
+                     CTxOut newTxOut(nChange, scriptChange);
+
+                     // Never create dust outputs; if we would, just
+                     // add the dust to the fee.
+                     if (newTxOut.IsDust(::minRelayTxFee))
+                     {
+                        nFeeRet += nChange;
+                        nChange = 0;
+                        reservekey.ReturnKey();
+                     }
+                     else
+                     {
+                        // Insert change txn at random position:
+                        std::vector<CTxOut>::iterator position = txNew.vout.begin() + GetRandInt(txNew.vout.size() + 1);
+                        txNew.vout.insert(position, newTxOut);
+                     }
+                  }
+               }
+               else
+                  reservekey.ReturnKey();
+
+               // Fill vin
+               for (const PAIRTYPE(const CWalletTx*, unsigned int)& coin : setCoins)
+                  txNew.vin.push_back(CTxIn(coin.first->GetHash(), coin.second));
+
+               if (sign)
+               {
+                  // Signing transaction outputs
+                  int nOut = 0;
+                  for (const auto& output : txNew.vout)
+                  {
+                     if (output.scriptPubKey.HasOpSender())
+                     {
+                        const CScript& scriptPubKey = GetScriptForDestination(signSenderAddress);
+                        SignatureData sigdata;
+                        const CAmount& amount = output.nValue;
+                        if (!BTC::ProduceSignature(BTC::MutableTransactionSignatureCreator(this, &txNew, nOut, amount, SIGHASH_ALL), scriptPubKey,sigdata))
+                        {
+                           strFailReason = _("Signing transaction failed");
+                           return false;
+                        }
+                        else
+                        {
+                           BTC::UpdateTransaction(txNew, nOut, sigdata);
+                        }
+                        nOut++;
+                     }
+                  }
+               }
+               // Sign
+               int nIn = 0;
+               for (const PAIRTYPE(const CWalletTx*, unsigned int)& coin : setCoins)
+               {
+                  SignatureData sigdata;
+                  assert(nIn < txNew.vin.size());
+                  CTxIn& txin = txNew.vin[nIn];
+                  assert(txin.prevout.n < coin.first->vout.size());
+                  const CTxOut& txout = coin.first->vout[txin.prevout.n];
+
+                  if (!BTC::ProduceSignature(BTC::MutableTransactionSignatureCreator(this, &txNew, nIn, txout.nValue, SIGHASH_ALL), txout.scriptPubKey, sigdata))
+                  {
+                     strFailReason = _("Signing transaction failed");
+                     return false;
+                  } else {
+                     BTC::UpdateTransaction(txNew, nIn, sigdata);
+                  }
+                  nIn++;
+               }
 
                 // Embed the constructed transaction data in wtxNew.
                 *static_cast<CTransaction*>(&wtxNew) = CTransaction(txNew);
@@ -2988,8 +3036,19 @@ bool CWallet::CreateCoinStake(
     if (!txNew.vin[0].scriptSig.IsZerocoinSpend()) {
         for (CTxIn txIn : txNew.vin) {
             const CWalletTx *wtx = GetWalletTx(txIn.prevout.hash);
-            if (!SignSignature(*this, *wtx, txNew, nIn++, SIGHASH_ALL, true, false))
-                return error("CreateCoinStake : failed to sign coinstake");
+            SignatureData sigdata;
+            assert(nIn < txNew.vin.size());
+            CTxIn& txin = txNew.vin[nIn];
+            assert(txin.prevout.n < wtx->vout.size());
+            const CTxOut& txout = wtx->vout[txin.prevout.n];
+
+            if (!BTC::ProduceSignature(BTC::MutableTransactionSignatureCreator(this, &txNew, nIn, txout.nValue, SIGHASH_ALL), txout.scriptPubKey, sigdata))
+            {
+               return error("CreateCoinStake : failed to sign coinstake");
+            } else {
+               BTC::UpdateTransaction(txNew, nIn, sigdata);
+            }
+            nIn++;
         }
     } else {
         //Update the mint database with tx hash and height
@@ -3062,9 +3121,15 @@ bool CWallet::CreateLeasingRewards(
         return true;
     }
 
-    if (!SignSignature(*this, GetScriptForDestination(pubKeySelf.GetID()), tx, 0, SIGHASH_ALL, false, true)) {
-        return error("%s : failed to sign leasing reward", __func__);
-    }
+   const CScript& scriptPubKey = GetScriptForDestination(pubKeySelf.GetID());
+   SignatureData sigdata;
+
+   if (!BTC::ProduceSignature(BTC::MutableTransactionSignatureCreator(this, &tx, 0, amount, SIGHASH_ALL), scriptPubKey,sigdata, false, true))
+   {
+      return false;
+   } else {
+      BTC::UpdateTransaction(tx, 0, sigdata);
+   }
 
 #endif
     return true;
@@ -3232,10 +3297,10 @@ bool CWallet::SetAddressBook(const CTxDestination& address, const std::string& s
         strPurpose, (fUpdated ? CT_UPDATED : CT_NEW));
     if (!fFileBacked)
         return false;
-    std::string addressStr = ParseIntoAddress(address, strPurpose).ToString();
-    if (!strPurpose.empty() && !CWalletDB(strWalletFile).WritePurpose(addressStr, strPurpose))
+
+    if (!strPurpose.empty() && !CWalletDB(strWalletFile).WritePurpose(EncodeDestination(address), strPurpose))
         return false;
-    return CWalletDB(strWalletFile).WriteName(addressStr, strName);
+    return CWalletDB(strWalletFile).WriteName(EncodeDestination(address), strName);
 }
 
 bool CWallet::DelAddressBook(const CTxDestination& address, const CChainParams::Base58Type addrType)
@@ -4387,6 +4452,25 @@ int CWallet::GetVersion()
     LOCK(cs_wallet);
     return nWalletVersion;
 }
+
+void CWallet::LearnRelatedScripts(const CPubKey& key, OutputType type)
+{
+   if (key.IsCompressed() && (type == OUTPUT_TYPE_P2SH_SEGWIT || type == OUTPUT_TYPE_BECH32)) {
+      CTxDestination witdest = WitnessV0KeyHash(key.GetID());
+      CScript witprog = GetScriptForDestination(witdest);
+      // Make sure the resulting program is solvable.
+      assert(BTC::IsSolvable(*this, witprog));
+      AddCScript(witprog);
+   }
+}
+
+void CWallet::LearnAllRelatedScripts(const CPubKey& key)
+{
+   // OUTPUT_TYPE_P2SH_SEGWIT always adds all necessary scripts for all types.
+   LearnRelatedScripts(key, OUTPUT_TYPE_P2SH_SEGWIT);
+}
+
+
 /*
 bool CWallet::GetKeyOrigin(const CKeyID& keyID, KeyOriginInfo& info) const
 {
@@ -4591,4 +4675,16 @@ CAmount CWalletTx::GetChange() const
 bool CWalletTx::IsFromMe(const isminefilter& filter) const
 {
     return (GetDebit(filter) > 0);
+}
+
+std::vector<CTxDestination> GetAllDestinationsForKey(const CPubKey& key)
+{
+   CKeyID keyid = key.GetID();
+   if (key.IsCompressed()) {
+      CTxDestination segwit = WitnessV0KeyHash(keyid);
+      CTxDestination p2sh = CScriptID(GetScriptForDestination(segwit));
+      return std::vector<CTxDestination>{std::move(keyid), std::move(p2sh), std::move(segwit)};
+   } else {
+      return std::vector<CTxDestination>{std::move(keyid)};
+   }
 }

@@ -807,59 +807,40 @@ bool IsStandardTx(const CTransaction& tx, std::string& reason)
  * 2. P2SH scripts with a crazy number of expensive
  *    CHECKSIG/CHECKMULTISIG operations
  */
+
 bool AreInputsStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs)
 {
-    if (tx.IsCoinBase() || tx.HasZerocoinSpendInputs() || tx.IsLeasingReward())
-        return true; // coinbase has no inputs and zerocoinspend has a special input
-    //todo should there be a check for a 'standard' zerocoinspend here?
+   if (tx.IsCoinBase() || tx.HasZerocoinSpendInputs() || tx.IsLeasingReward())
+      return true; // Coinbases don't use vin normally
 
-    for (unsigned int i = 0; i < tx.vin.size(); i++) {
-        const CTxOut& prev = mapInputs.GetOutputFor(tx.vin[i]);
+   for (unsigned int i = 0; i < tx.vin.size(); i++)
+   {
+      const CTxOut& prev = mapInputs.GetOutputFor(tx.vin[i]);
 
-        std::vector<std::vector<unsigned char> > vSolutions;
-        txnouttype whichType;
-        // get the scriptPubKey corresponding to this input:
-        const CScript& prevScript = prev.scriptPubKey;
-        if (!Solver(prevScript, whichType, vSolutions))
+      std::vector<std::vector<unsigned char> > vSolutions;
+      txnouttype whichType;
+      // get the scriptPubKey corresponding to this input:
+      const CScript& prevScript = prev.scriptPubKey;
+      if (!Solver(prevScript, whichType, vSolutions))
+         return false;
+
+      if (whichType == TX_NONSTANDARD) {
+         return false;
+      } else if (whichType == TX_SCRIPTHASH) {
+         std::vector<std::vector<unsigned char> > stack;
+         // convert the scriptSig into a stack, so we can inspect the redeemScript
+         if (!BTC::EvalScript(stack, tx.vin[i].scriptSig, false, BTC::BaseSignatureChecker(), SigVersion::BASE))
             return false;
-        int nArgsExpected = ScriptSigArgsExpected(whichType, vSolutions);
-        if (nArgsExpected < 0)
+         if (stack.empty())
             return false;
-
-        // Transactions with extra stuff in their scriptSigs are
-        // non-standard. Note that this EvalScript() call will
-        // be quick, because if there are any operations
-        // beside "push data" in the scriptSig
-        // IsStandard() will have already returned false
-        // and this method isn't called.
-        std::vector<std::vector<unsigned char> > stack;
-        if (!BTC::EvalScript(stack, tx.vin[i].scriptSig, false, BaseSignatureChecker(), SigVersion::BASE, nullptr))
+         CScript subscript(stack.back().begin(), stack.back().end());
+         if (subscript.GetSigOpCount(true) > MAX_P2SH_SIGOPS) {
             return false;
+         }
+      }
+   }
 
-        if (whichType == TX_SCRIPTHASH) {
-            if (stack.empty())
-                return false;
-            CScript subscript(stack.back().begin(), stack.back().end());
-            std::vector<std::vector<unsigned char> > vSolutions2;
-            txnouttype whichType2;
-            if (Solver(subscript, whichType2, vSolutions2)) {
-                int tmpExpected = ScriptSigArgsExpected(whichType2, vSolutions2);
-                if (tmpExpected < 0)
-                    return false;
-                nArgsExpected += tmpExpected;
-            } else {
-                // Any other Script with less than 15 sigops OK:
-                unsigned int sigops = subscript.GetSigOpCount(true);
-                // ... extra data left on the stack after execution is OK, too:
-                return (sigops <= MAX_P2SH_SIGOPS);
-            }
-        }
-
-        if (stack.size() != (unsigned int)nArgsExpected)
-            return false;
-    }
-
-    return true;
+   return true;
 }
 
 int GetInputAge(CTxIn& vin)
@@ -1292,6 +1273,17 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState& state, const CTransa
 
             nValueIn = view.GetValueIn(tx);
 
+           //check validator transaction
+           std::vector<CTransaction> validatorTransactions;
+           for(auto &t: pool.mapTx){
+              const CTransaction &valTx = t.second.GetTx();
+              if(valTx.IsValidatorVote() || valTx.IsValidatorRegister())
+                 validatorTransactions.push_back(valTx);
+           }
+           // nHeight is +1 due to current transaction should be included at least into the next block
+           if(!CheckValidatorTransaction(tx, state, view, chainActive.Height() + 1, validatorTransactions))
+              return false;
+
             // we have all inputs cached now, so switch back to dummy, so we don't need to keep lock on mempool
             view.SetBackend(dummy);
         }
@@ -1480,11 +1472,11 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState& state, const CTransa
         // verification flags, in case of bugs in the standard flags that cause
         // transactions to pass as valid when they're actually invalid. For
         // instance the STRICTENC flag was incorrectly allowing certain
-        // CHECKSIG NOT scripts to pass, even though they were invalid.
+        // CHECKSIG NOT scripts to pass, even though they were invalid.F
         //
         // There is a similar check in CreateNewBlock() to prevent creating
         // invalid blocks, however allowing such transactions into the mempool
-        // can be exploited as a DoS attack.
+        // can be exploited as a DoS attack.F
         flags = MANDATORY_SCRIPT_VERIFY_FLAGS;
         if (fCLTVIsActivated)
             flags |= SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY;
@@ -2040,14 +2032,10 @@ void UpdateCoins(const CTransaction& tx, CValidationState& state, CCoinsViewCach
     inputs.ModifyCoins(tx.GetHash())->FromTx(tx, nHeight);
 }
 
-bool CScriptCheck::operator()()
-{
-    const CScript& scriptSig = ptxTo->vin[nIn].scriptSig;
-    CScriptWitness witness;
-    if (!BTC::VerifyScript(scriptSig, scriptPubKey, &witness, nFlags, CachingTransactionSignatureChecker(ptxTo, nIn, cacheStore), &error)) {
-        return ::error("CScriptCheck(): %s:%d VerifySignature failed: %s", ptxTo->GetHash().ToString(), nIn, ScriptErrorString(error));
-    }
-    return true;
+bool CScriptCheck::operator()() {
+   const CScript &scriptSig = ptxTo->vin[nIn].scriptSig;
+   const CScriptWitness *witness = &ptxTo->vin[nIn].scriptWitness;
+   return BTC::VerifyScript(scriptSig, m_tx_out.scriptPubKey, witness, nFlags, BTC::CachingTransactionSignatureChecker(ptxTo, nIn, m_tx_out.nValue, cacheStore, *txdata), &error);
 }
 
 std::map<COutPoint, COutPoint> mapInvalidOutPoints;
@@ -2201,31 +2189,34 @@ bool CheckInputs(const CTransaction& tx, CValidationState& state, const CCoinsVi
                 assert(coins);
 
                 // Verify signature
-                CScriptCheck check(*coins, tx, i, flags, cacheStore);
+                BTC::PrecomputedTransactionData txdata(tx);
+                CScriptCheck check(coins->vout[prevout.n], tx, i, flags, cacheStore, &txdata);
+
                 if (pvChecks) {
-                    pvChecks->push_back(CScriptCheck());
-                    check.swap(pvChecks->back());
-                } else if (!check()) {
-                    if (flags & STANDARD_NOT_MANDATORY_VERIFY_FLAGS) {
-                        // Check whether the failure was caused by a
-                        // non-mandatory script verification check, such as
-                        // non-standard DER encodings or non-null dummy
-                        // arguments; if so, don't trigger DoS protection to
-                        // avoid splitting the network between upgraded and
-                        // non-upgraded nodes.
-                        CScriptCheck check(*coins, tx, i,
-                            flags & ~STANDARD_NOT_MANDATORY_VERIFY_FLAGS, cacheStore);
-                        if (check())
+                      pvChecks->push_back(CScriptCheck());
+                      check.swap(pvChecks->back());
+                   } else if (!check()) {
+                   if (flags & STANDARD_NOT_MANDATORY_VERIFY_FLAGS) {
+                         // Check whether the failure was caused by a
+                         // non-mandatory script verification check, such as
+                         // non-standard DER encodings or non-null dummy
+                         // arguments; if so, don't trigger DoS protection to
+                         // avoid splitting the network between upgraded and
+                         // non-upgraded nodes.
+                         CScriptCheck check(coins->vout[prevout.n], tx, i, flags & ~STANDARD_NOT_MANDATORY_VERIFY_FLAGS, cacheStore, &txdata);
+                         //CScriptCheck check(*coins, tx, i,
+                         //                   flags & ~STANDARD_NOT_MANDATORY_VERIFY_FLAGS, cacheStore);
+                         if (check())
                             return state.Invalid(false, REJECT_NONSTANDARD, strprintf("non-mandatory-script-verify-flag (%s)", ScriptErrorString(check.GetScriptError())));
-                    }
-                    // Failures of other flags indicate a transaction that is
-                    // invalid in new blocks, e.g. a invalid P2SH. We DoS ban
-                    // such nodes as they are not following the protocol. That
-                    // said during an upgrade careful thought should be taken
-                    // as to the correct behavior - we may want to continue
-                    // peering with non-upgraded nodes even after a soft-fork
-                    // super-majority vote has passed.
-                    return state.DoS(100, false, REJECT_INVALID, strprintf("mandatory-script-verify-flag-failed (%s)", ScriptErrorString(check.GetScriptError())));
+                      }
+                   // Failures of other flags indicate a transaction that is
+                   // invalid in new blocks, e.g. a invalid P2SH. We DoS ban
+                   // such nodes as they are not following the protocol. That
+                   // said during an upgrade careful thought should be taken
+                   // as to the correct behavior - we may want to continue
+                   // peering with non-upgraded nodes even after a soft-fork
+                   // super-majority vote has passed.
+                   return state.DoS(100, false, REJECT_INVALID, strprintf("mandatory-script-verify-flag-failed (%s)", ScriptErrorString(check.GetScriptError())));
                 }
             }
         }
@@ -3011,27 +3002,8 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                        CKeyID senderAddr = CKeyID(uint160(GetSenderAddress(tx, &view, NULL, nOut)));
 
                        //okay, seek trx pubkey in validators
-                       //genesis validators
-                       auto genesisValidators = Params().GenesisBlock().vtx[0].validatorRegister;
-                       for(auto &gv : genesisValidators){
-                          if(senderAddr == gv.pubKey.GetID()){
-                             bSCValidatorFound = true;
-                             break;
-                          }
-                       }
+                       bSCValidatorFound = isAddressValidator(senderAddr);
 
-                       //voted validators
-                       if(!bSCValidatorFound)
-                       {
-                          auto validatorsRegistrationList = g_ValidatorsState.get_validators();
-                          for (auto& rv: validatorsRegistrationList)
-                          {
-                             if(senderAddr == rv.pubKey.GetID()){
-                                bSCValidatorFound = true;
-                                break;
-                             }
-                          }
-                       }
                        //if key found - break;
                        if(bSCValidatorFound)
                           break;
@@ -3044,7 +3016,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                  return state.DoS(100, error("ConnectBlock() : Non-validator create contract not allowed"),
                                   REJECT_INVALID, "sc-create-invalid");
 
-              if (!CheckSenderScript(view, tx)) {
+              if (!CheckSenderScript(view, tx, &block)) {
                  return state.Error("bad-txns-invalid-sender-script");
               }
 
@@ -4581,7 +4553,7 @@ bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationState& sta
     const int chainHeight = chainActive.Height();
 
     //If this is a reorg, check that it is not too deep
-    int nMaxReorgDepth = GetArg("-maxreorg", Params().MaxReorganizationDepth());
+       int nMaxReorgDepth = GetArg("-maxreorg", Params().MaxReorganizationDepth());
     if (chainHeight - nHeight >= nMaxReorgDepth)
         return state.DoS(1, error("%s: forked chain older than max reorganization depth (height %d)", __func__, chainHeight - nHeight));
 
@@ -6195,7 +6167,10 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
                               !pSporkDB->SporkExists(SPORK_16_ZEROCOIN_MAINTENANCE_MODE) ||
                               !pSporkDB->SporkExists(SPORK_17_COLDSTAKING_ENFORCEMENT) ||
                               !pSporkDB->SporkExists(SPORK_1017_LEASING_ENFORCEMENT) ||
-                              !pSporkDB->SporkExists(SPORK_18_ZEROCOIN_PUBLICSPEND_V4);
+                              !pSporkDB->SporkExists(SPORK_18_ZEROCOIN_PUBLICSPEND_V4) ||
+                              !pSporkDB->SporkExists(SPORK_1018_MAX_VALIDATORS) ||
+                              !pSporkDB->SporkExists(SPORK_1019_CREATECONTRACT_ANY_ALLOWED) ||
+                              !pSporkDB->SporkExists(SPORK_1020_VALIDATOR_ENFORCEMENT);
 
         if (fMissingSporks || !fRequestedSporksIDB){
             LogPrintf("asking peer for sporks\n");

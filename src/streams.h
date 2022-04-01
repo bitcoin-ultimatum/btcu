@@ -337,12 +337,14 @@ private:
     CAutoFile(const CAutoFile&);
     CAutoFile& operator=(const CAutoFile&);
 
-    int nType;
-    int nVersion;
 
     FILE* file;
 
 public:
+
+    int nType;
+    int nVersion;
+
     CAutoFile(FILE* filenew, int nTypeIn, int nVersionIn)
     {
         file = filenew;
@@ -468,8 +470,6 @@ private:
     CBufferedFile(const CBufferedFile&);
     CBufferedFile& operator=(const CBufferedFile&);
 
-    int nType;
-    int nVersion;
 
     FILE* src;                // source file
     uint64_t nSrcPos;         // how many bytes have been read from source
@@ -499,6 +499,10 @@ protected:
     }
 
 public:
+
+    int nType;
+    int nVersion;
+
     CBufferedFile(FILE* fileIn, uint64_t nBufSize, uint64_t nRewindIn, int nTypeIn, int nVersionIn) : nSrcPos(0), nReadPos(0), nReadLimit((uint64_t)(-1)), nRewind(nRewindIn), vchBuf(nBufSize, 0)
     {
         src = fileIn;

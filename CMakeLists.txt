@@ -1472,6 +1472,7 @@ set(WALLET_SOURCES
         ./src/zbtcu/zerocoin.cpp
         ./src/wallet/rpcwallet.cpp
         ./src/kernel.cpp
+        ./src/key_io.cpp
         ./src/wallet/wallet.cpp
         ./src/wallet/wallet_zerocoin.cpp
         ./src/wallet/wallet_ismine.cpp
@@ -1780,13 +1781,18 @@ if(BUILD_UTILS)
         )
         list(APPEND btcu-tx_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/btcu-tx-res.rc)
     endif()
+    add_dependencies(btcu-tx leveldb leveldb_sse42 memenv)
     target_link_libraries(btcu-tx
             univalue
             COMMON_A
             SERVER_A
+            WALLET_A
             ZEROCOIN_A
             UTIL_A
             BITCOIN_CRYPTO_A
+            leveldb
+            leveldb_sse42
+            memenv
             secp256k1
             ${Boost_LIBRARIES} 
             ${OPENSSL_LIBRARIES}
@@ -1796,6 +1802,7 @@ if(BUILD_UTILS)
         target_link_libraries(btcu-tx ${GMP_LIBRARIES})
     endif()
     if(ZeroMQ_FOUND)
+        target_link_libraries(btcu-tx ZMQ_A)
         if(${CMAKE_SYSTEM_NAME} MATCHES "Windows" OR BUILD_STATIC)
             target_link_libraries(btcu-tx 
                 ZeroMQ::zmq
