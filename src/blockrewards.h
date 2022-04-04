@@ -1,5 +1,5 @@
 //
-// Created by dim4egster on 2/17/21.
+// Copyright (c) 2021 The BTCU developers
 //
 
 #ifndef BITCOIN_ULTIMATUM_BLOCKREWARDS_H
