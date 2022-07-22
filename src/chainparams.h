@@ -49,6 +49,8 @@ public:
         SECRET_KEY,     // BIP16
         STAKING_ADDRESS,
         LEASING_ADDRESS,
+        EXT_PUBLIC_KEY,
+        EXT_SECRET_KEY,
         MAX_BASE58_TYPES
     };
 
@@ -181,7 +183,7 @@ public:
     int MPoSRewardRecipients() const { return nMPoSRewardRecipients; }
 
     std::string EVMGenesisInfo(dev::eth::Network network) const;
-    
+    std::string EVMGenesisInfo() const;
     //Chainstate patching addresses
     const std::vector<std::string>& ExcludedBTCAddresses() const { return vExcludedAddresses; }
     const std::string& RechargedBTCAddress() const { return rechargedAddress; }
