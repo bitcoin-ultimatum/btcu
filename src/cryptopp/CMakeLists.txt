@@ -8,6 +8,7 @@ cmake_minimum_required(VERSION 3.14)
 
 project(cryptopp)
 
+set(CMAKE_CXX_STANDARD 14)
 # In order to make XCode correct build this
 # we need to simplify the process
 option(BUILD_TESTING "Build library tests" ${ENABLE_TESTS})

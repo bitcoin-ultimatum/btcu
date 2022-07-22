@@ -6,7 +6,6 @@
 
 #include "core_io.h"
 
-#include "btcu_address.h"
 #include "primitives/transaction.h"
 #include "script/script.h"
 #include "script/standard.h"
@@ -16,7 +15,7 @@
 #include "util.h"
 #include "utilmoneystr.h"
 #include "utilstrencodings.h"
-
+#include "key_io.h"
 
 
 std::string FormatScript(const CScript& script)
@@ -82,15 +81,12 @@ void ScriptPubKeyToUniv(const CScript& scriptPubKey,
     out.pushKV("type", GetTxnOutputType(type));
 
     UniValue a(UniValue::VARR);
-    if (type == TX_COLDSTAKE && addresses.size() == 2) {
-        a.push_back(CBTCUAddress(addresses[0], CChainParams::STAKING_ADDRESS).ToString());
-        a.push_back(CBTCUAddress(addresses[1], CChainParams::PUBKEY_ADDRESS).ToString());
-    } else if ((type == TX_LEASE || type == TX_LEASE_CLTV) && addresses.size() == 2) {
-        a.push_back(CBTCUAddress(addresses[0], CChainParams::PUBKEY_ADDRESS).ToString());
-        a.push_back(CBTCUAddress(addresses[1], CChainParams::PUBKEY_ADDRESS).ToString());
+    if ((type == TX_COLDSTAKE || type == TX_LEASE || type == TX_LEASE_CLTV) && addresses.size() == 2) {
+        a.push_back(EncodeDestination(addresses[0]));
+        a.push_back(EncodeDestination(addresses[1]));
     } else {
         for (const CTxDestination& addr : addresses)
-            a.push_back(CBTCUAddress(addr).ToString());
+           a.push_back(EncodeDestination(addr));
     }
     out.pushKV("addresses", a);
 }

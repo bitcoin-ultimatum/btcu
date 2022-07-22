@@ -55,6 +55,11 @@ public:
         return *this;
     }
 
+    CHash256& Write(Span<const unsigned char> input) {
+       sha.Write(input.data(), input.size());
+       return *this;
+    }
+
     CHash256& Reset()
     {
         sha.Reset();
@@ -142,6 +147,18 @@ public:
         sha.Write(data, len);
         return *this;
     }
+
+    void Finalize(Span<unsigned char> output) {
+       assert(output.size() == OUTPUT_SIZE);
+       unsigned char buf[CSHA256::OUTPUT_SIZE];
+       sha.Finalize(buf);
+       CRIPEMD160().Write(buf, CSHA256::OUTPUT_SIZE).Finalize(output.data());
+    }
+
+    CHash160& Write(Span<const unsigned char> input) {
+      sha.Write(input.data(), input.size());
+      return *this;
+   }
 
     CHash160& Reset()
     {
@@ -295,6 +312,15 @@ inline uint256 Hash(const T1 p1begin, const T1 p1end, const T2 p2begin, const T2
     return result;
 }
 
+/** Compute the 256-bit hash of an object. */
+template<typename T>
+inline uint256 Hash(const T& in1)
+{
+   uint256 result;
+   CHash256().Write(MakeUCharSpan(in1)).Finalize((unsigned char*)&result);
+   return result;
+}
+
 /** Compute the 160-bit hash an object. */
 template <typename T1>
 inline uint160 Hash160(const T1 pbegin, const T1 pend)
@@ -309,6 +335,15 @@ inline uint160 Hash160(const T1 pbegin, const T1 pend)
 inline uint160 Hash160(const std::vector<unsigned char>& vch)
 {
     return Hash160(vch.begin(), vch.end());
+}
+
+/** Compute the 160-bit hash an object. */
+template<typename T1>
+inline uint160 Hash160(const T1& in1)
+{
+   uint160 result;
+   CHash160().Write(MakeUCharSpan(in1)).Finalize((unsigned char*)&result);
+   return result;
 }
 
 /** A writer stream (for serialization) that computes a 256-bit hash. */
@@ -364,6 +399,9 @@ uint256 SerializeHash(const T& obj, int nType = SER_GETHASH, int nVersion = PROT
     ss << obj;
     return ss.GetHash();
 }
+
+/** Single-SHA256 a 32-byte input (represented as uint256). */
+[[nodiscard]] uint256 SHA256Uint256(const uint256& input);
 
 unsigned int MurmurHash3(unsigned int nHashSeed, const std::vector<unsigned char>& vDataToHash);
 

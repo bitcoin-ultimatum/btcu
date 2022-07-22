@@ -13,6 +13,7 @@
 #include "guiutil.h"
 #include "qt/btcu/qtutils.h"
 #include "walletmodel.h"
+#include "key_io.h"
 
 #include <QModelIndex>
 #include <QRegExpValidator>
@@ -222,7 +223,8 @@ void AddressesWidget::onStoreContactClicked(){
             return;
         }
 
-        CBTCUAddress btcuAdd = CBTCUAddress(address.toUtf8().constData());
+        bool isStaking = false;
+        CTxDestination btcuAdd = DecodeDestination(address.toUtf8().constData(), &isStaking);
         if (walletModel->isMine(btcuAdd)) {
             setCssEditLine(ui->lineEditAddress, false, true);
             inform(tr("Cannot store your own address as contact"));
@@ -236,8 +238,8 @@ void AddressesWidget::onStoreContactClicked(){
             return;
         }
 
-        if (walletModel->updateAddressBookLabels(btcuAdd.Get(), label.toUtf8().constData(),
-                btcuAdd.IsStakingAddress() ? AddressBook::AddressBookPurpose::COLD_STAKING_SEND : AddressBook::AddressBookPurpose::SEND)
+        if (walletModel->updateAddressBookLabels(btcuAdd, label.toUtf8().constData(),
+                                                 isStaking ? AddressBook::AddressBookPurpose::COLD_STAKING_SEND : AddressBook::AddressBookPurpose::SEND)
                 ) {
             ui->lineEditAddress->setText("");
             ui->lineEditName->setText("");
@@ -267,7 +269,7 @@ void AddressesWidget::onEditClicked(){
     dialog->setData(address, currentLabel);
     if(openDialogWithOpaqueBackground(dialog, window)){
         if(walletModel->updateAddressBookLabels(
-                CBTCUAddress(address.toStdString()).Get(), dialog->getLabel().toStdString(), addressTablemodel->purposeForAddress(address.toStdString()))){
+                DecodeDestination(address.toStdString()), dialog->getLabel().toStdString(), addressTablemodel->purposeForAddress(address.toStdString()))){
            updateAddresses();
            informWarning(tr("Contact edited"));
         }else{

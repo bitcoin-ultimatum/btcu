@@ -44,6 +44,7 @@ enum RPCErrorCode {
     RPC_INVALID_ADDRESS_OR_KEY          = -5, //! Invalid address or key
     RPC_OUT_OF_MEMORY                   = -7, //! Ran out of memory during operation
     RPC_INVALID_PARAMETER               = -8, //! Invalid, missing or duplicate parameter
+    RPC_WALLET_INVALID_LABEL_NAME   = -11, //!< Invalid label name
     RPC_DATABASE_ERROR                  = -20, //! Database error
     RPC_DESERIALIZATION_ERROR           = -22, //! Error parsing or validating structure in raw format
     RPC_VERIFY_ERROR                    = -25, //! General error during transaction or block submission

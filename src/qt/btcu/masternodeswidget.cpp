@@ -33,6 +33,7 @@
 #include "../../init.h"
 
 #include "main.h"
+#include "key_io.h"
 #include <QGraphicsDropShadowEffect>
 
 #define DECORATION_SIZE 65
@@ -413,7 +414,7 @@ void MasterNodesWidget::onpbnMyMasternodesClicked()
                 IsTransactionInChain(uHash, blockHeight, tr);
 
                 CKeyID key;
-                walletModel->getKeyId(CBTCUAddress(address), key);
+                walletModel->getKeyId(DecodeDestination(address), key);
                 CPubKey pubKey;
                 walletModel->getPubKey(key, pubKey);
 

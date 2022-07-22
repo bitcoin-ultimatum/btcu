@@ -76,8 +76,7 @@ static const bool DEFAULT_ALERTS = true;
 /** The maximum size for transactions we're willing to relay/mine */
 static const unsigned int MAX_STANDARD_TX_SIZE = 100000;
 static const unsigned int MAX_ZEROCOIN_TX_SIZE = 150000;
-/** Maximum number of signature check operations in an IsStandard() P2SH script */
-static const unsigned int MAX_P2SH_SIGOPS = 15;
+
 /** Default for -maxorphantx, maximum number of orphan transactions kept in memory */
 static const unsigned int DEFAULT_MAX_ORPHAN_TRANSACTIONS = 100;
 /** The maximum size of a blk?????.dat file (since 0.8) */
@@ -119,13 +118,6 @@ static const bool DEFAULT_BLOCK_SPAM_FILTER = true;
 static const unsigned int DEFAULT_BLOCK_SPAM_FILTER_MAX_SIZE = 100;
 /** Default for -blockspamfiltermaxavg, maximum average size of an index occurrence in the block spam filter */
 static const unsigned int DEFAULT_BLOCK_SPAM_FILTER_MAX_AVG = 10;
-
-/////////////////////////////////////////qtum
-/** The number of sender stack items in a standard sender signature script */
-static const unsigned int STANDARD_SENDER_STACK_ITEMS = 2;
-/** The maximum size of each sender stack item in a standard sender signature script */
-static const unsigned int MAX_STANDARD_SENDER_STACK_ITEM_SIZE = 80;
-////////////////////////////////////////////
 
 /**Masternode deposit size*/
 #define MN_DEPOSIT_SIZE 1000
@@ -296,7 +288,7 @@ bool AreInputsStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs)
  * This does not modify the UTXO set. If pvChecks is not NULL, script checks are pushed onto it
  * instead of being performed inline.
  */
-bool CheckInputs(const CTransaction& tx, CValidationState& state, const CCoinsViewCache& view, bool fScriptChecks, unsigned int flags, bool cacheStore, std::vector<CScriptCheck>* pvChecks = NULL);
+bool CheckInputs(const CTransaction& tx, CValidationState& state, const CCoinsViewCache& view, bool fScriptChecks, unsigned int flags, bool cacheStore, PrecomputedTransactionData& txdata, std::vector<CScriptCheck>* pvChecks = NULL);
 
 /** Apply the effects of this transaction on the UTXO set represented by view */
 void UpdateCoins(const CTransaction& tx, CValidationState& state, CCoinsViewCache& inputs, CTxUndo& txundo, int nHeight);
@@ -349,12 +341,15 @@ private:
    unsigned int nFlags;
    bool cacheStore;
    ScriptError error;
-   BTC::PrecomputedTransactionData *txdata;
+   PrecomputedTransactionData *txdata;
+   int nOut;
 
 public:
-   CScriptCheck(): ptxTo(nullptr), nIn(0), nFlags(0), cacheStore(false), error(SCRIPT_ERR_UNKNOWN_ERROR) {}
-   CScriptCheck(const CTxOut& outIn, const CTransaction& txToIn, unsigned int nInIn, unsigned int nFlagsIn, bool cacheIn, BTC::PrecomputedTransactionData* txdataIn) :
-   m_tx_out(outIn), ptxTo(&txToIn), nIn(nInIn), nFlags(nFlagsIn), cacheStore(cacheIn), error(SCRIPT_ERR_UNKNOWN_ERROR), txdata(txdataIn) { }
+   CScriptCheck(): ptxTo(nullptr), nIn(0), nFlags(0), cacheStore(false), error(SCRIPT_ERR_UNKNOWN_ERROR), nOut(-1) {}
+   CScriptCheck(const CTxOut& outIn, const CTransaction& txToIn, unsigned int nInIn, unsigned int nFlagsIn, bool cacheIn, PrecomputedTransactionData* txdataIn) :
+   m_tx_out(outIn), ptxTo(&txToIn), nIn(nInIn), nFlags(nFlagsIn), cacheStore(cacheIn), error(SCRIPT_ERR_UNKNOWN_ERROR), txdata(txdataIn), nOut(-1) { }
+   CScriptCheck(const CTransaction& txToIn, int nOutIn, unsigned int nFlagsIn, bool cacheIn, PrecomputedTransactionData* txdataIn) :
+   ptxTo(&txToIn), nIn(0), nFlags(nFlagsIn), cacheStore(cacheIn), error(SCRIPT_ERR_UNKNOWN_ERROR), txdata(txdataIn), nOut(nOutIn){ }
 
    bool operator()();
 
@@ -366,9 +361,11 @@ public:
       std::swap(cacheStore, check.cacheStore);
       std::swap(error, check.error);
       std::swap(txdata, check.txdata);
+      std::swap(nOut, check.nOut);
    }
 
    ScriptError GetScriptError() const { return error; }
+   bool checkOutput() const { return nOut > -1; }
 };
 
 

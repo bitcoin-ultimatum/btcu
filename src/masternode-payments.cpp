@@ -15,6 +15,7 @@
 #include "sync.h"
 #include "util.h"
 #include "utilmoneystr.h"
+#include "key_io.h"
 #include <boost/filesystem.hpp>
 
 /** Object for who's going to get paid on which blocks */
@@ -227,7 +228,7 @@ void DumpMasternodePayments()
     LogPrint("masternode","Budget dump finished  %dms\n", GetTimeMillis() - nStart);
 }
 
-bool IsBlockValueValid(const CBlock& block, CAmount nExpectedValue, CAmount nMinted)
+bool IsBlockValueValid(const CBlock& block, CAmount nExpectedValue, CAmount nMinted, bool fAlreadyChecked)
 {
     CBlockIndex* pindexPrev = chainActive.Tip();
     if (pindexPrev == NULL) return true;
@@ -252,7 +253,7 @@ bool IsBlockValueValid(const CBlock& block, CAmount nExpectedValue, CAmount nMin
         if (nHeight % Params().GetBudgetCycleBlocks() < 100) {
             return true;
         } else {
-            if (nMinted > nExpectedValue) {
+            if (fAlreadyChecked && (nMinted > nExpectedValue)) {
                 return false;
             }
         }
@@ -356,7 +357,7 @@ void CMasternodePayments::FillBlockPayee(CMutableTransaction& txNew, int64_t nFe
         //no masternode detected
         CMasternode* winningNode = mnodeman.GetCurrentMasterNode(1);
         if (winningNode) {
-            payee = GetScriptForDestination(winningNode->pubKeyCollateralAddress.GetID());
+            payee = GetScriptForDestination(PKHash(winningNode->pubKeyCollateralAddress.GetID()));
         } else {
             LogPrint("masternode","CreateNewBlock: Failed to detect masternode to pay\n");
             hasPayment = false;
@@ -404,9 +405,8 @@ void CMasternodePayments::FillBlockPayee(CMutableTransaction& txNew, int64_t nFe
 
         CTxDestination address1;
         ExtractDestination(payee, address1);
-        CBTCUAddress address2(address1);
 
-        LogPrint("masternode","Masternode payment of %s to %s\n", FormatMoney(masternodePayment).c_str(), address2.ToString().c_str());
+        LogPrint("masternode","Masternode payment of %s to %s\n", FormatMoney(masternodePayment).c_str(), EncodeDestination(address1).c_str());
     }
 }
 
@@ -497,9 +497,8 @@ void CMasternodePayments::ProcessMessageMasternodePayments(CNode* pfrom, std::st
 
         CTxDestination address1;
         ExtractDestination(winner.payee, address1);
-        CBTCUAddress address2(address1);
 
-        //   LogPrint("mnpayments", "mnw - winning vote - Addr %s Height %d bestHeight %d - %s\n", address2.ToString().c_str(), winner.nBlockHeight, nHeight, winner.vinMasternode.prevout.ToStringShort());
+        LogPrint("mnpayments", "mnw - winning vote - Addr %s Height %d bestHeight %d - %s\n", EncodeDestination(address1).c_str(), winner.nBlockHeight, nHeight, winner.vinMasternode.prevout.ToStringShort());
 
         if (masternodePayments.AddWinningMasternode(winner)) {
             winner.Relay();
@@ -531,7 +530,7 @@ bool CMasternodePayments::IsScheduled(CMasternode& mn, int nNotBlockHeight)
     }
 
     CScript mnpayee;
-    mnpayee = GetScriptForDestination(mn.pubKeyCollateralAddress.GetID());
+    mnpayee = GetScriptForDestination(PKHash(mn.pubKeyCollateralAddress.GetID()));
 
     CScript payee;
     for (int64_t h = nHeight; h <= nHeight + 8; h++) {
@@ -624,12 +623,12 @@ bool CMasternodeBlockPayees::IsTransactionValid(const CTransaction& txNew)
 
             CTxDestination address1;
             ExtractDestination(payee.scriptPubKey, address1);
-            CBTCUAddress address2(address1);
+            std::string str_address = EncodeDestination(address1);
 
             if (strPayeesPossible == "") {
-                strPayeesPossible += address2.ToString();
+                strPayeesPossible += str_address;
             } else {
-                strPayeesPossible += "," + address2.ToString();
+                strPayeesPossible += "," + str_address;
             }
         }
     }
@@ -647,12 +646,12 @@ std::string CMasternodeBlockPayees::GetRequiredPaymentsString()
     for (CMasternodePayee& payee : vecPayments) {
         CTxDestination address1;
         ExtractDestination(payee.scriptPubKey, address1);
-        CBTCUAddress address2(address1);
+        std::string str_address = EncodeDestination(address1);
 
         if (ret != "Unknown") {
-            ret += ", " + address2.ToString() + ":" + std::to_string(payee.nVotes);
+            ret += ", " + str_address + ":" + std::to_string(payee.nVotes);
         } else {
-            ret = address2.ToString() + ":" + std::to_string(payee.nVotes);
+            ret = str_address + ":" + std::to_string(payee.nVotes);
         }
     }
 
@@ -746,14 +745,14 @@ bool CMasternodePayments::ProcessBlock(int nBlockHeight)
 
             newWinner.nBlockHeight = nBlockHeight;
 
-            CScript payee = GetScriptForDestination(pmn->pubKeyCollateralAddress.GetID());
+            CScript payee = GetScriptForDestination(PKHash(pmn->pubKeyCollateralAddress.GetID()));
             newWinner.AddPayee(payee);
 
             CTxDestination address1;
             ExtractDestination(payee, address1);
-            CBTCUAddress address2(address1);
 
-            LogPrint("masternode","CMasternodePayments::ProcessBlock() Winner payee %s nHeight %d. \n", address2.ToString().c_str(), newWinner.nBlockHeight);
+            LogPrint("masternode","CMasternodePayments::ProcessBlock() Winner payee %s nHeight %d. \n",
+                     EncodeDestination(address1).c_str(), newWinner.nBlockHeight);
         } else {
             LogPrint("masternode","CMasternodePayments::ProcessBlock() Failed to find masternode to pay\n");
         }

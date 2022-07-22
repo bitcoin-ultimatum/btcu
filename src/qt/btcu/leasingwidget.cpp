@@ -24,6 +24,7 @@
 #include <QScrollBar>
 #include <QGraphicsDropShadowEffect>
 #include <iostream>
+#include "key_io.h"
 
 #define DECORATION_SIZE 70
 #define NUM_ITEMS 3
@@ -829,12 +830,12 @@ void LeasingWidget::onSendClicked(){
         std::string strAccount = "";
         std::string purpose = AddressBook::AddressBookPurpose::LEASED;
         CChainParams::Base58Type addrType = CChainParams::PUBKEY_ADDRESS;
-        CBTCUAddress address;
+        CTxDestination address;
         PairResult r = pwalletMain->getNewAddress(address, strAccount, purpose, addrType);
-        inputOwner = QString::fromStdString(address.ToString());
+        inputOwner = QString::fromStdString(EncodeDestination(address));
 
-        CKeyID ownerKey;
-        if (!address.GetKeyID(ownerKey))
+        CKeyID ownerKey = GetKeyForDestination(*pwalletMain, address);
+        if (ownerKey.IsNull())
         {
             informError(tr("Unable to get spend pubkey hash from owneraddress"));
             return;
@@ -1147,9 +1148,9 @@ void LeasingWidget::onLabelClicked(QString dialogTitle, const QModelIndex &index
             QString label = dialog->getLabel();
             std::string stdString = qAddress.toStdString();
             std::string purpose = walletModel->getAddressTableModel()->purposeForAddress(stdString);
-            const CBTCUAddress address = CBTCUAddress(stdString.data());
+            const CTxDestination address = DecodeDestination(stdString.data());
             if (!label.isEmpty() && walletModel->updateAddressBookLabels(
-                    address.Get(),
+                    address,
                     label.toUtf8().constData(),
                     purpose
             )) {

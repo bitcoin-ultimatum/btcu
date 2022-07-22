@@ -752,6 +752,7 @@ public:
     }
 
    bool ExtractPubKey(CPubKey& pubKeyOut) const;
+   uint64_t ExtractLeasedCLTVTimestamp() const;
 
     std::string ToString() const;
     void clear()

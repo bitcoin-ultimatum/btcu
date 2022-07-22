@@ -19,12 +19,16 @@
 #include "script/script_error.h"
 #include "script/sign.h"
 #include "script/standard.h"
+#include <script/signingprovider.h>
 #include "swifttx.h"
 #include "uint256.h"
 #include "utilmoneystr.h"
 #include "zbtcuchain.h"
 #ifdef ENABLE_WALLET
 #include "wallet/wallet.h"
+#include "policy/policy.h"
+#include "key_io.h"
+
 #endif
 
 #include <stdint.h>
@@ -54,7 +58,7 @@ void ScriptPubKeyToJSON(const CScript& scriptPubKey, UniValue& out, bool fInclud
 
     UniValue a(UniValue::VARR);
     for (const CTxDestination& addr : addresses)
-        a.push_back(CBTCUAddress(addr).ToString());
+        a.push_back(EncodeDestination(addr));
     out.push_back(Pair("addresses", a));
 }
 
@@ -255,13 +259,13 @@ UniValue listunspent(const UniValue& params, bool fHelp)
     if (params.size() > 1)
         nMaxDepth = params[1].get_int();
 
-    std::set<CBTCUAddress> setAddress;
+    std::set<CTxDestination> setAddress;
     if (params.size() > 2) {
         UniValue inputs = params[2].get_array();
         for (unsigned int inx = 0; inx < inputs.size(); inx++) {
             const UniValue& input = inputs[inx];
-            CBTCUAddress address(input.get_str());
-            if (!address.IsValid())
+            CTxDestination address = DecodeDestination(input.get_str());
+            if (!IsValidDestination(address))
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid BTCU address: ") + input.get_str());
             if (setAddress.count(address))
                 throw JSONRPCError(RPC_INVALID_PARAMETER, std::string("Invalid parameter, duplicated address: ") + input.get_str());
@@ -301,7 +305,7 @@ UniValue listunspent(const UniValue& params, bool fHelp)
         entry.push_back(Pair("vout", out.i));
         CTxDestination address;
         if (ExtractDestination(out.tx->vout[out.i].scriptPubKey, address)) {
-            entry.push_back(Pair("address", CBTCUAddress(address).ToString()));
+            entry.push_back(Pair("address", EncodeDestination(address)));
             if (pwalletMain->mapAddressBook.count(address))
                 entry.push_back(Pair("account", pwalletMain->mapAddressBook[address].name));
         }
@@ -309,7 +313,7 @@ UniValue listunspent(const UniValue& params, bool fHelp)
         if (pk.IsPayToScriptHash()) {
             CTxDestination address;
             if (ExtractDestination(pk, address)) {
-                const CScriptID& hash = boost::get<CScriptID>(address);
+                const CScriptID& hash = (CScriptID)*std::get_if<ScriptHash>(&address);
                 CScript redeemScript;
                 if (pwalletMain->CCryptoKeyStore::GetCScript(hash, redeemScript))
                     entry.push_back(Pair("redeemScript", HexStr(redeemScript.begin(), redeemScript.end())));
@@ -405,18 +409,18 @@ UniValue createrawtransaction(const UniValue& params, bool fHelp)
         rawTx.vin.push_back(in);
     }
 
-    std::set<CBTCUAddress> setAddress;
+    std::set<CTxDestination> setAddress;
     std::vector<std::string> addrList = sendTo.getKeys();
     for (const std::string& name_ : addrList) {
-        CBTCUAddress address(name_);
-        if (!address.IsValid())
+        CTxDestination address = DecodeDestination(name_);
+        if (!IsValidDestination(address))
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid BTCU address: ")+name_);
 
         if (setAddress.count(address))
             throw JSONRPCError(RPC_INVALID_PARAMETER, std::string("Invalid parameter, duplicated address: ")+name_);
         setAddress.insert(address);
 
-        CScript scriptPubKey = GetScriptForDestination(address.Get());
+        CScript scriptPubKey = GetScriptForDestination(address);
         CAmount nAmount = AmountFromValue(sendTo[name_]);
 
         CTxOut out(nAmount, scriptPubKey);
@@ -529,7 +533,7 @@ UniValue decodescript(const UniValue& params, bool fHelp)
     }
     ScriptPubKeyToJSON(script, r, false);
 
-    r.push_back(Pair("p2sh", CBTCUAddress(CScriptID(script)).ToString()));
+    r.push_back(Pair("p2sh", EncodeDestination(ScriptHash(script))));
     return r;
 }
 
@@ -671,13 +675,9 @@ UniValue signrawtransaction(const UniValue& params, bool fHelp)
         fGivenKeys = !keys.empty();
         for (unsigned int idx = 0; idx < keys.size(); idx++) {
             UniValue k = keys[idx];
-            CBTCUSecret vchSecret;
-            bool fGood = vchSecret.SetString(k.get_str());
-            if (!fGood)
-                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key");
-            CKey key = vchSecret.GetKey();
+            CKey key = DecodeSecret(k.get_str());
             if (!key.IsValid())
-                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Private key outside allowed range");
+               throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key");
             tempKeystore.AddKey(key);
         }
     }
@@ -801,12 +801,12 @@ UniValue signrawtransaction(const UniValue& params, bool fHelp)
         SignatureData sigdata;
         // Only sign SIGHASH_SINGLE if there's a corresponding output:
         if (!fHashSingle || (i < mergedTx.vout.size()))
-           BTC::ProduceSignature(BTC::MutableTransactionSignatureCreator(&keystore, &mergedTx, i, amount, nHashType), prevPubKey, sigdata, fColdStake, fLeasing, fForceLeaserSign);
+           ProduceSignature(keystore, MutableTransactionSignatureCreator(&mergedTx, i, amount, nHashType), prevPubKey, sigdata, fColdStake, fLeasing, fForceLeaserSign);
 
         // ... and merge in other signatures:
         for (const CMutableTransaction& txv : txVariants) {
-           sigdata = BTC::CombineSignatures(prevPubKey, BTC::TransactionSignatureChecker(&txConst, i, amount), sigdata, BTC::DataFromTransaction(mergedTx, i));
-           BTC::UpdateTransaction(mergedTx, i, sigdata);
+           sigdata = CombineSignatures(keystore, txv.vout[0], mergedTx, sigdata, DataFromTransaction(mergedTx, i, coins->vout[txin.prevout.n]));
+           UpdateInput(txin, sigdata);
         }
 
        // amount must be specified for valid segwit signature
@@ -815,7 +815,7 @@ UniValue signrawtransaction(const UniValue& params, bool fHelp)
        }
 
        ScriptError serror = SCRIPT_ERR_OK;
-       if (!BTC::VerifyScript(txin.scriptSig, prevPubKey, &txin.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, BTC::TransactionSignatureChecker(&txConst, i, amount), &serror)) {
+       if (!VerifyScript(txin.scriptSig, prevPubKey, &txin.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, TransactionSignatureChecker(&txConst, i, amount, MissingDataBehavior::ASSERT_FAIL), &serror)) {
             TxInErrorToJSON(txin, vErrors, ScriptErrorString(serror));
         }
     }
@@ -974,11 +974,11 @@ UniValue createrawzerocoinspend(const UniValue& params, bool fHelp)
     if (!IsHex(serial_hash))
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, expected hex serial hash");
 
-    CBTCUAddress address;
-    CBTCUAddress* addr_ptr = nullptr;
+    CTxDestination address;
+   CTxDestination* addr_ptr = nullptr;
     if (address_str != "") {
-        address = CBTCUAddress(address_str);
-        if(!address.IsValid())
+        address = DecodeDestination(address_str);
+        if(!IsValidDestination(address))
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid BTCU address");
         addr_ptr = &address;
     }
@@ -1001,9 +1001,9 @@ UniValue createrawzerocoinspend(const UniValue& params, bool fHelp)
     CZerocoinSpendReceipt receipt;
     CReserveKey reserveKey(pwalletMain);
     std::vector<CDeterministicMint> vNewMints;
-    std::list<std::pair<CBTCUAddress*, CAmount>> outputs;
+    std::list<std::pair<CTxDestination *, CAmount>> outputs;
     if (addr_ptr) {
-        outputs.push_back(std::pair<CBTCUAddress*, CAmount>(addr_ptr, nAmount));
+        outputs.push_back(std::pair<CTxDestination *, CAmount>(addr_ptr, nAmount));
     }
     if (!pwalletMain->CreateZCPublicSpendTransaction(nAmount, rawTx, reserveKey, receipt, vMintsSelected, vNewMints, outputs, nullptr))
         throw JSONRPCError(RPC_WALLET_ERROR, receipt.GetStatusMessage());

@@ -34,6 +34,7 @@
 #include "net.h"
 #include "rpc/server.h"
 #include "script/standard.h"
+#include <script/sigcache.h>
 #include "scheduler.h"
 #include "spork.h"
 #include "sporkdb.h"
@@ -871,6 +872,8 @@ bool AppInit2()
     // ********************************************************* Step 1: setup
     if (!AppInitBasicSetup())
         return false;
+
+    InitSignatureCache();
 
     // ********************************************************* Step 2: parameter interactions
     // Set this early so that parameter interactions go to console

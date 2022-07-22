@@ -13,6 +13,7 @@
 
 #include "wallet/wallet.h"
 #include "askpassphrasedialog.h"
+#include "key_io.h"
 
 #include <QDebug>
 #include <QFont>
@@ -126,9 +127,9 @@ public:
                     }
                     return CChainParams::PUBKEY_ADDRESS;
                 }();
-                const CBTCUAddress address = CBTCUAddress(item.first, addrType);
+                const CTxDestination address = item.first;
 
-                bool fMine = IsMine(*wallet, address.Get());
+                bool fMine = IsMine(*wallet, address);
                 AddressTableEntry::Type addressType = translateTransactionType(
                     QString::fromStdString(item.second.purpose), fMine);
                 const std::string& strName = item.second.name;
@@ -141,7 +142,7 @@ public:
                 cachedAddressTable.append(
                         AddressTableEntry(addressType,
                                           QString::fromStdString(strName),
-                                          QString::fromStdString(address.ToString()),
+                                          QString::fromStdString(EncodeDestination(address)),
                                           creationTime
                         )
                 );
@@ -195,7 +196,7 @@ public:
 
             std::string stdPurpose = purpose.toStdString();
             if (stdPurpose == AddressBook::AddressBookPurpose::RECEIVE)
-                creationTime = static_cast<uint>(wallet->GetKeyCreationTime(CBTCUAddress(address.toStdString())));
+                creationTime = static_cast<uint>(wallet->GetKeyCreationTime(DecodeDestination(address.toStdString())));
 
             updatePurposeCachedCounted(stdPurpose, true);
 
@@ -410,7 +411,7 @@ bool AddressTableModel::setData(const QModelIndex& index, const QVariant& value,
 
     if (role == Qt::EditRole) {
         LOCK(wallet->cs_wallet); /* For SetAddressBook / DelAddressBook */
-        CTxDestination curAddress = CBTCUAddress(rec->address.toStdString()).Get();
+        CTxDestination curAddress = DecodeDestination(rec->address.toStdString());
         if (index.column() == Label) {
             // Do nothing, if old label == new label
             if (rec->label == value.toString()) {
@@ -419,9 +420,9 @@ bool AddressTableModel::setData(const QModelIndex& index, const QVariant& value,
             }
             wallet->SetAddressBook(curAddress, value.toString().toStdString(), strPurpose);
         } else if (index.column() == Address) {
-            CTxDestination newAddress = CBTCUAddress(value.toString().toStdString()).Get();
+            CTxDestination newAddress = DecodeDestination(value.toString().toStdString());
             // Refuse to set invalid address, set error status and return false
-            if (boost::get<CNoDestination>(&newAddress)) {
+            if (std::get_if<CNoDestination>(&newAddress)) {
                 editStatus = INVALID_ADDRESS;
                 return false;
             }
@@ -520,7 +521,7 @@ QString AddressTableModel::addRow(const QString& type, const QString& label, con
         // Check for duplicate addresses
         {
             LOCK(wallet->cs_wallet);
-            if (wallet->mapAddressBook.count(CBTCUAddress(strAddress).Get())) {
+            if (wallet->mapAddressBook.count(DecodeDestination(strAddress))) {
                 editStatus = DUPLICATE_ADDRESS;
                 return QString();
             }
@@ -540,7 +541,7 @@ QString AddressTableModel::addRow(const QString& type, const QString& label, con
                 return QString();
             }
         }
-        strAddress = CBTCUAddress(newKey.GetID()).ToString();
+        strAddress = EncodeDestination(PKHash(newKey.GetID()));
     } else {
         return QString();
     }
@@ -548,7 +549,7 @@ QString AddressTableModel::addRow(const QString& type, const QString& label, con
     // Add entry
     {
         LOCK(wallet->cs_wallet);
-        wallet->SetAddressBook(CBTCUAddress(strAddress).Get(), strLabel,
+        wallet->SetAddressBook(DecodeDestination(strAddress), strLabel,
             (type == Send ? AddressBook::AddressBookPurpose::SEND : AddressBook::AddressBookPurpose::RECEIVE));
     }
     return QString::fromStdString(strAddress);
@@ -573,7 +574,7 @@ bool AddressTableModel::removeRows(int row, int count, const QModelIndex& parent
     }();
     {
         LOCK(wallet->cs_wallet);
-        return wallet->DelAddressBook(CBTCUAddress(rec->address.toStdString()).Get(), addrType);
+        return wallet->DelAddressBook(DecodeDestination(rec->address.toStdString()), addrType);
     }
 }
 
@@ -585,8 +586,8 @@ QString AddressTableModel::labelForAddress(const QString& address) const
     if (!address.isEmpty()) {
         {
             LOCK(wallet->cs_wallet);
-            CBTCUAddress address_parsed(address.toStdString());
-            std::map<CTxDestination, AddressBook::CAddressBookData>::iterator mi = wallet->mapAddressBook.find(address_parsed.Get());
+            CTxDestination address_parsed = DecodeDestination(address.toStdString());
+            std::map<CTxDestination, AddressBook::CAddressBookData>::iterator mi = wallet->mapAddressBook.find(address_parsed);
             if (mi != wallet->mapAddressBook.end()) {
                 return QString::fromStdString(mi->second.name);
             }
@@ -599,7 +600,7 @@ QString AddressTableModel::labelForAddress(const QString& address) const
  */
 std::string AddressTableModel::purposeForAddress(const std::string& address) const
 {
-    return wallet->purposeForAddress(CBTCUAddress(address).Get());
+    return wallet->purposeForAddress(DecodeDestination(address));
 }
 
 int AddressTableModel::lookupAddress(const QString& address) const
@@ -628,17 +629,17 @@ QString AddressTableModel::getAddressToShow() const{
     if(!wallet->mapAddressBook.empty()) {
         for (auto it = wallet->mapAddressBook.rbegin(); it != wallet->mapAddressBook.rend(); ++it ) {
             if (it->second.purpose == AddressBook::AddressBookPurpose::RECEIVE) {
-                const CBTCUAddress &address = it->first;
-                if (address.IsValid() && IsMine(*wallet, address.Get())) {
-                    addressStr = QString::fromStdString(address.ToString());
+                const CTxDestination &address = it->first;
+                if (IsValidDestination(address) && IsMine(*wallet, address)) {
+                    addressStr = QString::fromStdString(EncodeDestination(address));
                 }
             }
         }
     } else {
         // For some reason we don't have any address in our address book, let's create one
-        CBTCUAddress newAddress;
+        CTxDestination newAddress;
         if (walletModel->getNewAddress(newAddress, "Default").result) {
-            addressStr = QString::fromStdString(newAddress.ToString());
+            addressStr = QString::fromStdString(EncodeDestination(newAddress));
         }
     }
     return addressStr;

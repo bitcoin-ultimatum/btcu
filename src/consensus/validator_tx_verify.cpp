@@ -13,7 +13,7 @@
 
 bool IsUtxoDestination(const CPubKey &pubKey, const CTxOut &vout)
 {
-    CTxDestination pubkeyAddress(pubKey.GetID());
+    CTxDestination pubkeyAddress(PKHash(pubKey.GetID()));
     CTxDestination outputAddress;
     ExtractDestination(vout.scriptPubKey, outputAddress);
     

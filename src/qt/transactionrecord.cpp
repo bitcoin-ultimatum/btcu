@@ -13,6 +13,7 @@
 #include "wallet/wallet.h"
 #include "zbtcuchain.h"
 #include "main.h"
+#include "key_io.h"
 
 #include <algorithm>
 #include <stdint.h>
@@ -67,7 +68,7 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const CWallet* 
                 // BTCU stake reward
                 sub.involvesWatchAddress = mine & ISMINE_WATCH_ONLY;
                 sub.type = TransactionRecord::StakeMint;
-                sub.address = CBTCUAddress(address).ToString();
+                sub.address = EncodeDestination(address);
                 sub.credit = nNet;
             }
         } else {
@@ -78,7 +79,7 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const CWallet* 
                 isminetype mine = wallet->IsMine(wtx.vout[nIndexMN]);
                 sub.involvesWatchAddress = mine & ISMINE_WATCH_ONLY;
                 sub.type = TransactionRecord::MNReward;
-                sub.address = CBTCUAddress(destMN).ToString();
+                sub.address = EncodeDestination(destMN);
                 sub.credit = wtx.vout[nIndexMN].nValue;
             }
         }
@@ -111,7 +112,7 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const CWallet* 
             std::string strAddress = "";
             CTxDestination address;
             if (ExtractDestination(txout.scriptPubKey, address))
-                strAddress = CBTCUAddress(address).ToString();
+                strAddress = EncodeDestination(address);
 
             // a zerocoinspend that was sent to an address held by this wallet
             isminetype mine = wallet->IsMine(txout);
@@ -200,7 +201,7 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const CWallet* 
                 if (ExtractDestination(txout.scriptPubKey, address) && IsMine(*wallet, address)) {
                     // Received by BTCU Address
                     sub.type = TransactionRecord::RecvWithAddress;
-                    sub.address = CBTCUAddress(address).ToString();
+                    sub.address = EncodeDestination(address);
                 } else {
                     // Received by IP connection (deprecated features), or a multisignature or other non-simple transaction
                     sub.type = TransactionRecord::RecvFromOther;
@@ -260,7 +261,7 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const CWallet* 
                 CTxDestination address;
                 if (ExtractDestination(wtx.vout[0].scriptPubKey, address)) {
                     // Sent to BTCU Address
-                    sub.address = CBTCUAddress(address).ToString();
+                    sub.address = EncodeDestination(address);
                 } else {
                     // Sent to IP, or other non-address transaction like OP_EVAL
                     sub.address = mapValue["to"];
@@ -278,7 +279,7 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const CWallet* 
                 // Label for payment to self
                 CTxDestination address;
                 if (ExtractDestination(wtx.vout[0].scriptPubKey, address)) {
-                    sub.address = CBTCUAddress(address).ToString();
+                    sub.address = EncodeDestination(address);
                 }
             }
 
@@ -314,7 +315,7 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const CWallet* 
                         continue;
                     // Sent to BTCU Address
                     sub.type = TransactionRecord::SendToAddress;
-                    sub.address = CBTCUAddress(address).ToString();
+                    sub.address = EncodeDestination(address);
                 } else if (txout.IsZerocoinMint()){
                     sub.type = TransactionRecord::ZerocoinMint;
                     sub.address = mapValue["zerocoinmint"];
@@ -518,10 +519,10 @@ bool TransactionRecord::ExtractAddress(const CScript& scriptPubKey, bool fColdSt
         addressStr = "No available address";
         return false;
     } else {
-        addressStr = CBTCUAddress(
+        addressStr = EncodeDestination(
                 address,
                 (fColdStake ? CChainParams::STAKING_ADDRESS : CChainParams::PUBKEY_ADDRESS)
-        ).ToString();
+        );
         return true;
     }
 }

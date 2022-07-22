@@ -16,6 +16,7 @@
 #include "util.h"
 #include "utiltime.h"
 #include "wallet/wallet.h"
+#include "key_io.h"
 #include <zbtcu/deterministicmint.h>
 
 #include <boost/filesystem.hpp>
@@ -422,11 +423,11 @@ bool ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue, CW
         if (strType == "name") {
             std::string strAddress;
             ssKey >> strAddress;
-            ssValue >> pwallet->mapAddressBook[CBTCUAddress(strAddress).Get()].name;
+            ssValue >> pwallet->mapAddressBook[DecodeDestination(strAddress)].name;
         } else if (strType == "purpose") {
             std::string strAddress;
             ssKey >> strAddress;
-            ssValue >> pwallet->mapAddressBook[CBTCUAddress(strAddress).Get()].purpose;
+            ssValue >> pwallet->mapAddressBook[DecodeDestination(strAddress)].purpose;
         } else if (strType == "tx") {
             uint256 hash;
             ssKey >> hash;
@@ -629,7 +630,8 @@ bool ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue, CW
             ssKey >> i;
             std::pair<std::string, int> pMultiSend;
             ssValue >> pMultiSend;
-            if (CBTCUAddress(pMultiSend.first).IsValid()) {
+            auto dest = DecodeDestination(pMultiSend.first);
+            if (IsValidDestination(dest)) {
                 pwallet->vMultiSend.push_back(pMultiSend);
             }
         } else if (strType == "msettingsv2") //presstab HyperStake
@@ -654,7 +656,7 @@ bool ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue, CW
             ssKey >> strAddress;
             ssKey >> strKey;
             ssValue >> strValue;
-            if (!pwallet->LoadDestData(CBTCUAddress(strAddress).Get(), strKey, strValue)) {
+            if (!pwallet->LoadDestData(DecodeDestination(strAddress), strKey, strValue)) {
                 strErr = "Error reading wallet database: LoadDestData failed";
                 return false;
             }

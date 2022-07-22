@@ -16,6 +16,7 @@
 #include "utilmoneystr.h"
 #include "zbtcuchain.h"
 #include "zbtcu/zpos.h"
+#include "policy/policy.h"
 
 /*
  * PoS Validation
@@ -168,7 +169,7 @@ bool initStakeInput(const CBlock& block, std::unique_ptr<CStakeInput>& stake, in
         ScriptError serror;
         const CAmount& amount = txPrev.vout[txin.prevout.n].nValue;
 
-        if (!BTC::VerifyScript(txin.scriptSig, txPrev.vout[txin.prevout.n].scriptPubKey, &txin.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, BTC::TransactionSignatureChecker(&tx, 0, amount), &serror)) {
+        if (!VerifyScript(txin.scriptSig, txPrev.vout[txin.prevout.n].scriptPubKey, &txin.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, TransactionSignatureChecker(&tx, 0, amount, MissingDataBehavior::ASSERT_FAIL), &serror)) {
             std::string strErr = "";
             if (serror && ScriptErrorString(serror))
                 strErr = strprintf("with the following error: %s", ScriptErrorString(serror));

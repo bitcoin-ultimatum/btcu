@@ -19,6 +19,7 @@
 #include "script/script.h"
 #include "script/standard.h"
 #include "util.h"
+#include "key_io.h"
 
 #ifdef WIN32
 #ifdef _WIN32_WINNT
@@ -250,7 +251,7 @@ QString formatBitcoinURI(const SendCoinsRecipient& info)
 
 bool isDust(const QString& address, const CAmount& amount)
 {
-    CTxDestination dest = CBTCUAddress(address.toStdString()).Get();
+    CTxDestination dest = DecodeDestination(address.toStdString());
     CScript script = GetScriptForDestination(dest);
     CTxOut txOut(amount, script);
     return txOut.IsDust(::minRelayTxFee);

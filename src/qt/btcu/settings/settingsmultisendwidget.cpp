@@ -12,6 +12,7 @@
 #include "init.h"
 #include "walletmodel.h"
 #include "wallet/wallet.h"
+#include "key_io.h"
 
 
 #define DECORATION_SIZE 65
@@ -271,7 +272,7 @@ void SettingsMultisendWidget::onAddRecipientClicked() {
 
 void SettingsMultisendWidget::addMultiSend(QString address, int percentage, QString addressLabel){
     std::string strAddress = address.toStdString();
-    if (!CBTCUAddress(strAddress).IsValid()) {
+    if (!IsValidDestination(DecodeDestination(strAddress))) {
         informError(tr("The entered address: %1 is invalid.\nPlease check the address and try again.").arg(address));
         return;
     }
@@ -295,9 +296,9 @@ void SettingsMultisendWidget::addMultiSend(QString address, int percentage, QStr
 
     if (walletModel && walletModel->getAddressTableModel()) {
         // update the address book with the label given or no label if none was given.
-        CBTCUAddress address(strAddress);
+        CTxDestination address = DecodeDestination(strAddress);
         std::string userInputLabel = addressLabel.toStdString();
-        walletModel->updateAddressBookLabels(address.Get(), (userInputLabel.empty()) ? "(no label)" : userInputLabel,
+        walletModel->updateAddressBookLabels(address, (userInputLabel.empty()) ? "(no label)" : userInputLabel,
                 AddressBook::AddressBookPurpose::SEND);
     }
 
@@ -325,7 +326,7 @@ void SettingsMultisendWidget::activate(){
     else if (!(ui->checkBoxStake->isChecked() || ui->checkBoxRewards->isChecked())) {
         strRet = tr("Unable to activate MultiSend\nCheck one or both of the check boxes to send on stake and/or masternode rewards");
        informError(strRet);
-    } else if (CBTCUAddress(pwalletMain->vMultiSend[0].first).IsValid()) {
+    } else if (IsValidDestination(DecodeDestination(pwalletMain->vMultiSend[0].first))) {
         pwalletMain->fMultiSendStake = ui->checkBoxStake->isChecked();
         pwalletMain->fMultiSendMasternodeReward = ui->checkBoxRewards->isChecked();
 

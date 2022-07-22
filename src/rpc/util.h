@@ -34,4 +34,5 @@ extern std::vector<unsigned char> ParseHexO(const UniValue& o, std::string strKe
 
 extern CAmount AmountFromValue(const UniValue& value);
 
+
 #endif // BITCOIN_RPC_UTIL_H

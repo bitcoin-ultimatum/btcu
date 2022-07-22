@@ -7,7 +7,6 @@
 
 #include "libethereum/ChainParams.h"
 #include "libethereum/LastBlockHashesFace.h"
-#include "libethashseal/Ethash.h"
 #include "libethashseal/GenesisInfo.h"
 
 #include "qtum/qtumstate.h"

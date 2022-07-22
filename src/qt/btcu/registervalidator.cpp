@@ -135,7 +135,7 @@ void RegisterValidator::registerValidator(){
                 //IsTransactionInChain(uHash, blockHeight, tr);
 
                 /*CKeyID key;
-                walletModel->getKeyId(CBTCUAddress(walletModel->getAddressTableModel()->getAddressToShow().toStdString()), key);
+                walletModel->getKeyId(EncodeDestination(walletModel->getAddressTableModel()->getAddressToShow().toStdString()), key);
                 CPubKey pubKey;
                 walletModel->getPubKey(key, pubKey);
 

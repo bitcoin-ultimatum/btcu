@@ -164,7 +164,6 @@ btcud
 test_btcu
 install_manifest.txt
 osx_volname
-lib/
 bin/
 conf*/*
 conftest.c
@@ -190,14 +189,15 @@ btcu.xcodeproj/
 CPackConfig.cmake
 CPackSourceConfig.cmake
 
-src/cpp-ethereum/ethash/test/benchmarks/CMakeFiles/
-src/cpp-ethereum/ethash/test/fakeminer/CMakeFiles/
-src/cpp-ethereum/ethash/test/integration/compilation/CMakeFiles/
-src/cpp-ethereum/ethash/test/tools/CMakeFiles/
-src/cpp-ethereum/ethash/test/unittests/CMakeFiles/
-src/cpp-ethereum/ethash/CMakeFiles/
-src/cpp-ethereum/ethash/test/CMakeFiles/
-src/cpp-ethereum/ethash/test/integration/CMakeFiles/
-src/cpp-ethereum/ethash/test/ethash-bench
-src/cpp-ethereum/ethash/test/ethash-test
-src/cpp-ethereum/ethash/test/kiss99-tester
+lib/
+src/eth_client/utils/ethash/CMakeFiles/
+src/eth_client/utils/ethash/lib/ethash/CMakeFiles/
+src/eth_client/utils/ethash/lib/ethash/ethashConfig.cmake
+src/eth_client/utils/ethash/lib/ethash/ethashConfigVersion.cmake
+src/eth_client/utils/ethash/test/CMakeFiles/
+src/eth_client/utils/ethash/test/benchmarks/CMakeFiles/
+src/eth_client/utils/ethash/test/fakeminer/CMakeFiles/
+src/eth_client/utils/ethash/test/integration/CMakeFiles/
+src/eth_client/utils/ethash/test/integration/compilation/CMakeFiles/
+src/eth_client/utils/ethash/test/tools/CMakeFiles/
+src/eth_client/utils/ethash/test/unittests/CMakeFiles/

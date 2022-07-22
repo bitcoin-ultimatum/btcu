@@ -63,6 +63,15 @@ Build requirements:
     sudo apt-get install git build-essential libtool bsdmainutils autotools-dev autoconf pkg-config automake python3-dev libzmq3-dev libevent-dev libjsonrpccpp-dev libsnappy-dev libbenchmark-dev libnorm-dev libpgm-dev
 ```
 
+GCC version 9.0:
+```bash
+sudo add-apt-repository ppa:ubuntu-toolchain-r/test &&
+sudo apt update &&
+sudo apt install gcc-9 g++-9 &&
+sudo ln -f -s /usr/bin/gcc-9 /usr/bin/gcc &&
+sudo ln -f -s /usr/bin/g++-9 /usr/bin/g++
+```
+
 **Note:** In order to build it on Ubuntu 20.04 you may need to instal additionally:
 ```bash
     sudo apt-get install python-is-python3
@@ -468,7 +477,7 @@ non-wallet distribution of the latest changes on Arch Linux:
 
 ```bash
     pacman -S base-devel boost cmake git libevent ninja python
-    git clone https://github.com/btcu-ultimatum/btcu
+    git clone https://github.com/btcu-ultimatum/btcu --recursive
     cd btcu/
     mkdir build
     cd build

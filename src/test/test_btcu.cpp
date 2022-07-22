@@ -65,7 +65,7 @@ TestingSetup::TestingSetup() : BasicTestingSetup()
         const dev::h256 hashDB(dev::sha3(dev::rlp("")));
         dev::eth::BaseState existsQtumstate = fStatus ? dev::eth::BaseState::PreExisting : dev::eth::BaseState::Empty;
         globalState = std::unique_ptr<QtumState>(new QtumState(dev::u256(0), QtumState::openDB(dirQtum, hashDB, dev::WithExisting::Trust), dirQtum, existsQtumstate));
-        auto geni = chainparams.EVMGenesisInfo(dev::eth::Network::qtumMainNetwork);
+        auto geni = chainparams.EVMGenesisInfo(dev::eth::Network::qtumNetwork);
         dev::eth::ChainParams cp((geni));
         globalSealEngine = std::unique_ptr<dev::eth::SealEngineFace>(cp.createSealEngine());
         globalState->setRoot(dev::sha3(dev::rlp("")));

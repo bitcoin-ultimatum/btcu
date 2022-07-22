@@ -10,10 +10,12 @@
 
 #include "script/interpreter.h"
 #include "uint256.h"
+#include <util/hash_type.h>
 
 #include <boost/variant.hpp>
 
 #include <stdint.h>
+#include <variant>
 
 //contract executions with less gas than this are not standard
 //Make sure is always equal or greater than MINIMUM_GAS_LIMIT (which we can't reference here due to insane header dependency chains)
@@ -25,14 +27,16 @@ static const uint64_t STANDARD_MINIMUM_GAS_PRICE = 1;
 
 class CKeyID;
 class CScript;
+struct ScriptHash;
 
 /** A reference to a CScript: the Hash160 of its serialization (see script.h) */
-class CScriptID : public uint160
+class CScriptID : public BaseHash<uint160>
 {
 public:
-    CScriptID() : uint160() {}
-    CScriptID(const CScript& in);
-    CScriptID(const uint160& in) : uint160(in) {}
+   CScriptID() : BaseHash() {}
+   explicit CScriptID(const CScript& in);
+   explicit CScriptID(const uint160& in) : BaseHash(in) {}
+   explicit CScriptID(const ScriptHash& in);
 };
 
 static const unsigned int MAX_OP_RETURN_RELAY = 83;      //!< bytes (+1 for OP_RETURN, +2 for the pushdata opcodes)
@@ -49,18 +53,6 @@ extern unsigned nMaxDatacarrierBytes;
  */
 static const unsigned int MANDATORY_SCRIPT_VERIFY_FLAGS = SCRIPT_VERIFY_P2SH;
 
-/**
- * Standard script verification flags that standard transactions will comply
- * with. However scripts violating these flags may still be present in valid
- * blocks and we must accept those blocks.
- */
-static const unsigned int STANDARD_SCRIPT_VERIFY_FLAGS = MANDATORY_SCRIPT_VERIFY_FLAGS |
-                                                         SCRIPT_VERIFY_DERSIG |
-                                                         SCRIPT_VERIFY_STRICTENC |
-                                                         SCRIPT_VERIFY_MINIMALDATA |
-                                                         SCRIPT_VERIFY_NULLDUMMY |
-                                                         SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS |
-                                                         SCRIPT_VERIFY_WITNESS_PUBKEYTYPE;
 
 /**
  * Standard script verification flags that standard transactions will comply
@@ -84,8 +76,6 @@ static constexpr unsigned int STANDARD_SCRIPT_VERIFY_FLAGS_N = MANDATORY_SCRIPT_
                                                              SCRIPT_VERIFY_WITNESS_PUBKEYTYPE |
                                                              SCRIPT_VERIFY_CONST_SCRIPTCODE;
 
-/** For convenience, standard but not mandatory verify flags. */
-static const unsigned int STANDARD_NOT_MANDATORY_VERIFY_FLAGS = STANDARD_SCRIPT_VERIFY_FLAGS & ~MANDATORY_SCRIPT_VERIFY_FLAGS;
 
 enum txnouttype
 {
@@ -105,6 +95,7 @@ enum txnouttype
     TX_WITNESS_UNKNOWN,
     TX_WITNESS_V0_SCRIPTHASH,
     TX_WITNESS_V0_KEYHASH,
+    TX_WITNESS_V1_TAPROOT,
     TX_LEASE,
     TX_LEASINGREWARD,
     TX_LEASE_CLTV
@@ -116,21 +107,49 @@ public:
     friend bool operator<(const CNoDestination &a, const CNoDestination &b) { return true; }
 };
 
-
-struct WitnessV0KeyHash : public uint160
+struct PKHash : public BaseHash<uint160>
 {
-    WitnessV0KeyHash() : uint160() {}
-    explicit WitnessV0KeyHash(const uint160& hash) : uint160(hash) {}
-    explicit WitnessV0KeyHash(const CPubKey& pubkey);
-    using uint160::uint160;
+   PKHash() : BaseHash() {}
+   explicit PKHash(const uint160& hash) : BaseHash(hash) {}
+   explicit PKHash(const CPubKey& pubkey);
+   explicit PKHash(const CKeyID& pubkey_id);
+};
+CKeyID ToKeyID(const PKHash& key_hash);
+
+struct WitnessV0KeyHash;
+struct ScriptHash : public BaseHash<uint160>
+{
+   ScriptHash() : BaseHash() {}
+   // These don't do what you'd expect.
+   // Use ScriptHash(GetScriptForDestination(...)) instead.
+   explicit ScriptHash(const WitnessV0KeyHash& hash) = delete;
+   explicit ScriptHash(const PKHash& hash) = delete;
+
+   explicit ScriptHash(const uint160& hash) : BaseHash(hash) {}
+   explicit ScriptHash(const CScript& script);
+   explicit ScriptHash(const CScriptID& script);
 };
 
-struct WitnessV0ScriptHash : public uint256
+struct WitnessV0ScriptHash : public BaseHash<uint256>
 {
-    WitnessV0ScriptHash() : uint256() {}
-    explicit WitnessV0ScriptHash(const uint256& hash) : uint256(hash) {}
-    explicit WitnessV0ScriptHash(const CScript& script);
-    using uint256::uint256;
+   WitnessV0ScriptHash() : BaseHash() {}
+   explicit WitnessV0ScriptHash(const uint256& hash) : BaseHash(hash) {}
+   explicit WitnessV0ScriptHash(const CScript& script);
+};
+
+struct WitnessV0KeyHash : public BaseHash<uint160>
+{
+   WitnessV0KeyHash() : BaseHash() {}
+   explicit WitnessV0KeyHash(const uint160& hash) : BaseHash(hash) {}
+   explicit WitnessV0KeyHash(const CPubKey& pubkey);
+   explicit WitnessV0KeyHash(const PKHash& pubkey_hash);
+};
+CKeyID ToKeyID(const WitnessV0KeyHash& key_hash);
+
+struct WitnessV1Taproot : public XOnlyPubKey
+{
+   WitnessV1Taproot() : XOnlyPubKey() {}
+   explicit WitnessV1Taproot(const XOnlyPubKey& xpk) : XOnlyPubKey(xpk) {}
 };
 
 //! CTxDestination subtype to encode any future Witness version
@@ -159,9 +178,8 @@ struct WitnessUnknown
  *  * CNoDestination: no destination set
  *  * CKeyID: TX_PUBKEYHASH destination
  *  * CScriptID: TX_SCRIPTHASH destination
- *  A CTxDestination is the internal data type encoded in a CBTCUAddress
  */
-typedef boost::variant<CNoDestination, CKeyID, CScriptID, WitnessV0ScriptHash, WitnessV0KeyHash, WitnessUnknown> CTxDestination;
+using CTxDestination = std::variant<CNoDestination, PKHash, ScriptHash, WitnessV0ScriptHash, WitnessV0KeyHash, WitnessV1Taproot, WitnessUnknown>;
 
 enum addresstype
 {
@@ -175,13 +193,7 @@ enum addresstype
 ///////////////////////////////////////////qtum
 /** Parse a output public key for the sender public key and sender signature. */
 bool ExtractSenderData(const CScript& outputPubKey, CScript* senderPubKey, CScript* senderSig);
-
-
-
-
-
-/** Check whether a CTxDestination is a CNoDestination. */
-bool IsValidDestination(const CTxDestination& dest);
+bool GetSenderPubKey(const CScript& outputPubKey, CScript& senderPubKey);
 
 const char* GetTxnOutputType(txnouttype t);
 
@@ -216,5 +228,32 @@ CScript GetScriptForLeasingReward(const COutPoint& outPoint, const CTxDestinatio
  * the various witness-specific CTxDestination subtypes.
  */
 CScript GetScriptForWitness(const CScript& redeemscript);
+
+struct ShortestVectorFirstComparator
+{
+   bool operator()(const std::vector<unsigned char>& a, const std::vector<unsigned char>& b) const
+   {
+      if (a.size() < b.size()) return true;
+      if (a.size() > b.size()) return false;
+      return a < b;
+   }
+};
+
+struct TaprootSpendData
+{
+   /** The BIP341 internal key. */
+   XOnlyPubKey internal_key;
+   /** The Merkle root of the script tree (0 if no scripts). */
+   uint256 merkle_root;
+   /** Map from (script, leaf_version) to (sets of) control blocks.
+    *  More than one control block for a given script is only possible if it
+    *  appears in multiple branches of the tree. We keep them all so that
+    *  inference can reconstruct the full tree. Within each set, the control
+    *  blocks are sorted by size, so that the signing logic can easily
+    *  prefer the cheapest one. */
+   std::map<std::pair<CScript, int>, std::set<std::vector<unsigned char>, ShortestVectorFirstComparator>> scripts;
+   /** Merge other TaprootSpendData (for the same scriptPubKey) into this. */
+   void Merge(TaprootSpendData other);
+};
 
 #endif // BITCOIN_SCRIPT_STANDARD_H

@@ -68,6 +68,8 @@ ResultExecute QtumState::execute(EnvInfo const& _envInfo, SealEngineFace const& 
         if (_p == Permanence::Reverted){
             m_cache.clear();
             cacheUTXO.clear();
+            m_changeLog.clear();
+            m_unchangedCacheEntries.clear();
         } else {
             deleteAccounts(_sealEngine.deleteAddresses);
             if(res.excepted == TransactionException::None){
@@ -254,7 +256,7 @@ void QtumState::printfErrorLog(const dev::eth::TransactionException er){
     std::stringstream ss;
     ss << er;
 #ifndef WIN32
-    LogPrintf("VM exception: %s", ss.str().c_str());
+    LogPrintf("VM exception: %s\n", ss.str().c_str());
 #endif
 }
 

@@ -170,6 +170,7 @@ extern std::vector<unsigned char> ParseHexV(const UniValue& v, std::string strNa
 extern std::vector<unsigned char> ParseHexO(const UniValue& o, std::string strKey);
 extern int ParseInt(const UniValue& o, std::string strKey);
 extern bool ParseBool(const UniValue& o, std::string strKey);
+std::string LabelFromValue(const UniValue& value);
 
 extern int64_t nWalletUnlockTime;
 extern CAmount AmountFromValue(const UniValue& value);

@@ -4,21 +4,19 @@
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "btcu_address.h"
 #include "hash.h"
 #include "main.h" // For strMessageMagic
 #include "messagesigner.h"
 #include "masternodeman.h"  // For GetPublicKey (of MN from its vin)
 #include "tinyformat.h"
 #include "utilstrencodings.h"
+#include "key_io.h"
 
 bool CMessageSigner::GetKeysFromSecret(const std::string& strSecret, CKey& keyRet, CPubKey& pubkeyRet)
 {
-    CBTCUSecret vchSecret;
-
-    if(!vchSecret.SetString(strSecret)) return false;
-
-    keyRet = vchSecret.GetKey();
+    keyRet = DecodeSecret(strSecret);
+    if (!keyRet.IsValid())
+       return false;
     pubkeyRet = keyRet.GetPubKey();
 
     return true;
@@ -67,7 +65,7 @@ bool CHashSigner::VerifyHash(const uint256& hash, const CKeyID& keyID, const std
 
     if(pubkeyFromSig.GetID() != keyID) {
         strErrorRet = strprintf("Keys don't match: pubkey=%s, pubkeyFromSig=%s, hash=%s, vchSig=%s",
-                CBTCUAddress(keyID).ToString(), CBTCUAddress(pubkeyFromSig.GetID()).ToString(),
+                EncodeDestination(PKHash(keyID)), EncodeDestination(PKHash(pubkeyFromSig)),
                 hash.ToString(), EncodeBase64(&vchSig[0], vchSig.size()));
         return false;
     }

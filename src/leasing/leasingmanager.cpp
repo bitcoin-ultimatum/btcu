@@ -761,7 +761,7 @@ private:
       aResAmount = aResAmount * nRewardAge / (365 * 24 * 60); // 1 year
 
       auto outPoint = COutPoint(leasingOut.nTrxHash, leasingOut.nPosition);
-      auto outScript = GetScriptForLeasingReward(outPoint, leasingOut.kOwnerID);
+      auto outScript = GetScriptForLeasingReward(outPoint, PKHash(leasingOut.kOwnerID));
 
       LeasingLogPrint("nPct=%d, aResAmount=%d, nRewardAge=%d", nPct, aResAmount, nRewardAge);
       LeasingLogPrint("outPoint=%s", outPoint.ToString());
@@ -782,7 +782,7 @@ private:
       uint256 trxHash;
       trxHash.SetNull();
       auto outPoint = COutPoint(trxHash, static_cast<int>(type));
-      auto outScript = GetScriptForLeasingReward(outPoint, leaserID);
+      auto outScript = GetScriptForLeasingReward(outPoint, PKHash(leaserID));
 
       LeasingLogPrint("CTxOut(aAmount(%d) * nPct(%d) / _100pct(%d), outScript(%s)", aAmount, nPct, _100pct, outScript.ToString());
 

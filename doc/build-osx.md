@@ -175,12 +175,22 @@ If the brew installed a different version run the followed command:
     curl https://raw.githubusercontent.com/Homebrew/homebrew-core/f325e0637fbf513819129744dc107382de028fc5/Formula/berkeley-db.rb -o berkeley-db.rb
     brew install ./berkeley-db.rb
 ```
+Or use manual installation:
+
+```bash
+        tar zxvf depends/packages/static/berkeley-db-18.1.32/berkeley-db-18.1.32.tar.gz -C ./
+        cd  db-18.1.32/build_unix
+        ../dist/configure --enable-cxx --disable-shared --disable-replication --with-pic --prefix=/opt
+        make
+        sudo make install
+        cd -
+```
 
 ## Build BTCU
 
 1. Clone the BTCU source code:
 ```shell
-    git clone https://github.com/bitcoin-ultimatum/btcu
+    git clone https://github.com/bitcoin-ultimatum/btcu --recursive
     cd btcu
 ```
 

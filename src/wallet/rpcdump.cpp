@@ -106,13 +106,8 @@ UniValue importprivkey(const UniValue& params, bool fHelp)
     const bool fRescan = (params.size() > 2 ? params[2].get_bool() : true);
     const bool fStakingAddress = (params.size() > 3 ? params[3].get_bool() : false);
 
-    CBTCUSecret vchSecret;
-    if (!vchSecret.SetString(strSecret))
-        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key encoding");
-
-    CKey key = vchSecret.GetKey();
-    if (!key.IsValid())
-        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Private key outside allowed range");
+    CKey key = DecodeSecret(strSecret);
+    if (!key.IsValid()) throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key encoding");
 
     CPubKey pubkey = key.GetPubKey();
     assert(key.VerifyPubKey(pubkey));
@@ -125,7 +120,7 @@ UniValue importprivkey(const UniValue& params, bool fHelp)
 
        // We don't know which corresponding address will be used; label them all
        for (const auto& dest : GetAllDestinationsForKey(pubkey)) {
-          pwalletMain->SetAddressBook(vchAddress, strLabel, (
+          pwalletMain->SetAddressBook(PKHash(vchAddress), strLabel, (
           fStakingAddress ?
           AddressBook::AddressBookPurpose::COLD_STAKING :
           AddressBook::AddressBookPurpose::RECEIVE));
@@ -184,9 +179,10 @@ UniValue importaddress(const UniValue& params, bool fHelp)
 
     CScript script;
 
-    CBTCUAddress address(params[0].get_str());
-    if (address.IsValid()) {
-        script = GetScriptForDestination(address.Get());
+    bool isStaking = false;
+    CTxDestination dest = DecodeDestination(params[0].get_str(), &isStaking);
+    if (IsValidDestination(dest)) {
+        script = GetScriptForDestination(dest);
     } else if (IsHex(params[0].get_str())) {
         std::vector<unsigned char> data(ParseHex(params[0].get_str()));
         script = CScript(data.begin(), data.end());
@@ -208,9 +204,9 @@ UniValue importaddress(const UniValue& params, bool fHelp)
             throw JSONRPCError(RPC_WALLET_ERROR, "The wallet already contains the private key for this address or script");
 
         // add to address book or update label
-        if (address.IsValid()) {
-            pwalletMain->SetAddressBook(address.Get(), strLabel,
-                    (address.IsStakingAddress() ?
+        if (IsValidDestination(dest)) {
+            pwalletMain->SetAddressBook(dest, strLabel,
+                    (isStaking ?
                             AddressBook::AddressBookPurpose::COLD_STAKING :
                             AddressBook::AddressBookPurpose::RECEIVE));
         }
@@ -287,14 +283,13 @@ UniValue importwallet(const UniValue& params, bool fHelp)
         if (vstr.size() < 2)
             continue;
 
-        CBTCUSecret vchSecret;
-        if (vchSecret.SetString(vstr[0])) {
-            CKey key = vchSecret.GetKey();
+        CKey key = DecodeSecret(vstr[0]);
+        if (key.IsValid()) {
             CPubKey pubkey = key.GetPubKey();
             assert(key.VerifyPubKey(pubkey));
             CKeyID keyid = pubkey.GetID();
             if (pwalletMain->HaveKey(keyid)) {
-                LogPrintf("Skipping import of %s (key already present)\n", CBTCUAddress(keyid).ToString());
+                LogPrintf("Skipping import of %s (key already present)\n", EncodeDestination(PKHash(keyid)));
                 continue;
             }
             int64_t nTime = DecodeDumpTime(vstr[1]);
@@ -312,14 +307,14 @@ UniValue importwallet(const UniValue& params, bool fHelp)
                     fLabel = true;
                 }
             }
-            LogPrintf("Importing key %s...\n", CBTCUAddress(keyid).ToString());
+            LogPrintf("Importing key %s...\n", EncodeDestination(PKHash(keyid)));
             if (!pwalletMain->AddKeyPubKey(key, pubkey)) {
                 fGood = false;
                 continue;
             }
             pwalletMain->mapKeyMetadata[keyid].nCreateTime = nTime;
             if (fLabel)
-                pwalletMain->SetAddressBook(keyid, strLabel, AddressBook::AddressBookPurpose::RECEIVE);
+                pwalletMain->SetAddressBook(PKHash(keyid), strLabel, AddressBook::AddressBookPurpose::RECEIVE);
             nTimeBegin = std::min(nTimeBegin, nTime);
         } else if (vstr.size() > 2 && vstr[2] == "script=1" && IsHex(vstr[0])) {
             std::vector<unsigned char> vData(ParseHex(vstr[0]));
@@ -390,7 +385,7 @@ UniValue dumpprivkey(const UniValue& params, bool fHelp)
     CKey vchSecret;
     if (!pwalletMain->GetKey(keyid, vchSecret))
         throw JSONRPCError(RPC_WALLET_ERROR, "Private key for address " + strAddress + " is not known");
-    return CBTCUSecret(vchSecret).ToString();
+    return EncodeSecret(vchSecret);
 }
 
 
@@ -445,15 +440,15 @@ UniValue dumpwallet(const UniValue& params, bool fHelp)
     for (std::vector<std::pair<int64_t, CKeyID> >::const_iterator it = vKeyBirth.begin(); it != vKeyBirth.end(); it++) {
         const CKeyID& keyid = it->second;
         std::string strTime = EncodeDumpTime(it->first);
-        std::string strAddr = CBTCUAddress(keyid).ToString();
+        std::string strAddr = EncodeDestination(PKHash(keyid));
         CKey key;
         if (pwalletMain->GetKey(keyid, key)) {
-            if (pwalletMain->mapAddressBook.count(keyid)) {
-                file << strprintf("%s %s label=%s # addr=%s\n", CBTCUSecret(key).ToString(), strTime, EncodeDumpString(pwalletMain->mapAddressBook[keyid].name), strAddr);
+            if (pwalletMain->mapAddressBook.count(PKHash(keyid))) {
+                file << strprintf("%s %s label=%s # addr=%s\n", EncodeSecret(key), strTime, EncodeDumpString(pwalletMain->mapAddressBook[PKHash(keyid)].name), strAddr);
             } else if (setKeyPool.count(keyid)) {
-                file << strprintf("%s %s reserve=1 # addr=%s\n", CBTCUSecret(key).ToString(), strTime, strAddr);
+                file << strprintf("%s %s reserve=1 # addr=%s\n", EncodeSecret(key), strTime, strAddr);
             } else {
-                file << strprintf("%s %s change=1 # addr=%s\n", CBTCUSecret(key).ToString(), strTime, strAddr);
+                file << strprintf("%s %s change=1 # addr=%s\n", EncodeSecret(key), strTime, strAddr);
             }
         }
     }
@@ -461,7 +456,7 @@ UniValue dumpwallet(const UniValue& params, bool fHelp)
     for (const CScriptID &scriptid: scripts) {
         CScript script;
         std::string create_time = "0";
-        std::string address = CBTCUAddress(CScriptID(scriptid)).ToString();
+        std::string address = EncodeDestination(ScriptHash(scriptid));
         if (pwalletMain->GetCScript(scriptid, script)) {
             file << strprintf("%s %s script=1", HexStr(script), create_time);
             file << strprintf(" # addr=%s\n", address);
@@ -503,14 +498,15 @@ UniValue bip38encrypt(const UniValue& params, bool fHelp)
     std::string strAddress = params[0].get_str();
     std::string strPassphrase = params[1].get_str();
 
-    CBTCUAddress address;
-    if (!address.SetString(strAddress))
+    CTxDestination dest = DecodeDestination(strAddress);
+    if (!IsValidDestination(dest))
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid BTCU address");
-    CKeyID keyID;
-    if (!address.GetKeyID(keyID))
-        throw JSONRPCError(RPC_TYPE_ERROR, "Address does not refer to a key");
+    auto keyid = GetKeyForDestination(*pwalletMain, dest);
+    if (keyid.IsNull()) {
+       throw JSONRPCError(RPC_TYPE_ERROR, "Address does not refer to a key");
+    }
     CKey vchSecret;
-    if (!pwalletMain->GetKey(keyID, vchSecret))
+    if (!pwalletMain->GetKey(keyid, vchSecret))
         throw JSONRPCError(RPC_WALLET_ERROR, "Private key for address " + strAddress + " is not known");
 
     uint256 privKey = vchSecret.GetPrivKey_256();
@@ -567,11 +563,11 @@ UniValue bip38decrypt(const UniValue& params, bool fHelp)
     CPubKey pubkey = key.GetPubKey();
     pubkey.IsCompressed();
     assert(key.VerifyPubKey(pubkey));
-    result.push_back(Pair("Address", CBTCUAddress(pubkey.GetID()).ToString()));
+    result.push_back(Pair("Address", EncodeDestination(PKHash(pubkey.GetID()))));
     CKeyID vchAddress = pubkey.GetID();
     {
         pwalletMain->MarkDirty();
-        pwalletMain->SetAddressBook(vchAddress, "", AddressBook::AddressBookPurpose::RECEIVE);
+        pwalletMain->SetAddressBook(PKHash(vchAddress), "", AddressBook::AddressBookPurpose::RECEIVE);
 
         // Don't throw error in case a key is already there
         if (pwalletMain->CCryptoKeyStore::HaveKey(vchAddress))

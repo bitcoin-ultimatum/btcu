@@ -8,6 +8,7 @@
 #include "script.h"
 #include "tinyformat.h"
 #include "utilstrencodings.h"
+#include "standard.h"
 
 namespace {
 inline std::string ValueString(const std::vector<unsigned char>& vch)
@@ -408,6 +409,16 @@ bool CScript::ExtractPubKey(CPubKey& pubKeyOut) const
    if (!GetOp(pc, opcode, vch) || opcode != OP_CHECKSIG || GetOp(pc, opcode, vch))
       return false;
    return true;
+}
+
+uint64_t CScript::ExtractLeasedCLTVTimestamp() const
+{
+   txnouttype typeRet = TX_NONSTANDARD;
+   std::vector<valtype> vSolutions;
+   if (!Solver(*this, typeRet, vSolutions) || typeRet != TX_LEASE_CLTV || vSolutions.size() < 3)
+      return 0;
+
+   return CScriptNum::vch_to_uint64(vSolutions[0]);
 }
 bool CScript::IsPayToWitnessScriptHash() const
 {

@@ -10,6 +10,7 @@
 #include "addresstablemodel.h"
 #include "transactionrecord.h"
 #include "walletmodel.h"
+#include "key_io.h"
 
 #include <iostream>
 
@@ -63,12 +64,12 @@ struct LeasingModel::Impl {
         if (!ExtractDestinations(out.scriptPubKey, type, addresses, nRequired) || type != TX_LEASE || type != TX_LEASE_CLTV || addresses.size() != 2)
             return error("%s : Error extracting P2L destinations for utxo: %s-%d", __func__, utxo.tx->GetHash().GetHex(), utxo.i);
 
-        leasing.leaserKeyID = boost::get<CKeyID>(addresses[0]);
-        leasing.leaserAddress = QString::fromStdString(CBTCUAddress(leasing.leaserKeyID, CChainParams::PUBKEY_ADDRESS).ToString());
+        leasing.leaserKeyID = ToKeyID(*(std::get_if<PKHash>(&addresses[0])));
+        leasing.leaserAddress = QString::fromStdString(EncodeDestination(PKHash(leasing.leaserKeyID)));
         leasing.isLeaser = pwalletMain->HaveKey(leasing.leaserKeyID);
 
-        leasing.ownerKeyID = boost::get<CKeyID>(addresses[1]);
-        leasing.ownerAddress = QString::fromStdString(CBTCUAddress(leasing.ownerKeyID, CChainParams::PUBKEY_ADDRESS).ToString());
+        leasing.ownerKeyID = ToKeyID(*(std::get_if<PKHash>(&addresses[1])));
+        leasing.ownerAddress = QString::fromStdString(EncodeDestination(PKHash(leasing.ownerKeyID)));
         leasing.isOwner = pwalletMain->HaveKey(leasing.ownerKeyID);
 
         return true;
@@ -83,8 +84,8 @@ struct LeasingModel::Impl {
         if (!ExtractDestinations(out.scriptPubKey, type, addresses, nRequired) || type != TX_LEASINGREWARD || addresses.size() != 1)
             return error("%s : Error extracting LR destination for utxo: %s-%d", __func__, utxo.tx->GetHash().GetHex(), utxo.i);;
 
-        leasing.ownerKeyID = boost::get<CKeyID>(addresses[0]);
-        leasing.ownerAddress = QString::fromStdString(CBTCUAddress(leasing.ownerKeyID, CChainParams::PUBKEY_ADDRESS).ToString());
+        leasing.ownerKeyID = ToKeyID(*(std::get_if<PKHash>(&addresses[0])));
+        leasing.ownerAddress = QString::fromStdString(EncodeDestination(PKHash(leasing.ownerKeyID)));
         leasing.isOwner = true;
         return true;
     }

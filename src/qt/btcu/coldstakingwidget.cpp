@@ -19,6 +19,7 @@
 #include "coincontroldialog.h"
 #include "coincontrol.h"
 #include "qt/btcu/csrow.h"
+#include "key_io.h"
 
 #define DECORATION_SIZE 70
 #define NUM_ITEMS 3
@@ -694,9 +695,9 @@ void ColdStakingWidget::onLabelClicked(QString dialogTitle, const QModelIndex &i
             QString label = dialog->getLabel();
             std::string stdString = qAddress.toStdString();
             std::string purpose = walletModel->getAddressTableModel()->purposeForAddress(stdString);
-            const CBTCUAddress address = CBTCUAddress(stdString.data());
+            const CTxDestination address = DecodeDestination(stdString.data());
             if (!label.isEmpty() && walletModel->updateAddressBookLabels(
-                    address.Get(),
+                    address,
                     label.toUtf8().constData(),
                     purpose
             )) {

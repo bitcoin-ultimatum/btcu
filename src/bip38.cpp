@@ -4,12 +4,13 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "bip38.h"
-#include "btcu_address.h"
 #include "hash.h"
 #include "pubkey.h"
 #include "util.h"
 #include "utilstrencodings.h"
 #include "random.h"
+#include "base58.h"
+#include "key_io.h"
 
 #include <openssl/aes.h>
 #include <secp256k1.h>
@@ -273,7 +274,7 @@ bool BIP38_Decrypt(std::string strPassphrase, std::string strEncryptedKey, uint2
     CKey k;
     k.Set(privKey.begin(), privKey.end(), fCompressed);
     CPubKey pubkey = k.GetPubKey();
-    std::string address = CBTCUAddress(pubkey.GetID()).ToString();
+    std::string address = EncodeDestination(PKHash(pubkey));
 
     return strAddressHash == AddressToBip38Hash(address);
 }

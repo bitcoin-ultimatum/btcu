@@ -23,6 +23,7 @@
 #include <leasing/leasing_tx_verify.h>
 
 #include "leasing/leasingmanager.h"
+#include "key_io.h"
 
 void SendMoney(const CTxDestination& address, CAmount nValue, CWalletTx& wtxNew, bool fUseIX = false,
         const std::vector<CValidatorRegister> &validatorRegister = std::vector<CValidatorRegister>(),
@@ -36,7 +37,6 @@ boost::optional<CKey> GetCollateralKey(CMasternode *pmn)
     auto addr = pmn->pubKeyCollateralAddress.GetID(); // public key ID for MN's collateral address
     if (pwalletMain->GetKey(addr, key)) // get key (private and public parts) from wallet
     {
-//        auto addr_str = CBTCUAddress(key.GetPubKey().GetID()).ToString();
         keyOpt.emplace(key);
     }
     return keyOpt;
@@ -287,7 +287,7 @@ UniValue CreateAndSendTransaction(const boost::optional<CValidatorRegister> &val
       CReserveKey reservekey(pwalletMain);
       CPubKey vchPubKey;
       assert(reservekey.GetReservedKey(vchPubKey));
-      CTxDestination myAddress = vchPubKey.GetID();
+      CTxDestination myAddress = PKHash(vchPubKey.GetID());
 
       CAmount nAmount = AmountFromValue(
       UniValue((double) /*38*/100000000 / COIN)); // send 38 satoshi (min tx fee per kb is 100 satoshi)
@@ -456,7 +456,7 @@ UniValue mnregvalidatorlist(const UniValue& params, bool fHelp)
     UniValue ret(UniValue::VARR);
     for(auto &valReg : validatorsRegistrationList) {
        UniValue obj(UniValue::VOBJ);
-       obj.push_back(Pair("addr", CBTCUAddress(valReg.pubKey.GetID()).ToString()));
+       obj.push_back(Pair("addr", EncodeDestination(PKHash(valReg.pubKey.GetID()))));
        obj.push_back(Pair("pubkey", HexStr(valReg.pubKey)));
        ret.push_back(obj);
     }
@@ -472,9 +472,8 @@ UniValue mnvotevalidatorlist(const UniValue& params, bool fHelp)
     for(auto &valVote : validatorsVotesList)
     {
        UniValue validator(UniValue::VOBJ);
-       validator.push_back(Pair("validator", CBTCUAddress(valVote.pubKey.GetID()).ToString()));
-       //valVoteStr += "Voting address: " + CBTCUAddress(valVote.pubKey.GetID()).ToString() + "\n";
-       //valVoteStr +="\tVotes:\n";
+       validator.push_back(Pair("validator", EncodeDestination(PKHash(valVote.pubKey.GetID()))));
+
        for(auto &vote:valVote.votes)
        {
           CTxOut prevOut;
@@ -483,11 +482,10 @@ UniValue mnvotevalidatorlist(const UniValue& params, bool fHelp)
              throw JSONRPCError(RPC_INTERNAL_ERROR, "public zerocoin spend prev output not found");
           }
           CTxDestination dest;
-          CBTCUAddress address;
-          if (ExtractDestination(prevOut.scriptPubKey, dest) && address.Set(dest))
+          if (ExtractDestination(prevOut.scriptPubKey, dest) && IsValidDestination(dest))
           {
              UniValue validator_vote(UniValue::VOBJ);
-             validator_vote.push_back(Pair("address", address.ToString()));
+             validator_vote.push_back(Pair("address", EncodeDestination(dest)));
              validator_vote.push_back(Pair("vote", (vote.vote == VoteYes ? "yes": "no") ));
              validator.push_back(Pair("voteto", validator_vote));
           }
@@ -503,7 +501,7 @@ UniValue mnvalidatorlist(const UniValue& params, bool fHelp)
    auto validatorsList = g_ValidatorsState.get_validators();
    for(auto &val : validatorsList) {
       UniValue obj(UniValue::VOBJ);
-      obj.push_back(Pair("addr", CBTCUAddress(val.pubKey.GetID()).ToString()));
+      obj.push_back(Pair("addr", EncodeDestination(PKHash(val.pubKey.GetID()))));
       obj.push_back(Pair("pubkey", HexStr(val.pubKey)));
       ret.push_back(obj);
    }
