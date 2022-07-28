@@ -7,11 +7,13 @@
 #include <masternode.h>
 #include "main.h"
 #include "validator_tx_verify.h"
+#include "validators_voting.h"
+#include "spork.h"
 
 
 bool IsUtxoDestination(const CPubKey &pubKey, const CTxOut &vout)
 {
-    CTxDestination pubkeyAddress(pubKey.GetID());
+    CTxDestination pubkeyAddress(PKHash(pubKey.GetID()));
     CTxDestination outputAddress;
     ExtractDestination(vout.scriptPubKey, outputAddress);
     
@@ -127,7 +129,7 @@ bool CheckValidatorVote(const CTransaction &tx, const CCoinsViewCache &view, int
         {
             auto valVote = tx.validatorVote.front();
             
-            status = (CheckCredentials(valVote.vin, valVote.pubKey, view) &&
+            status = (isAddressValidator(valVote.pubKey.GetID()) &&
                       valVote.Verify(valVote.pubKey) &&
                       VotesAreValid(valVote.votes)); //  CValidatorVote's signature verification
         }
@@ -189,31 +191,45 @@ bool CheckValidatorTransaction(
         int nHeight,
         std::vector<CTransaction> &validatorTransactionsInCurrentBlock)
 {
+   if ((tx.IsValidatorRegister() || tx.IsValidatorVote()) && !sporkManager.IsSporkActive(SPORK_1020_VALIDATOR_ENFORCEMENT)) {
+      return state.DoS(10, error("CheckValidatorTransaction() validator transaction are disabled"),
+                       REJECT_INVALID, "validator-register-and-vote-disabled");
+   }
     if (tx.IsValidatorRegister() && tx.IsValidatorVote())
     {
-        return state.DoS(10, error("CheckValidatorTransaction() : check failed"),
+        return state.DoS(10, error("CheckValidatorTransaction() check failed: validator-register-and-vote"),
                          REJECT_INVALID, "validator-register-and-vote");
     }
     // Check that transaction from the same MN wasn't included into a current block
     if(AlreadyPresent(tx, validatorTransactionsInCurrentBlock))
     {
-        return state.DoS(10, error("CheckValidatorTransaction() : check failed"),
+        return state.DoS(10, error("CheckValidatorTransaction() check failed: duplicated-validator-transaction"),
                          REJECT_INVALID, "duplicated-validator-transaction");
     } else {
         if (tx.IsValidatorRegister())
         {
-            if(!CheckValidatorRegister(tx, view, nHeight) || AlreadyRegistered(tx))
+            if(!CheckValidatorRegister(tx, view, nHeight))
             {
-                return state.DoS(10, error("CheckValidatorTransaction() : check failed"),
+                return state.DoS(10, error("CheckValidatorTransaction() check failed: bad-validator-register"),
                                  REJECT_INVALID, "bad-validator-register");
+            }
+            if(AlreadyRegistered(tx))
+            {
+               return state.DoS(10, error("CheckValidatorTransaction() check failed: bad-validator-already-registered"),
+                                REJECT_INVALID, "bad-validator-already-registered");
             }
         }
         else if (tx.IsValidatorVote())
         {
-            if(!CheckValidatorVote(tx, view, nHeight) || AlreadyVoted(tx))
+            if(!CheckValidatorVote(tx, view, nHeight))
             {
-                return state.DoS(10, error("CheckValidatorTransaction() : check failed"),
+                return state.DoS(10, error("CheckValidatorTransaction() check failed: bad-validator-vote"),
                                  REJECT_INVALID, "bad-validator-vote");
+            }
+            if(AlreadyVoted(tx))
+            {
+               return state.DoS(10, error("CheckValidatorTransaction() check failed: bad-validator-already-voted"),
+                               REJECT_INVALID, "bad-validator-already-voted");
             }
         }
         return true;

@@ -598,7 +598,7 @@ else
     echo -ne  "no"
     echo  ""
     echo  "[63%] Downloading latest version of the BTCU... "
-    git clone https://github.com/askiiRobotics/btcu
+    git clone https://github.com/askiiRobotics/btcu --recursive
     cd btcu
     git checkout -b static-build-option-static-build origin/static-build-option-static-build
     echo  ""

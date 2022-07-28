@@ -8,7 +8,8 @@
 #include "coins.h"
 #include "chain.h"
 
-#include "libdevcore/ABI.h"
+#include <libethcore/ABI.h>
+#include "policy/policy.h"
 
 std::unique_ptr<QtumState> globalState;
 std::shared_ptr<dev::eth::SealEngineFace> globalSealEngine;
@@ -27,14 +28,14 @@ void ContractStateInit()
     const dev::h256 hashDB(dev::sha3(dev::rlp("")));
     dev::eth::BaseState existsQtumstate = fStatus ? dev::eth::BaseState::PreExisting : dev::eth::BaseState::Empty;
     globalState = std::unique_ptr<QtumState>(new QtumState(dev::u256(0), QtumState::openDB(dirQtum, hashDB, dev::WithExisting::Trust), dirQtum, existsQtumstate));
-    auto geni = chainparams.EVMGenesisInfo(dev::eth::Network::qtumMainNetwork);
+    auto geni = chainparams.EVMGenesisInfo();
     dev::eth::ChainParams cp(geni);
     globalSealEngine = std::unique_ptr<dev::eth::SealEngineFace>(cp.createSealEngine());
 
     if(chainActive.Tip() != nullptr){
-        auto hashStRoot = uintToh256(chainActive.Tip()->hashStateRoot);
-        auto hashUTXORoot = uintToh256(chainActive.Tip()->hashUTXORoot);
-        LogPrint("sc", "%s: chainActive.Tip()->hashStateRoot: %s, chainActive.Tip()->hashUTXORoot: %s\n", __func__, hashStRoot.hex().c_str(), hashUTXORoot.hex().c_str());
+        //auto hashStRoot = uintToh256(chainActive.Tip()->hashStateRoot);
+        //auto hashUTXORoot = uintToh256(chainActive.Tip()->hashUTXORoot);
+        //LogPrint("sc", "%s: chainActive.Tip()->hashStateRoot: %s, chainActive.Tip()->hashUTXORoot: %s\n", __func__, hashStRoot.hex().c_str(), hashUTXORoot.hex().c_str());
 
         //globalState->setRoot(dev::sha3(dev::rlp("")));
         globalState->setRoot(uintToh256(chainActive.Tip()->hashStateRoot));
@@ -87,7 +88,7 @@ bool CheckOpSender(const CTransaction& tx, const CChainParams& chainparams, int 
     return true;
 }
 
-bool CheckSenderScript(const CCoinsViewCache& view, const CTransaction& tx){
+bool CheckSenderScript(const CCoinsViewCache& view, const CTransaction& tx, const CBlock *pblock){
     // Check for the sender that pays the coins
     if (tx.vout.size() < 2) {
         return false;
@@ -100,7 +101,22 @@ bool CheckSenderScript(const CCoinsViewCache& view, const CTransaction& tx){
         // First try finding the previous transaction in database
         CTransaction txPrev; uint256 hashBlock;
         if (!GetTransaction(tx.vin[0].prevout.hash, txPrev, hashBlock, true))
-           return false;
+        {
+           //check in the same block...
+           if(pblock)
+           {
+              for (unsigned int i = 0; i < pblock->vtx.size(); i++) {
+                 if(tx.vin[0].prevout.hash == pblock->vtx[i].GetHash())
+                 {
+                    txPrev = pblock->vtx[i];
+                    break;
+                 }
+              }
+           }
+           else
+              return false;
+        }
+
         CScript script = txPrev.vout[tx.vin[0].prevout.n].scriptPubKey;
         if(!script.IsPayToPubkeyHash() && !script.IsPayToPubkey()){
             return false;
@@ -126,7 +142,7 @@ bool CheckSenderScript(const CCoinsViewCache& view, const CTransaction& tx){
 
             // Get the signature stack
             std::vector <std::vector<unsigned char> > stack;
-            if (!BTC::EvalScript(stack, senderSig, SCRIPT_VERIFY_NONE, BaseSignatureChecker(), SigVersion::BASE, nullptr))
+            if (!EvalScript(stack, senderSig, SCRIPT_VERIFY_NONE, BaseSignatureChecker(), SigVersion::BASE))
                 return false;
 
             // Check that the items size is no more than 80 bytes
@@ -278,7 +294,7 @@ valtype GetSenderAddress(const CTransaction& tx, const CCoinsViewCache* coinsVie
     }
     if(!scriptFilled && coinsView){
         auto coins = coinsView->AccessCoins(tx.vin[0].prevout.hash);
-        if (coins && coins->vout.size() > 0) {
+       if (coins && tx.vin[0].prevout.n < coins->vout.size()) {
             script = coins->vout[tx.vin[0].prevout.n].scriptPubKey;
             scriptFilled = true;
         }
@@ -299,9 +315,8 @@ valtype GetSenderAddress(const CTransaction& tx, const CCoinsViewCache* coinsVie
     CTxDestination addressBit;
     txnouttype txType=TX_NONSTANDARD;
     if(ExtractDestination(script, addressBit, &txType)){
-        if ((txType == TX_PUBKEY || txType == TX_PUBKEYHASH) &&
-            addressBit.type() == typeid(CKeyID)){
-            CKeyID senderAddress(boost::get<CKeyID>(addressBit));
+        if ((txType == TX_PUBKEY || txType == TX_PUBKEYHASH)){
+            PKHash senderAddress(*std::get_if<PKHash>(&addressBit));
             return valtype(senderAddress.begin(), senderAddress.end());
         }
     }
@@ -490,9 +505,8 @@ dev::Address ByteCodeExec::EthAddrFromScript(const CScript& script){
     CTxDestination addressBit;
     txnouttype txType=TX_NONSTANDARD;
     if(ExtractDestination(script, addressBit, &txType)){
-        if ((txType == TX_PUBKEY || txType == TX_PUBKEYHASH) &&
-            addressBit.type() == typeid(CKeyID)){
-            CKeyID addressKey(boost::get<CKeyID>(addressBit));
+        if ((txType == TX_PUBKEY || txType == TX_PUBKEYHASH)){
+            PKHash addressKey(*std::get_if<PKHash>(&addressBit));
             std::vector<unsigned char> addr(addressKey.begin(), addressKey.end());
             return dev::Address(addr);
         }
@@ -530,7 +544,7 @@ bool QtumTxConverter::extractionQtumTransactions(ExtractQtumTX& qtumtx){
 bool QtumTxConverter::receiveStack(const CScript& scriptPubKey){
     sender = false;
     // FIX: hardcoded flag value
-    BTC::EvalScript(stack, scriptPubKey, 1610612736, BaseSignatureChecker(), SigVersion::BASE, nullptr);
+    EvalScript(stack, scriptPubKey, 1610612736, BaseSignatureChecker(), SigVersion::BASE);
     if (stack.empty())
         return false;
 

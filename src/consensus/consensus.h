@@ -30,6 +30,8 @@ extern unsigned int dgpMaxTxSigOps;
 /** The maximum allowed weight for a block, see BIP 141 (network rule) */
 extern unsigned int dgpMaxBlockWeight;
 
+extern unsigned int dgpMaxBlockSize; // qtum
+
 /** Flags for nSequence and nLockTime locks */
 enum {
     /* Interpret sequence numbers as relative lock-time constraints. */
@@ -38,5 +40,7 @@ enum {
     /* Use GetMedianTimePast() instead of nTime for end point timestamp. */
     LOCKTIME_MEDIAN_TIME_PAST = (1 << 1),
 };
+
+void updateBlockSizeParams(unsigned int newBlockSize);
 
 #endif // BITCOIN_CONSENSUS_CONSENSUS_H

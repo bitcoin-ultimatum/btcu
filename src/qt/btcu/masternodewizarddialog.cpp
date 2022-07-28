@@ -10,6 +10,7 @@
 #include "pairresult.h"
 #include "activemasternode.h"
 #include "qt/btcu/guitransactionsutils.h"
+#include "key_io.h"
 #include <QFile>
 #include <QIntValidator>
 #include <QHostAddress>
@@ -249,8 +250,7 @@ bool MasterNodeWizardDialog::createMN(){
         // First create the mn key
         CKey secret;
         secret.MakeNewKey(false);
-        CBTCUSecret mnKey = CBTCUSecret(secret);
-        std::string mnKeyString = mnKey.ToString();
+        std::string mnKeyString = EncodeSecret(secret);
 
         // second create mn address
         QString addressLabel = ui->lineEditName->text().trimmed();
@@ -274,7 +274,7 @@ bool MasterNodeWizardDialog::createMN(){
         std::string port = portStr.toStdString();
 
         // New receive address
-        CBTCUAddress address;
+        CTxDestination address;
         PairResult r = walletModel->getNewAddress(address, alias);
 
         if (!r.result) {
@@ -284,7 +284,7 @@ bool MasterNodeWizardDialog::createMN(){
         }
 
         // const QString& addr, const QString& label, const CAmount& amount, const QString& message
-        SendCoinsRecipient sendCoinsRecipient(QString::fromStdString(address.ToString()), QString::fromStdString(alias), CAmount(MN_DEPOSIT_SIZE) * COIN, "");
+        SendCoinsRecipient sendCoinsRecipient(QString::fromStdString(EncodeDestination(address)), QString::fromStdString(alias), CAmount(MN_DEPOSIT_SIZE) * COIN, "");
 
         // Send the 10 tx to one of your address
         QList<SendCoinsRecipient> recipients;

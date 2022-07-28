@@ -3,7 +3,7 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.10)
 set(PACKAGE_NAME "btcu qt")
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/scripts)
-list(APPEND CMAKE_PREFIX_PATH ./src/cpp-ethereum/ethash)
+list(APPEND CMAKE_PREFIX_PATH ./src/eth_client/utils/ethash)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOUIC_SEARCH_PATHS ${CMAKE_CURRENT_SOURCE_DIR}/forms ${CMAKE_CURRENT_SOURCE_DIR}/btcu/forms ${CMAKE_CURRENT_SOURCE_DIR}/btcu/settings/forms)
@@ -266,18 +266,18 @@ SET(QT_SOURCES
         )
 
 set(SERVER_SOURCES
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/ethash/lib/ethash/keccak.c
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/ethash/lib/ethash/ethash.cpp
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/ethash/lib/ethash/keccakf1600.c
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/ethash/lib/ethash/primes.c
+        ${CMAKE_SOURCE_DIR}/src/eth_client/utils/ethash/lib/ethash/keccak.c
+        ${CMAKE_SOURCE_DIR}/src/eth_client/utils/ethash/lib/ethash/ethash.cpp
+        ${CMAKE_SOURCE_DIR}/src/eth_client/utils/ethash/lib/ethash/keccakf1600.c
+        ${CMAKE_SOURCE_DIR}/src/eth_client/utils/ethash/lib/ethash/primes.c
 
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/ethash/lib/ethash/ethash.cpp
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/ethash/lib/ethash/keccak.c
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/ethash/lib/ethash/keccakf800.c
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/ethash/lib/ethash/keccakf1600.c
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/ethash/lib/ethash/managed.cpp
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/ethash/lib/ethash/primes.c
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/ethash/lib/ethash/progpow.cpp
+        ${CMAKE_SOURCE_DIR}/src/eth_client/utils/ethash/lib/ethash/ethash.cpp
+        ${CMAKE_SOURCE_DIR}/src/eth_client/utils/ethash/lib/ethash/keccak.c
+        ${CMAKE_SOURCE_DIR}/src/eth_client/utils/ethash/lib/ethash/keccakf800.c
+        ${CMAKE_SOURCE_DIR}/src/eth_client/utils/ethash/lib/ethash/keccakf1600.c
+        ${CMAKE_SOURCE_DIR}/src/eth_client/utils/ethash/lib/ethash/managed.cpp
+        ${CMAKE_SOURCE_DIR}/src/eth_client/utils/ethash/lib/ethash/primes.c
+        ${CMAKE_SOURCE_DIR}/src/eth_client/utils/ethash/lib/ethash/progpow.cpp
         )
 add_library(SERVER_B STATIC ${BitcoinHeaders} ${SERVER_SOURCES})
 
@@ -289,9 +289,9 @@ target_include_directories(SERVER_B
         ${OPENSSL_INCLUDE_DIR}
         ${Boost_INCLUDE_DIRS}
         ${Boost_INCLUDE_DIRS}/filesystem
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/ethash/include
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/evmc/include
+        ${CMAKE_SOURCE_DIR}/src/eth_client
+        ${CMAKE_SOURCE_DIR}/src/eth_client/utils/ethash/include
+        ${CMAKE_SOURCE_DIR}/src/evmone/evmc/include
         ${CMAKE_SOURCE_DIR}/src/qtum
         )
 
@@ -314,11 +314,7 @@ target_include_directories(BITCOIN_CRYPTO_B PUBLIC
         )
 
 set(COMMON_SOURCES
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/libethashseal/Ethash.cpp
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/libethashseal/EthashCPUMiner.cpp
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/libethashseal/EthashProofOfWork.cpp
-
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/libethashseal/GenesisInfo.cpp
+        ${CMAKE_SOURCE_DIR}/src/eth_client/libethashseal/GenesisInfo.cpp
         )
 
 add_library(COMMON_B STATIC ${BitcoinHeaders} ${COMMON_SOURCES})
@@ -327,9 +323,9 @@ target_include_directories(COMMON_B
     PUBLIC
         ${OPENSSL_INCLUDE_DIR}
         ${BerkeleyDB_INCLUDE_DIRS}
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/ethash/include
-        ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/evmc/include
+        ${CMAKE_SOURCE_DIR}/src/eth_client
+        ${CMAKE_SOURCE_DIR}/src/eth_client/utils/ethash/include
+        ${CMAKE_SOURCE_DIR}/src/evmone/evmc/include
         ${CMAKE_SOURCE_DIR}/src/qtum
         )
 target_link_libraries(COMMON_B
@@ -366,21 +362,20 @@ target_include_directories(qt_stuff
 			${CMAKE_SOURCE_DIR}/src/leveldb/include
 			${CMAKE_SOURCE_DIR}/src/univalue/include
 			${CMAKE_SOURCE_DIR}/src/secp256k1/include
-            ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/ethash/lib/ethash
-            ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/libethashseal
-            ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/ethash/include
-            ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/evmc/include
+            ${CMAKE_SOURCE_DIR}/src/eth_client
+            ${CMAKE_SOURCE_DIR}/src/eth_client/utils/ethash/include
+            ${CMAKE_SOURCE_DIR}/src/evmone/evmc/include
             ${CMAKE_SOURCE_DIR}/src/qtum
 			${CMAKE_CURRENT_SOURCE_DIR}
 			${CMAKE_CURRENT_SOURCE_DIR}/btcu
 			${CMAKE_CURRENT_SOURCE_DIR}/btcu/settings
 			${OPENSSL_INCLUDE_DIR}
 			${BerkeleyDB_INCLUDE_DIRS}
-			${CMAKE_SOURCE_DIR}/src/cpp-ethereum/
+			${CMAKE_SOURCE_DIR}/src/eth_clientm/
 			${Boost_INCLUDE_DIRS}
 			${Boost_INCLUDE_DIRS}/filesystem
         )
-set_property(TARGET qt_stuff PROPERTY CXX_STANDARD 11)
+set_property(TARGET qt_stuff PROPERTY CXX_STANDARD 17)
 
 if(ZeroMQ_FOUND)
     if(${CMAKE_SYSTEM_NAME} MATCHES "Windows" OR BUILD_STATIC)
@@ -441,7 +436,7 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 endif()
 add_dependencies(btcu-qt translations_target leveldb leveldb_sse42 memenv)
 
-target_include_directories(btcu-qt PUBLIC ${ENDIAN_INCLUDES} ${CMAKE_SOURCE_DIR}/src/cpp-ethereum/)
+target_include_directories(btcu-qt PUBLIC ${ENDIAN_INCLUDES} ${CMAKE_SOURCE_DIR}/src/eth_client/)
 
 target_link_libraries(btcu-qt
         qt_stuff
@@ -918,7 +913,7 @@ if(ENABLE_TESTS)
 	add_dependencies(test_btcu-qt translations_target leveldb leveldb_sse42 memenv)
 	target_include_directories(test_btcu-qt PUBLIC
 			${ENDIAN_INCLUDES}
-			${CMAKE_SOURCE_DIR}/src/cpp-ethereum/
+			${CMAKE_SOURCE_DIR}/src/eth_client/
 			${CMAKE_CURRENT_SOURCE_DIR}/test
 			${CMAKE_SOURCE_DIR}/src
 			${CMAKE_SOURCE_DIR}/src/leveldb/include
@@ -929,7 +924,7 @@ if(ENABLE_TESTS)
 			${CMAKE_CURRENT_SOURCE_DIR}/btcu/settings
 			${OPENSSL_INCLUDE_DIR}
 			${BerkeleyDB_INCLUDE_DIRS}
-			${CMAKE_SOURCE_DIR}/src/cpp-ethereum/
+			${CMAKE_SOURCE_DIR}/src/eth_client/
 		)
 
 	target_link_libraries(test_btcu-qt PUBLIC

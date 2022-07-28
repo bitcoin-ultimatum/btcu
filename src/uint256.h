@@ -269,10 +269,10 @@ public:
         return (unsigned char*)&pn[WIDTH];
     }
 
-    unsigned int size() const
-    {
-        return sizeof(pn);
-    }
+   static constexpr unsigned int size()
+   {
+      return sizeof(pn);
+   }
 
     uint64_t Get64(int n = 0) const
     {
@@ -337,6 +337,8 @@ public:
     uint256(uint64_t b) : base_uint<256>(b) {}
     explicit uint256(const std::string& str) : base_uint<256>(str) {}
     explicit uint256(const std::vector<unsigned char>& vch) : base_uint<256>(vch) {}
+    static const uint256 ZERO;
+    static const uint256 ONE;
 
     /**
      * The "compact" format is a representation of a whole

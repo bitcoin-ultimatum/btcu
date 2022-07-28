@@ -17,7 +17,6 @@
 class CTxIn;
 class CObfuscationPool;
 class CMasterNodeVote;
-class CBTCUAddress;
 class CObfuscationQueue;
 class CObfuscationBroadcastTx;
 class CActiveMasternode;

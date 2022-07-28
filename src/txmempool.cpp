@@ -13,6 +13,7 @@
 #include "util.h"
 #include "utilmoneystr.h"
 #include "version.h"
+#include <random>
 
 #include <boost/circular_buffer.hpp>
 
@@ -229,7 +230,9 @@ public:
             // Insert at most 10 random entries per bucket, otherwise a single block
             // can dominate an estimate:
             if (e.size() > 10) {
-                std::random_shuffle(e.begin(), e.end());
+                std::random_device seed;
+                auto m_urng = std::mt19937_64(seed());
+                std::shuffle(e.begin(), e.end(), m_urng);
                 e.resize(10);
             }
             for (const CTxMemPoolEntry* entry : e) {
@@ -546,7 +549,7 @@ void CTxMemPool::check(const CCoinsViewCache* pcoins) const
     LogPrint("mempool", "Checking mempool with %u transactions and %u inputs\n", (unsigned int)mapTx.size(), (unsigned int)mapNextTx.size());
 
     uint64_t checkTotal = 0;
-
+    PrecomputedTransactionData txdata;
     CCoinsViewCache mempoolDuplicate(const_cast<CCoinsViewCache*>(pcoins));
 
     LOCK(cs);
@@ -556,6 +559,7 @@ void CTxMemPool::check(const CCoinsViewCache* pcoins) const
         checkTotal += it->second.GetTxSize();
         const CTransaction& tx = it->second.GetTx();
         bool fDependsWait = false;
+
         for (const CTxIn& txin : tx.vin) {
             // Check that every mempool transaction's inputs refer to available coins, or other mempool tx's.
             std::map<uint256, CTxMemPoolEntry>::const_iterator it2 = mapTx.find(txin.prevout.hash);
@@ -584,7 +588,7 @@ void CTxMemPool::check(const CCoinsViewCache* pcoins) const
         else {
             CValidationState state;
             CTxUndo undo;
-            assert(CheckInputs(tx, state, mempoolDuplicate, false, 0, false, NULL));
+            assert(CheckInputs(tx, state, mempoolDuplicate, false, 0, false, txdata, NULL));
             UpdateCoins(tx, state, mempoolDuplicate, undo, 1000000);
         }
     }
@@ -598,7 +602,7 @@ void CTxMemPool::check(const CCoinsViewCache* pcoins) const
             stepsSinceLastRemove++;
             assert(stepsSinceLastRemove < waitingOnDependants.size());
         } else {
-            assert(CheckInputs(entry->GetTx(), state, mempoolDuplicate, false, 0, false, NULL));
+            assert(CheckInputs(entry->GetTx(), state, mempoolDuplicate, false, 0, false, txdata, NULL));
             CTxUndo undo;
             UpdateCoins(entry->GetTx(), state, mempoolDuplicate, undo, 1000000);
             stepsSinceLastRemove = 0;

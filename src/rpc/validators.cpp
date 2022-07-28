@@ -23,10 +23,11 @@
 #include <leasing/leasing_tx_verify.h>
 
 #include "leasing/leasingmanager.h"
+#include "key_io.h"
 
 void SendMoney(const CTxDestination& address, CAmount nValue, CWalletTx& wtxNew, bool fUseIX = false,
         const std::vector<CValidatorRegister> &validatorRegister = std::vector<CValidatorRegister>(),
-        const std::vector<CValidatorVote> &validatorVote = std::vector<CValidatorVote>());
+        const std::vector<CValidatorVote> &validatorVote = std::vector<CValidatorVote>(), CCoinsViewCache* pView = nullptr);
 
 boost::optional<CKey> GetCollateralKey(CMasternode *pmn)
 {
@@ -36,7 +37,6 @@ boost::optional<CKey> GetCollateralKey(CMasternode *pmn)
     auto addr = pmn->pubKeyCollateralAddress.GetID(); // public key ID for MN's collateral address
     if (pwalletMain->GetKey(addr, key)) // get key (private and public parts) from wallet
     {
-//        auto addr_str = CBTCUAddress(key.GetPubKey().GetID()).ToString();
         keyOpt.emplace(key);
     }
     return keyOpt;
@@ -105,6 +105,7 @@ boost::optional<std::pair<CTxIn, CKey>> GetRegisteredValidatorVinKey()
 }
 
 // Tries to get secret key which corresponds to one of registering validators keys
+/*
 boost::optional<std::pair<CTxIn, CKey>> GetRegisteringValidatorVinKey()
 {
    boost::optional<std::pair<CTxIn, CKey>> vinKeyOpt;
@@ -121,21 +122,23 @@ boost::optional<std::pair<CTxIn, CKey>> GetRegisteringValidatorVinKey()
             auto keyOpt = GetCollateralKey(pmn);
             if(keyOpt.is_initialized())
             {
-               auto validatorsRegistrationList = g_ValidatorsState.get_registrations();
-               for(auto &validator: validatorsRegistrationList)
-               {
-                  if(validator.pubKey == keyOpt.value().GetPubKey())
-                  {
+               ///Commented code allow any masternodes vote for registered validator
+//               auto validatorsRegistrationList = g_ValidatorsState.get_registrations();
+//               for(auto &validator: validatorsRegistrationList)
+//               {
+//                  if(validator.pubKey == keyOpt.value().GetPubKey())
+//                  {
                      vinKeyOpt.emplace(std::pair<CTxIn, CKey>(pmn->vin, keyOpt.value()));
                      return vinKeyOpt;
-                  }
-               }
+ //                 }
+ //              }
             }
          }
       }
    }
    return vinKeyOpt;
 }
+*/
 
 // Tries to get secret key which corresponds to one of registered validators keys
 std::string GetMNAliasFromVin(CTxIn mnVin)
@@ -201,8 +204,12 @@ boost::optional<CValidatorRegister> CreateValidatorReg(const std::string &strAli
 boost::optional<CValidatorVote> CreateValidatorVote(const std::vector<MNVote> &votes)
 {
     boost::optional<CValidatorVote> valVoteOpt;
-    
-    auto keyOpt = GetRegisteringValidatorVinKey();
+
+    //try to get validator data from genesis and registered lists
+    auto keyOpt = GetGenesisVinKey();
+    if(!keyOpt.is_initialized())
+       keyOpt = GetRegisteredValidatorVinKey();
+
     if(keyOpt.is_initialized())
     {
         auto vinKey = keyOpt.value();
@@ -246,7 +253,6 @@ UniValue CreateAndSendTransaction(const boost::optional<CValidatorRegister> &val
       std::vector<CValidatorRegister> valReg;
       std::vector<CValidatorVote> valVote;
 
-      CTxIn vin;
       if (valRegOpt.is_initialized())
       {
          //check leased to candidate coins
@@ -259,41 +265,37 @@ UniValue CreateAndSendTransaction(const boost::optional<CValidatorRegister> &val
             CPubKey pubkey = valRegOpt.value().pubKey;
             pwalletMain->pLeasingManager->GetAllAmountsLeasedTo(pubkey, amount);
 
-            if(amount < LEASED_TO_VALIDATOR_MIN_AMOUNT)
+            if(amount < LEASED_TO_VALIDATOR_MIN_AMOUNT * COIN)
                return UniValue("Not enough leased to validator candidate coins, min=" + std::to_string(LEASED_TO_VALIDATOR_MIN_AMOUNT) +
                ", current=" + std::to_string(amount) + ", validator pubkey=" + HexStr(pubkey));
          }
 #endif
          valReg.push_back(valRegOpt.value());
-         vin = valRegOpt.value().vin;
+         //Check minimum age of mn vin
+         const CCoins* unspentCoins = view.AccessCoins(valRegOpt.value().vin.prevout.hash);
+         int age = GetCoinsAge(unspentCoins);
+         if (age < MASTERNODE_MIN_CONFIRMATIONS)
+            return UniValue("Masternode vin minimum confirmation is:" + std::to_string(MASTERNODE_MIN_CONFIRMATIONS) +
+                            ", but now vin age = " + std::to_string(age));
       }
       else if (valVoteOpt.is_initialized())
       {
          valVote.push_back(valVoteOpt.value());
-         vin = valVoteOpt.value().vin;
       }
-
-      //Check minimum age of mn vin
-      const CCoins* unspentCoins = view.AccessCoins(vin.prevout.hash);
-      int age = GetCoinsAge(unspentCoins);
-      if (age < MASTERNODE_MIN_CONFIRMATIONS)
-         return UniValue("Masternode vin minimum confirmation is:" + std::to_string(MASTERNODE_MIN_CONFIRMATIONS) +
-                         ", but now vin age = " + std::to_string(age));
-
 
       // Get own address from wallet to send btcu to
       CReserveKey reservekey(pwalletMain);
       CPubKey vchPubKey;
       assert(reservekey.GetReservedKey(vchPubKey));
-      CTxDestination myAddress = vchPubKey.GetID();
+      CTxDestination myAddress = PKHash(vchPubKey.GetID());
 
       CAmount nAmount = AmountFromValue(
-      UniValue((double) 38 / COIN)); // send 38 satoshi (min tx fee per kb is 100 satoshi)
+      UniValue((double) /*38*/100000000 / COIN)); // send 38 satoshi (min tx fee per kb is 100 satoshi)
       CWalletTx wtx;
 
       EnsureWalletIsUnlocked();
       // Create and send transaction
-      SendMoney(myAddress, nAmount, wtx, false, valReg, valVote);
+      SendMoney(myAddress, nAmount, wtx, false, valReg, valVote, &view);
 
       // Get hash of the created transaction
       return UniValue(wtx.GetHash().GetHex());
@@ -379,7 +381,7 @@ UniValue mnvotevalidator(const UniValue& params, bool fHelp)
           "\nList the registered validators\n" +
           HelpExampleCli("mnregvalidatorlist", "") +
           "\nVote for validators\n" +
-          HelpExampleCli("mnvotevalidator", "\"[{\\\"pubkey\\\":\\\"a08e6907dbbd3d809776dbfc5d82e371b764ed838b5655e72f463568df1aadf0\\\",\\\"vote\\\":\\\"yes\\\"}]\"") +
+          HelpExampleCli("mnvotevalidator", "[{\"pubkey\":\"a08e6907dbbd3d809776dbfc5d82e371b764ed838b5655e72f463568df1aadf0\",\"vote\":\"yes\"}]") +
           "\nAs a json rpc call\n" +
           HelpExampleRpc("mnvotevalidator", "\"[{\\\"pubkey\\\":\\\"a08e6907dbbd3d809776dbfc5d82e371b764ed838b5655e72f463568df1aadf0\\\",\\\"vote\\\":\\\"yes\\\"}]\""));
 
@@ -435,7 +437,7 @@ UniValue mnvotevalidator(const UniValue& params, bool fHelp)
            if (valVoteOpt.is_initialized()){
                 ret = CreateAndSendTransaction(boost::optional<CValidatorRegister>(), valVoteOpt);
             } else {
-              throw JSONRPCError(RPC_INVALID_PARAMETER, "Failed to get validator masternode key: CreateValidatorVote failed. Check your masternode status.");
+              throw JSONRPCError(RPC_INVALID_PARAMETER, "Failed to get validator key: CreateValidatorVote failed. You don't have permission for voting transaction.");
            }
         } else {
            throw JSONRPCError(RPC_INVALID_PARAMETER, "Votes are empty");
@@ -449,27 +451,60 @@ UniValue mnvotevalidator(const UniValue& params, bool fHelp)
 UniValue mnregvalidatorlist(const UniValue& params, bool fHelp)
 {
     auto validatorsRegistrationList = g_ValidatorsState.get_registrations();
-    std::string valRegStr;
-    for(auto &valReg : validatorsRegistrationList)
-       valRegStr += " 1. PubKey: " +  HexStr(valReg.pubKey) + "\nVin: " + valReg.vin.ToString() + "\n";
-    return UniValue(valRegStr);
+    int count = 1;
+
+    UniValue ret(UniValue::VARR);
+    for(auto &valReg : validatorsRegistrationList) {
+       UniValue obj(UniValue::VOBJ);
+       obj.push_back(Pair("addr", EncodeDestination(PKHash(valReg.pubKey.GetID()))));
+       obj.push_back(Pair("pubkey", HexStr(valReg.pubKey)));
+       ret.push_back(obj);
+    }
+
+    return ret;
 }
 
 UniValue mnvotevalidatorlist(const UniValue& params, bool fHelp)
 {
+    UniValue ret(UniValue::VARR);
     auto validatorsVotesList = g_ValidatorsState.get_votes();
-    std::string valVoteStr;
+    //std::string valVoteStr;
     for(auto &valVote : validatorsVotesList)
-       valVoteStr += " 1. PubKey: " +  HexStr(valVote.pubKey) + "\nVin: " + valVote.vin.ToString() + "\n";
-    return UniValue(valVoteStr);
+    {
+       UniValue validator(UniValue::VOBJ);
+       validator.push_back(Pair("validator", EncodeDestination(PKHash(valVote.pubKey.GetID()))));
+
+       for(auto &vote:valVote.votes)
+       {
+          CTxOut prevOut;
+          CValidationState state;
+          if(!GetOutput(vote.vin.prevout.hash, vote.vin.prevout.n, state, prevOut)){
+             throw JSONRPCError(RPC_INTERNAL_ERROR, "public zerocoin spend prev output not found");
+          }
+          CTxDestination dest;
+          if (ExtractDestination(prevOut.scriptPubKey, dest) && IsValidDestination(dest))
+          {
+             UniValue validator_vote(UniValue::VOBJ);
+             validator_vote.push_back(Pair("address", EncodeDestination(dest)));
+             validator_vote.push_back(Pair("vote", (vote.vote == VoteYes ? "yes": "no") ));
+             validator.push_back(Pair("voteto", validator_vote));
+          }
+       }
+       ret.push_back(validator);
+    }
+    return ret;
 }
 
 UniValue mnvalidatorlist(const UniValue& params, bool fHelp)
 {
-    auto validatorsList = g_ValidatorsState.get_validators();
-    
-    std::string valStr;
-    for(auto &val : validatorsList)
-       valStr += " 1. PubKey: " +  HexStr(val.pubKey) + "\nVin: " + val.vin.ToString() + "\n";
-    return UniValue(valStr);
+   UniValue ret(UniValue::VARR);
+   auto validatorsList = g_ValidatorsState.get_validators();
+   for(auto &val : validatorsList) {
+      UniValue obj(UniValue::VOBJ);
+      obj.push_back(Pair("addr", EncodeDestination(PKHash(val.pubKey.GetID()))));
+      obj.push_back(Pair("pubkey", HexStr(val.pubKey)));
+      ret.push_back(obj);
+   }
+
+   return ret;
 }

@@ -51,6 +51,7 @@
 #include "libzerocoin/Denominations.h"
 #include "invalid.h"
 #include "validators_voting.h"
+#include "policy/policy.h"
 #include <sstream>
 
 #include <boost/filesystem.hpp>
@@ -807,59 +808,40 @@ bool IsStandardTx(const CTransaction& tx, std::string& reason)
  * 2. P2SH scripts with a crazy number of expensive
  *    CHECKSIG/CHECKMULTISIG operations
  */
+
 bool AreInputsStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs)
 {
-    if (tx.IsCoinBase() || tx.HasZerocoinSpendInputs() || tx.IsLeasingReward())
-        return true; // coinbase has no inputs and zerocoinspend has a special input
-    //todo should there be a check for a 'standard' zerocoinspend here?
+   if (tx.IsCoinBase() || tx.HasZerocoinSpendInputs() || tx.IsLeasingReward())
+      return true; // Coinbases don't use vin normally
 
-    for (unsigned int i = 0; i < tx.vin.size(); i++) {
-        const CTxOut& prev = mapInputs.GetOutputFor(tx.vin[i]);
+   for (unsigned int i = 0; i < tx.vin.size(); i++)
+   {
+      const CTxOut& prev = mapInputs.GetOutputFor(tx.vin[i]);
 
-        std::vector<std::vector<unsigned char> > vSolutions;
-        txnouttype whichType;
-        // get the scriptPubKey corresponding to this input:
-        const CScript& prevScript = prev.scriptPubKey;
-        if (!Solver(prevScript, whichType, vSolutions))
+      std::vector<std::vector<unsigned char> > vSolutions;
+      txnouttype whichType;
+      // get the scriptPubKey corresponding to this input:
+      const CScript& prevScript = prev.scriptPubKey;
+      if (!Solver(prevScript, whichType, vSolutions))
+         return false;
+
+      if (whichType == TX_NONSTANDARD) {
+         return false;
+      } else if (whichType == TX_SCRIPTHASH) {
+         std::vector<std::vector<unsigned char> > stack;
+         // convert the scriptSig into a stack, so we can inspect the redeemScript
+         if (!EvalScript(stack, tx.vin[i].scriptSig, false, BaseSignatureChecker(), SigVersion::BASE))
             return false;
-        int nArgsExpected = ScriptSigArgsExpected(whichType, vSolutions);
-        if (nArgsExpected < 0)
+         if (stack.empty())
             return false;
-
-        // Transactions with extra stuff in their scriptSigs are
-        // non-standard. Note that this EvalScript() call will
-        // be quick, because if there are any operations
-        // beside "push data" in the scriptSig
-        // IsStandard() will have already returned false
-        // and this method isn't called.
-        std::vector<std::vector<unsigned char> > stack;
-        if (!BTC::EvalScript(stack, tx.vin[i].scriptSig, false, BaseSignatureChecker(), SigVersion::BASE, nullptr))
+         CScript subscript(stack.back().begin(), stack.back().end());
+         if (subscript.GetSigOpCount(true) > MAX_P2SH_SIGOPS) {
             return false;
+         }
+      }
+   }
 
-        if (whichType == TX_SCRIPTHASH) {
-            if (stack.empty())
-                return false;
-            CScript subscript(stack.back().begin(), stack.back().end());
-            std::vector<std::vector<unsigned char> > vSolutions2;
-            txnouttype whichType2;
-            if (Solver(subscript, whichType2, vSolutions2)) {
-                int tmpExpected = ScriptSigArgsExpected(whichType2, vSolutions2);
-                if (tmpExpected < 0)
-                    return false;
-                nArgsExpected += tmpExpected;
-            } else {
-                // Any other Script with less than 15 sigops OK:
-                unsigned int sigops = subscript.GetSigOpCount(true);
-                // ... extra data left on the stack after execution is OK, too:
-                return (sigops <= MAX_P2SH_SIGOPS);
-            }
-        }
-
-        if (stack.size() != (unsigned int)nArgsExpected)
-            return false;
-    }
-
-    return true;
+   return true;
 }
 
 int GetInputAge(CTxIn& vin)
@@ -1124,6 +1106,19 @@ CAmount GetMinRelayFee(const CTransaction& tx, unsigned int nBytes, bool fAllowF
     return nMinFee;
 }
 
+CBlockIndex* LookupBlockIndex(const uint256& hash)
+{
+   AssertLockHeld(cs_main);
+   BlockMap::const_iterator it = mapBlockIndex.find(hash);
+   return it == mapBlockIndex.end() ? nullptr : it->second;
+}
+
+int GetSpendHeight(const CCoinsViewCache& inputs)
+{
+   LOCK(cs_main);
+   CBlockIndex* pindexPrev = LookupBlockIndex(inputs.GetBestBlock());
+   return pindexPrev->nHeight + 1;
+}
 
 bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState& state, const CTransaction& tx, bool fLimitFree, bool* pfMissingInputs, bool fRejectInsaneFee, bool ignoreFees)
 {
@@ -1279,6 +1274,17 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState& state, const CTransa
 
             nValueIn = view.GetValueIn(tx);
 
+           //check validator transaction
+           std::vector<CTransaction> validatorTransactions;
+           for(auto &t: pool.mapTx){
+              const CTransaction &valTx = t.second.GetTx();
+              if(valTx.IsValidatorVote() || valTx.IsValidatorRegister())
+                 validatorTransactions.push_back(valTx);
+           }
+           // nHeight is +1 due to current transaction should be included at least into the next block
+           if(!CheckValidatorTransaction(tx, state, view, chainActive.Height() + 1, validatorTransactions))
+              return false;
+
             // we have all inputs cached now, so switch back to dummy, so we don't need to keep lock on mempool
             view.SetBackend(dummy);
         }
@@ -1306,6 +1312,96 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState& state, const CTransa
         double dPriority = 0;
         if (!hasZcSpendInputs)
             view.GetPriority(tx, chainHeight);
+
+
+       //////////////////////////////////////////////////////////// // qtum
+       dev::u256 txMinGasPrice = 0;
+       if(!CheckOpSender(tx, Params(), GetSpendHeight(view))){
+          return state.Invalid(false, REJECT_INVALID, "bad-txns-invalid-sender");
+       }
+       if(tx.HasCreateOrCall()){
+
+          if(!CheckSenderScript(view, tx)){
+             return state.Invalid(false, REJECT_INVALID, "bad-txns-invalid-sender-script");
+          }
+
+          QtumDGP qtumDGP(globalState.get(), fGettingValuesDGP);
+          uint64_t minGasPrice = qtumDGP.getMinGasPrice(::chainActive.Tip()->nHeight + 1);
+          uint64_t blockGasLimit = qtumDGP.getBlockGasLimit(::chainActive.Tip()->nHeight + 1);
+          size_t count = 0;
+          for(const CTxOut& o : tx.vout)
+             count += o.scriptPubKey.HasOpCreate() || o.scriptPubKey.HasOpCall() ? 1 : 0;
+          unsigned int contractflags = SCRIPT_EXEC_BYTE_CODE;//= GetContractScriptFlags(nHeight, chainparams.GetConsensus());
+          contractflags |= SCRIPT_OUTPUT_SENDER;
+          QtumTxConverter converter(tx, NULL, NULL, contractflags);
+          ExtractQtumTX resultConverter;
+          if(!converter.extractionQtumTransactions(resultConverter)){
+             return state.Invalid(error("AcceptToMempool(): Contract transaction of the wrong format"), REJECT_INVALID, "bad-tx-bad-contract-format");
+          }
+          std::vector<QtumTransaction> qtumTransactions = resultConverter.first;
+          std::vector<EthTransactionParams> qtumETP = resultConverter.second;
+
+          dev::u256 sumGas = dev::u256(0);
+          dev::u256 gasAllTxs = dev::u256(0);
+          for(QtumTransaction qtumTransaction : qtumTransactions){
+             sumGas += qtumTransaction.gas() * qtumTransaction.gasPrice();
+
+             if(sumGas > dev::u256(INT64_MAX)) {
+                return state.Invalid(error("AcceptToMempool(): Transaction's gas stipend overflows"), REJECT_INVALID, "bad-tx-gas-stipend-overflow");
+             }
+
+             if(sumGas > dev::u256(nFees)) {
+                return state.Invalid(error("AcceptToMempool(): Transaction fee does not cover the gas stipend"), REJECT_INVALID, "bad-txns-fee-notenough");
+             }
+
+             if(txMinGasPrice != 0) {
+                txMinGasPrice = std::min(txMinGasPrice, qtumTransaction.gasPrice());
+             } else {
+                txMinGasPrice = qtumTransaction.gasPrice();
+             }
+             VersionVM v = qtumTransaction.getVersion();
+             if(v.format!=0)
+                return state.Invalid(error("AcceptToMempool(): Contract execution uses unknown version format"), REJECT_INVALID, "bad-tx-version-format");
+             if(v.rootVM != 1)
+                return state.Invalid(error("AcceptToMempool(): Contract execution uses unknown root VM"), REJECT_INVALID, "bad-tx-version-rootvm");
+             if(v.vmVersion != 0)
+                return state.Invalid(error("AcceptToMempool(): Contract execution uses unknown VM version"), REJECT_INVALID, "bad-tx-version-vmversion");
+             if(v.flagOptions != 0)
+                return state.Invalid(error("AcceptToMempool(): Contract execution uses unknown flag options"), REJECT_INVALID, "bad-tx-version-flags");
+
+             //check gas limit is not less than minimum mempool gas limit
+             if(qtumTransaction.gas() < GetArg("-minmempoolgaslimit", MEMPOOL_MIN_GAS_LIMIT))
+                return state.Invalid(error("AcceptToMempool(): Contract execution has lower gas limit than allowed to accept into mempool"), REJECT_INVALID, "bad-tx-too-little-mempool-gas");
+
+             //check gas limit is not less than minimum gas limit (unless it is a no-exec tx)
+             if(qtumTransaction.gas() < MINIMUM_GAS_LIMIT && v.rootVM != 0)
+                return state.Invalid(error("AcceptToMempool(): Contract execution has lower gas limit than allowed"), REJECT_INVALID, "bad-tx-too-little-gas");
+
+             if(qtumTransaction.gas() > UINT32_MAX)
+                return state.Invalid(error("AcceptToMempool(): Contract execution can not specify greater gas limit than can fit in 32-bits"), REJECT_INVALID, "bad-tx-too-much-gas");
+
+             gasAllTxs += qtumTransaction.gas();
+             if(gasAllTxs > dev::u256(blockGasLimit))
+                return state.Invalid(false, REJECT_INVALID, "bad-txns-gas-exceeds-blockgaslimit");
+
+             //don't allow less than DGP set minimum gas price to prevent MPoS greedy mining/spammers
+             if(v.rootVM!=0 && (uint64_t)qtumTransaction.gasPrice() < minGasPrice)
+                return state.Invalid(error("AcceptToMempool(): Contract execution has lower gas price than allowed"), REJECT_INVALID, "bad-tx-low-gas-price");
+          }
+
+          if(!CheckMinGasPrice(qtumETP, minGasPrice))
+             return state.Invalid(false, REJECT_INVALID, "bad-txns-small-gasprice");
+
+          if(count > qtumTransactions.size())
+             return state.Invalid(false, REJECT_INVALID, "bad-txns-incorrect-format");
+
+          /*if (rawTx && nAbsurdFee && dev::u256(nFees) > dev::u256(nAbsurdFee) + sumGas)
+             return state.Invalid(false,
+                                  REJECT_HIGHFEE, "absurdly-high-fee",
+                                  strprintf("%d > %d", nFees, nAbsurdFee));*/
+       }
+       ////////////////////////////////////////////////////////////
+
 
         CTxMemPoolEntry entry(tx, nFees, GetTime(), dPriority, chainHeight);
         unsigned int nSize = entry.GetTxSize();
@@ -1366,10 +1462,11 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState& state, const CTransa
 
         // Check against previous transactions
         // This is done last to help prevent CPU exhaustion denial-of-service attacks.
+        PrecomputedTransactionData txdata;
         int flags = STANDARD_SCRIPT_VERIFY_FLAGS;
         if (fCLTVIsActivated)
             flags |= SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY;
-        if (!CheckInputs(tx, state, view, true, flags, true)) {
+        if (!CheckInputs(tx, state, view, true, flags, true, txdata)) {
             return error("%s : ConnectInputs failed %s", __func__, hash.ToString());
         }
 
@@ -1377,15 +1474,15 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState& state, const CTransa
         // verification flags, in case of bugs in the standard flags that cause
         // transactions to pass as valid when they're actually invalid. For
         // instance the STRICTENC flag was incorrectly allowing certain
-        // CHECKSIG NOT scripts to pass, even though they were invalid.
+        // CHECKSIG NOT scripts to pass, even though they were invalid.F
         //
         // There is a similar check in CreateNewBlock() to prevent creating
         // invalid blocks, however allowing such transactions into the mempool
-        // can be exploited as a DoS attack.
+        // can be exploited as a DoS attack.F
         flags = MANDATORY_SCRIPT_VERIFY_FLAGS;
         if (fCLTVIsActivated)
             flags |= SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY;
-        if (!CheckInputs(tx, state, view, true, flags, true)) {
+        if (!CheckInputs(tx, state, view, true, flags, true, txdata)) {
             return error("%s : BUG! PLEASE REPORT THIS! ConnectInputs failed against MANDATORY but not STANDARD flags %s",
                     __func__, hash.ToString());
         }
@@ -1406,6 +1503,7 @@ bool AcceptableInputs(CTxMemPool& pool, CValidationState& state, const CTransact
         *pfMissingInputs = false;
 
     const int chainHeight = chainActive.Height();
+    PrecomputedTransactionData txdata;
 
     if (!CheckTransaction(tx, chainHeight >= Params().Zerocoin_StartHeight(), true, state))
         return error("AcceptableInputs: : CheckTransaction failed");
@@ -1580,7 +1678,7 @@ bool AcceptableInputs(CTxMemPool& pool, CValidationState& state, const CTransact
         int flags = STANDARD_SCRIPT_VERIFY_FLAGS;
         if (fCLTVIsActivated)
             flags |= SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY;
-        if (!CheckInputs(tx, state, view, false, flags, true)) {
+        if (!CheckInputs(tx, state, view, false, flags, true, txdata)) {
             return error("AcceptableInputs: : ConnectInputs failed %s", hash.ToString());
         }
 
@@ -1937,14 +2035,20 @@ void UpdateCoins(const CTransaction& tx, CValidationState& state, CCoinsViewCach
     inputs.ModifyCoins(tx.GetHash())->FromTx(tx, nHeight);
 }
 
-bool CScriptCheck::operator()()
-{
-    const CScript& scriptSig = ptxTo->vin[nIn].scriptSig;
-    CScriptWitness witness;
-    if (!BTC::VerifyScript(scriptSig, scriptPubKey, &witness, nFlags, CachingTransactionSignatureChecker(ptxTo, nIn, cacheStore), &error)) {
-        return ::error("CScriptCheck(): %s:%d VerifySignature failed: %s", ptxTo->GetHash().ToString(), nIn, ScriptErrorString(error));
-    }
-    return true;
+bool CScriptCheck::operator()() {
+   if(checkOutput())
+   {
+      // Check the sender signature inside the output, usenderPubKey = {CScript} sed to identify VM sender
+      CScript senderPubKey, senderSig;
+      if(!ExtractSenderData(ptxTo->vout[nOut].scriptPubKey, &senderPubKey, &senderSig))
+         return false;
+      return VerifyScript(senderSig, senderPubKey, nullptr, nFlags, CachingTransactionSignatureOutputChecker(ptxTo, nOut, ptxTo->vout[nOut].nValue, cacheStore, *txdata), &error);
+   }
+
+   // Check the input signature
+   const CScript &scriptSig = ptxTo->vin[nIn].scriptSig;
+   const CScriptWitness *witness = &ptxTo->vin[nIn].scriptWitness;
+   return VerifyScript(scriptSig, m_tx_out.scriptPubKey, witness, nFlags, CachingTransactionSignatureChecker(ptxTo, nIn, m_tx_out.nValue, cacheStore, *txdata), &error);
 }
 
 std::map<COutPoint, COutPoint> mapInvalidOutPoints;
@@ -2031,7 +2135,7 @@ CAmount GetInvalidUTXOValue()
     return nValue;
 }
 
-bool CheckInputs(const CTransaction& tx, CValidationState& state, const CCoinsViewCache& inputs, bool fScriptChecks, unsigned int flags, bool cacheStore, std::vector<CScriptCheck>* pvChecks)
+bool CheckInputs(const CTransaction& tx, CValidationState& state, const CCoinsViewCache& inputs, bool fScriptChecks, unsigned int flags, bool cacheStore, PrecomputedTransactionData& txdata, std::vector<CScriptCheck>* pvChecks)
 {
     if (!tx.IsCoinBase() && !tx.HasZerocoinSpendInputs() && !tx.IsLeasingReward()) {
         if (pvChecks)
@@ -2048,6 +2152,21 @@ bool CheckInputs(const CTransaction& tx, CValidationState& state, const CCoinsVi
         int nSpendHeight = pindexPrev->nHeight + 1;
         CAmount nValueIn = 0;
         CAmount nFees = 0;
+
+        if (!txdata.m_spent_outputs_ready) {
+          std::vector<CTxOut> spent_outputs;
+          spent_outputs.reserve(tx.vin.size());
+
+          for (const auto& txin : tx.vin) {
+             const COutPoint& prevout = txin.prevout;
+             const CCoins* coins = inputs.AccessCoins(prevout.hash);
+             assert(coins);
+             spent_outputs.emplace_back(coins->vout[prevout.n]);
+          }
+          txdata.Init(tx, std::move(spent_outputs));
+       }
+        assert(txdata.m_spent_outputs.size() == tx.vin.size());
+
         for (unsigned int i = 0; i < tx.vin.size(); i++) {
             const COutPoint& prevout = tx.vin[i].prevout;
             const CCoins* coins = inputs.AccessCoins(prevout.hash);
@@ -2093,38 +2212,51 @@ bool CheckInputs(const CTransaction& tx, CValidationState& state, const CCoinsVi
         // still computed and checked, and any change will be caught at the next checkpoint.
         if (fScriptChecks) {
             for (unsigned int i = 0; i < tx.vin.size(); i++) {
-                const COutPoint& prevout = tx.vin[i].prevout;
-                const CCoins* coins = inputs.AccessCoins(prevout.hash);
-                assert(coins);
 
                 // Verify signature
-                CScriptCheck check(*coins, tx, i, flags, cacheStore);
+                CScriptCheck check(txdata.m_spent_outputs[i], tx, i, flags, cacheStore, &txdata);
+
                 if (pvChecks) {
-                    pvChecks->push_back(CScriptCheck());
-                    check.swap(pvChecks->back());
-                } else if (!check()) {
-                    if (flags & STANDARD_NOT_MANDATORY_VERIFY_FLAGS) {
-                        // Check whether the failure was caused by a
-                        // non-mandatory script verification check, such as
-                        // non-standard DER encodings or non-null dummy
-                        // arguments; if so, don't trigger DoS protection to
-                        // avoid splitting the network between upgraded and
-                        // non-upgraded nodes.
-                        CScriptCheck check(*coins, tx, i,
-                            flags & ~STANDARD_NOT_MANDATORY_VERIFY_FLAGS, cacheStore);
-                        if (check())
+                      pvChecks->push_back(CScriptCheck());
+                      check.swap(pvChecks->back());
+                   } else if (!check()) {
+                   if (flags & STANDARD_NOT_MANDATORY_VERIFY_FLAGS) {
+                         // Check whether the failure was caused by a
+                         // non-mandatory script verification check, such as
+                         // non-standard DER encodings or non-null dummy
+                         // arguments; if so, don't trigger DoS protection to
+                         // avoid splitting the network between upgraded and
+                         // non-upgraded nodes.
+                         CScriptCheck check2(txdata.m_spent_outputs[i], tx, i, flags & ~STANDARD_NOT_MANDATORY_VERIFY_FLAGS, cacheStore, &txdata);
+                         //CScriptCheck check(*coins, tx, i,
+                         //                   flags & ~STANDARD_NOT_MANDATORY_VERIFY_FLAGS, cacheStore);
+                         if (check2())
                             return state.Invalid(false, REJECT_NONSTANDARD, strprintf("non-mandatory-script-verify-flag (%s)", ScriptErrorString(check.GetScriptError())));
-                    }
-                    // Failures of other flags indicate a transaction that is
-                    // invalid in new blocks, e.g. a invalid P2SH. We DoS ban
-                    // such nodes as they are not following the protocol. That
-                    // said during an upgrade careful thought should be taken
-                    // as to the correct behavior - we may want to continue
-                    // peering with non-upgraded nodes even after a soft-fork
-                    // super-majority vote has passed.
-                    return state.DoS(100, false, REJECT_INVALID, strprintf("mandatory-script-verify-flag-failed (%s)", ScriptErrorString(check.GetScriptError())));
+                      }
+                   // Failures of other flags indicate a transaction that is
+                   // invalid in new blocks, e.g. a invalid P2SH. We DoS ban
+                   // such nodes as they are not following the protocol. That
+                   // said during an upgrade careful thought should be taken
+                   // as to the correct behavior - we may want to continue
+                   // peering with non-upgraded nodes even after a soft-fork
+                   // super-majority vote has passed.
+                   return state.DoS(100, false, REJECT_INVALID, strprintf("mandatory-script-verify-flag-failed (%s)", ScriptErrorString(check.GetScriptError())));
                 }
             }
+
+            for (unsigned int i = 0; i < tx.vout.size(); i++) {
+               // Verify sender output signature
+              if(tx.vout[i].scriptPubKey.HasOpSender())
+              {
+                 CScriptCheck check(tx, i, 0, cacheStore, &txdata);
+                 if (pvChecks) {
+                    pvChecks->push_back(CScriptCheck());
+                    check.swap(pvChecks->back());
+                 } else if (!check()) {
+                    return state.DoS(100, false, REJECT_INVALID, strprintf("sender-output-script-verify-failed (%s)", ScriptErrorString(check.GetScriptError())));
+                 }
+              }
+           }
         }
     }
 
@@ -2628,19 +2760,28 @@ static int64_t nTimeIndex = 0;
 static int64_t nTimeCallbacks = 0;
 static int64_t nTimeTotal = 0;
 
-bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pindex, CCoinsViewCache& view, bool fJustCheck, bool fAlreadyChecked)
+bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pindex, CCoinsViewCache& view, bool fJustCheck, bool fAlreadyChecked, bool fVerifyDB)
 {
     AssertLockHeld(cs_main);
     // Check it again in case a previous version let a bad block in
     if (!fAlreadyChecked && !CheckBlock(block, state, !fJustCheck, !fJustCheck))
         return false;
 
-    uint64_t blockGasLimit = 40000000; //= qtumDGP.getBlockGasLimit(::ChainActive().Height());
-    uint64_t minGasPrice = 40;         //CAmount(qtumDGP.getMinGasPrice(::ChainActive().Height()));
-    CAmount nGasPrice = 40;            //(minGasPrice>DEFAULT_GAS_PRICE)?minGasPrice:DEFAULT_GAS_PRICE;
+    //////////////////////////////////////////////////////// qtum
+    QtumDGP qtumDGP(globalState.get(), fGettingValuesDGP);
+    globalSealEngine->setQtumSchedule(qtumDGP.getGasSchedule(pindex->nHeight));
+    uint32_t sizeBlockDGP = qtumDGP.getBlockSize(pindex->nHeight);
+    uint64_t minGasPrice = qtumDGP.getMinGasPrice(pindex->nHeight);
+    uint64_t blockGasLimit = qtumDGP.getBlockGasLimit(pindex->nHeight);
+    dgpMaxBlockSize = sizeBlockDGP ? sizeBlockDGP : dgpMaxBlockSize;
+    updateBlockSizeParams(dgpMaxBlockSize);
+    CBlock checkBlock(block.GetBlockHeader());
+    std::vector<CTxOut> checkVouts;
+    ////////////////////////////////////////////////////////////////
+
 
     // verify that the view's current state corresponds to the previous block
-    // we start from bitcoin chainstate therefore shouldn't check previous for the first block
+    // we start from bitcoin chainstate theundoDummyrefore shouldn't check previous for the first block
     if(pindex->nHeight > 0)
     {
        uint256 hashPrevBlock = pindex->pprev == NULL ? uint256(0): pindex->pprev->GetBlockHash();
@@ -2686,8 +2827,14 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         fCLTVIsActivated = pindex->pprev->nHeight >= Params().BIP65ActivationHeight();
     }
 
+    // Precomputed transaction data pointers must not be invalidated
+    // until after `control` has run the script checks (potentially
+    // in multiple threads). Preallocate the vector size so a new allocation
+    // doesn't invalidate pointers into the vector, and keep txsdata in scope
+    // for as long as `control`.
     CCheckQueueControl<CScriptCheck> control(fScriptChecks && nScriptCheckThreads ? &scriptcheckqueue : nullptr);
-    
+    std::vector<PrecomputedTransactionData> txsdata(block.vtx.size());
+
     // TODO: the first condition is only for testing purposes to allow blocks without validators signature
     if(!block.vchValidatorSig.empty()){
         if(!CheckValidator(block, view)){
@@ -2746,6 +2893,8 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         if (block.nTime > sporkManager.GetSporkValue(SPORK_16_ZEROCOIN_MAINTENANCE_MODE) && !IsInitialBlockDownload() && tx.ContainsZerocoins()) {
             return state.DoS(100, error("ConnectBlock() : zerocoin transactions are currently in maintenance mode"));
         }
+
+        bool hasOpSpend = tx.HasOpSpend();
 
         if (tx.HasZerocoinMintOutputs()) {
 
@@ -2836,8 +2985,12 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
             if (fCLTVIsActivated)
                 flags |= SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY;
 
-            if (!CheckInputs(tx, state, view, fScriptChecks, flags, false, nScriptCheckThreads ? &vChecks : NULL))
+            //For contract sender suport add this flag
+            flags |= SCRIPT_OUTPUT_SENDER;
+
+            if (!CheckInputs(tx, state, view, fScriptChecks, flags, false, txsdata[i], (hasOpSpend || tx.HasCreateOrCall()) ? nullptr: ( nScriptCheckThreads ? /*&vChecks*/nullptr : nullptr)))
                 return false;
+
             control.Add(vChecks);
     
             // Check validators after the basic checks have been passed
@@ -2874,14 +3027,19 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         vPos.emplace_back(tx.GetHash(), pos);
         pos.nTxOffset += ::GetSerializeSize(tx, SER_DISK, CLIENT_VERSION);
 
-        bool hasOpSpend = tx.HasOpSpend();
 
         unsigned int contractflags = SCRIPT_EXEC_BYTE_CODE;
-        
+
+       if(!CheckOpSender(tx, Params(), pindex->nHeight)){
+          state.Invalid(false, REJECT_INVALID, "bad-txns-invalid-sender");
+       }
+       if(!tx.HasOpSpend()){
+          checkBlock.vtx.push_back(block.vtx[i]);
+       }
 
         //checks for smart contracts trxs
         bool bSCValidatorFound = true;
-        if (tx.HasCreateOrCall() && !hasOpSpend) {
+        if (tx.HasCreateOrCall() && ! hasOpSpend) {
               //check that only validator can create contract
               if(tx.HasOpCreate() && !sporkManager.IsSporkActive(SPORK_1019_CREATECONTRACT_ANY_ALLOWED)) {
                  //check if create contract allowed for all
@@ -2894,27 +3052,8 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                        CKeyID senderAddr = CKeyID(uint160(GetSenderAddress(tx, &view, NULL, nOut)));
 
                        //okay, seek trx pubkey in validators
-                       //genesis validators
-                       auto genesisValidators = Params().GenesisBlock().vtx[0].validatorRegister;
-                       for(auto &gv : genesisValidators){
-                          if(senderAddr == gv.pubKey.GetID()){
-                             bSCValidatorFound = true;
-                             break;
-                          }
-                       }
+                       bSCValidatorFound = isAddressValidator(senderAddr);
 
-                       //voted validators
-                       if(!bSCValidatorFound)
-                       {
-                          auto validatorsRegistrationList = g_ValidatorsState.get_validators();
-                          for (auto& rv: validatorsRegistrationList)
-                          {
-                             if(senderAddr == rv.pubKey.GetID()){
-                                bSCValidatorFound = true;
-                                break;
-                             }
-                          }
-                       }
                        //if key found - break;
                        if(bSCValidatorFound)
                           break;
@@ -2927,7 +3066,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                  return state.DoS(100, error("ConnectBlock() : Non-validator create contract not allowed"),
                                   REJECT_INVALID, "sc-create-invalid");
 
-              if (!CheckSenderScript(view, tx)) {
+              if (!CheckSenderScript(view, tx, &block)) {
                  return state.Error("bad-txns-invalid-sender-script");
               }
 
@@ -3001,7 +3140,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                  }
               }
 
-              if (fAlreadyChecked) {
+              if (fAlreadyChecked || fVerifyDB) {
 
                  if (!exec.performByteCode()) {
                     return state.Error("ConnectBlock(): Unknown error during contract execution");
@@ -3019,7 +3158,9 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                  for (CTxOut refundVout : bcer.refundOutputs) {
                     gasRefunds += refundVout.nValue;
                  }
-
+                 for(CTransaction& t : bcer.valueTransfers){
+                    checkBlock.vtx.push_back(t);
+                 }
                  if (fRecordLogOpcodes && !fJustCheck) {
                     writeVMlog(resultExec, tx, block);
                  }
@@ -3047,9 +3188,9 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         nExpectedMint += nFees;
 
     //Check that the block does not overmint
-    if (!IsBlockValueValid(block, nExpectedMint, pindex->nMint)) {
+    if (!IsBlockValueValid(block, nExpectedMint + gasRefunds, pindex->nMint, fAlreadyChecked)) {
         return state.DoS(100, error("ConnectBlock() : reward pays too much (actual=%s vs limit=%s)",
-                                    FormatMoney(pindex->nMint), FormatMoney(nExpectedMint)),
+                                    FormatMoney(pindex->nMint), FormatMoney(nExpectedMint + gasRefunds)),
                          REJECT_INVALID, "bad-cb-amount");
     }
 
@@ -3132,7 +3273,65 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
             return AbortNode(state, "Failed to write transaction index");
 
 
-   /////////////////////////////////////////////////////qtum
+
+   ////////////////////////////////////////////////////////////////// // qtum
+   checkBlock.hashMerkleRoot = BlockMerkleRoot(checkBlock);
+   checkBlock.hashStateRoot = h256Touint(globalState->rootHash());
+   checkBlock.hashUTXORoot = h256Touint(globalState->rootHashUTXO());
+
+   //If this error happens, it probably means that something with AAL created transactions didn't match up to what is expected
+   if((checkBlock.GetHash() != block.GetHash()) && !fJustCheck)
+   {
+      LogPrintf("Actual block data does not match block expected by AAL\n");
+      //Something went wrong with AAL, compare different elements and determine what the problem is
+      if(checkBlock.hashMerkleRoot != block.hashMerkleRoot){
+         //there is a mismatched tx, so go through and determine which txs
+         if(block.vtx.size() > checkBlock.vtx.size()){
+            LogPrintf("Unexpected AAL transactions in block. Actual txs: %i, expected txs: %i\n", block.vtx.size(), checkBlock.vtx.size());
+            for(size_t i=0;i<block.vtx.size();i++){
+               if(i > checkBlock.vtx.size()-1){
+                  LogPrintf("Unexpected transaction: %s\n", block.vtx[i].ToString());
+               }else {
+                  if (block.vtx[i].GetHash() != checkBlock.vtx[i].GetHash()) {
+                     LogPrintf("Mismatched transaction at entry %i\n", i);
+                     LogPrintf("Actual: %s\n", block.vtx[i].ToString());
+                     LogPrintf("Expected: %s\n", checkBlock.vtx[i].ToString());
+                  }
+               }
+            }
+         }else if(block.vtx.size() < checkBlock.vtx.size()){
+            LogPrintf("Actual block is missing AAL transactions. Actual txs: %i, expected txs: %i\n", block.vtx.size(), checkBlock.vtx.size());
+            for(size_t i=0;i<checkBlock.vtx.size();i++){
+               if(i > block.vtx.size()-1){
+                  LogPrintf("Missing transaction: %s\n", checkBlock.vtx[i].ToString());
+               }else {
+                  if (block.vtx[i].GetHash() != checkBlock.vtx[i].GetHash()) {
+                     LogPrintf("Mismatched transaction at entry %i\n", i);
+                     LogPrintf("Actual: %s\n", block.vtx[i].ToString());
+                     LogPrintf("Expected: %s\n", checkBlock.vtx[i].ToString());
+                  }
+               }
+            }
+         }else{
+            //count is correct, but a tx is wrong
+            for(size_t i=0;i<checkBlock.vtx.size();i++){
+               if (block.vtx[i].GetHash() != checkBlock.vtx[i].GetHash()) {
+                  LogPrintf("Mismatched transaction at entry %i\n", i);
+                  LogPrintf("Actual: %s\n", block.vtx[i].ToString());
+                  LogPrintf("Expected: %s\n", checkBlock.vtx[i].ToString());
+               }
+            }
+         }
+      }
+      if(checkBlock.hashUTXORoot != block.hashUTXORoot){
+         LogPrintf("Actual block data does not match hashUTXORoot expected by AAL block\n");
+      }
+      if(checkBlock.hashStateRoot != block.hashStateRoot){
+         LogPrintf("Actual block data does not match hashStateRoot expected by AAL block\n");
+      }
+
+      return state.Invalid(error("ConnectBlock(): Incorrect AAL transactions or hashes (hashStateRoot, hashUTXORoot)"), REJECT_INVALID, "incorrect-transactions-or-hashes-block");
+   }
    if (fJustCheck)
    {
       dev::h256 prevHashStateRoot(dev::sha3(dev::rlp("")));
@@ -4404,7 +4603,7 @@ bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationState& sta
     const int chainHeight = chainActive.Height();
 
     //If this is a reorg, check that it is not too deep
-    int nMaxReorgDepth = GetArg("-maxreorg", Params().MaxReorganizationDepth());
+       int nMaxReorgDepth = GetArg("-maxreorg", Params().MaxReorganizationDepth());
     if (chainHeight - nHeight >= nMaxReorgDepth)
         return state.DoS(1, error("%s: forked chain older than max reorganization depth (height %d)", __func__, chainHeight - nHeight));
 
@@ -4961,7 +5160,7 @@ bool ProcessNewBlock(CValidationState& state, CNode* pfrom, CBlock* pblock, CDis
 
     LogPrintf("%s : ACCEPTED Block %ld in %ld milliseconds with size=%d\n", __func__, GetHeight(), GetTimeMillis() - nStartTime,
               pblock->GetSerializeSize(SER_DISK, CLIENT_VERSION));
-    LogPrint("sc","%s : SC: rootHash: %s, rootHashUTXO: %s\n",__func__, globalState->rootHash().hex().c_str(), globalState->rootHashUTXO().hex().c_str());
+    //LogPrint("sc","%s : SC: rootHash: %s, rootHashUTXO: %s\n",__func__, globalState->rootHash().hex().c_str(), globalState->rootHashUTXO().hex().c_str());
 
 
     return true;
@@ -5273,7 +5472,7 @@ bool CVerifyDB::VerifyDB(CCoinsView* coinsview, int nCheckLevel, int nCheckDepth
             dev::h256 oldHashStateRoot(globalState->rootHash()); // qtum
             dev::h256 oldHashUTXORoot(globalState->rootHashUTXO()); // qtum
 
-            if (!ConnectBlock(block, state, pindex, coins, false)){
+            if (!ConnectBlock(block, state, pindex, coins, false, false, true)){
                 globalState->setRoot(oldHashStateRoot); // qtum
                 globalState->setRootUTXO(oldHashUTXORoot); // qtum
                 return error("VerifyDB() : *** found unconnectable block at %d, hash=%s", pindex->nHeight, pindex->GetBlockHash().ToString());
@@ -6018,7 +6217,10 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
                               !pSporkDB->SporkExists(SPORK_16_ZEROCOIN_MAINTENANCE_MODE) ||
                               !pSporkDB->SporkExists(SPORK_17_COLDSTAKING_ENFORCEMENT) ||
                               !pSporkDB->SporkExists(SPORK_1017_LEASING_ENFORCEMENT) ||
-                              !pSporkDB->SporkExists(SPORK_18_ZEROCOIN_PUBLICSPEND_V4);
+                              !pSporkDB->SporkExists(SPORK_18_ZEROCOIN_PUBLICSPEND_V4) ||
+                              !pSporkDB->SporkExists(SPORK_1018_MAX_VALIDATORS) ||
+                              !pSporkDB->SporkExists(SPORK_1019_CREATECONTRACT_ANY_ALLOWED) ||
+                              !pSporkDB->SporkExists(SPORK_1020_VALIDATOR_ENFORCEMENT);
 
         if (fMissingSporks || !fRequestedSporksIDB){
             LogPrintf("asking peer for sporks\n");

@@ -14,6 +14,7 @@
 #include "wallet/wallet.h"
 #include "askpassphrasedialog.h"
 #include "addressbookpage.h"
+#include "key_io.h"
 
 #include <string>
 #include <vector>
@@ -176,14 +177,14 @@ void SettingsSignMessageWidgets::onSignMessageButtonSMClicked(){
     ui->signatureOut_SM->clear();
 
 
-    CBTCUAddress addr(ui->addressIn_SM->text().toStdString());
-    if (!addr.IsValid()) {
+    CTxDestination addr = DecodeDestination(ui->addressIn_SM->text().toStdString());
+    if (!IsValidDestination(addr)) {
         ui->statusLabel_SM->setStyleSheet("QLabel { color: red; }");
         ui->statusLabel_SM->setText(tr("The entered address is invalid.") + QString(" ") + tr("Please check the address and try again."));
         return;
     }
-    CKeyID keyID;
-    if (!addr.GetKeyID(keyID)) {
+    CKeyID keyID = GetKeyForDestination(*pwalletMain, addr);
+    if (keyID.IsNull()) {
         // TODO: change css..
         //ui->addressIn_SM->setValid(false);
         ui->statusLabel_SM->setStyleSheet("QLabel { color: red; }");
@@ -233,14 +234,14 @@ void SettingsSignMessageWidgets::onVerifyMessage(){
     ui->statusLabel_SM->setStyleSheet("QLabel { color: transparent; }");
      */
 
-    CBTCUAddress addr(ui->addressIn_SM->text().toStdString());
-    if (!addr.IsValid()) {
+    CTxDestination addr = DecodeDestination(ui->addressIn_SM->text().toStdString());
+    if (std::get_if<CNoDestination>(&addr)) {
         ui->statusLabel_SM->setStyleSheet("QLabel { color: red; }");
         ui->statusLabel_SM->setText(tr("The entered address is invalid.") + QString(" ") + tr("Please check the address and try again."));
         return;
     }
-    CKeyID keyID;
-    if (!addr.GetKeyID(keyID)) {
+
+    if (!std::get_if<PKHash>(&addr)) {
         //ui->addressIn_SM->setValid(false);
         ui->statusLabel_SM->setStyleSheet("QLabel { color: red; }");
         ui->statusLabel_SM->setText(tr("The entered address does not refer to a key.") + QString(" ") + tr("Please check the address and try again."));
@@ -269,7 +270,7 @@ void SettingsSignMessageWidgets::onVerifyMessage(){
         return;
     }
 
-    if (!(CBTCUAddress(pubkey.GetID()) == addr)) {
+    if (!(EncodeDestination(PKHash(pubkey.GetID())) == EncodeDestination(addr))) {
         ui->statusLabel_SM->setStyleSheet("QLabel { color: red; }");
         ui->statusLabel_SM->setText(QString("<nobr>") + tr("Message verification failed.") + QString("</nobr>"));
         return;

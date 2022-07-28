@@ -213,7 +213,7 @@ public:
     bool sendZbtcu(
             std::vector<CZerocoinMint> &vMintsSelected,
             CZerocoinSpendReceipt &receipt,
-            std::list<std::pair<CBTCUAddress*, CAmount>> outputs,
+            std::list<std::pair<CTxDestination*, CAmount>> outputs,
             std::string changeAddress = ""
     );
 
@@ -267,27 +267,27 @@ public:
     bool getPubKey(const CKeyID& address, CPubKey& vchPubKeyOut) const;
     int64_t getCreationTime() const;
     int64_t getKeyCreationTime(const CPubKey& key);
-    int64_t getKeyCreationTime(const CBTCUAddress& address);
-    PairResult getNewAddress(CBTCUAddress& ret, std::string label = "") const;
+    int64_t getKeyCreationTime(const CTxDestination& address);
+    PairResult getNewAddress(CTxDestination& ret, std::string label = "") const;
     /**
      * Return a new address used to receive for delegated cold stake purpose.
      */
-    PairResult getNewStakingAddress(CBTCUAddress& ret, std::string label = "") const;
+    PairResult getNewStakingAddress(CTxDestination & ret, std::string label = "") const;
     /**
      * Return a new address used to receive for lease purpose.
      */
-    PairResult getNewLeasingAddress(CBTCUAddress& ret, std::string label = "") const;
+    PairResult getNewLeasingAddress(CTxDestination& ret, std::string label = "") const;
 
     bool whitelistAddressFromColdStaking(const QString &addressStr);
     bool blacklistAddressFromColdStaking(const QString &address);
     bool updateAddressBookPurpose(const QString &addressStr, const std::string& purpose);
-    std::string getLabelForAddress(const CBTCUAddress& address);
-    bool getKeyId(const CBTCUAddress& address, CKeyID& keyID);
+    std::string getLabelForAddress(const CTxDestination& address);
+    bool getKeyId(const CTxDestination & address, CKeyID& keyID);
 
-    bool isMine(CBTCUAddress address);
+    bool isMine(CTxDestination address);
     bool isMine(const CScript& script);
     bool isMine(const QString& addressStr);
-    bool isUsed(CBTCUAddress address);
+    bool isUsed(CTxDestination address);
     void getOutputs(const std::vector<COutPoint>& vOutpoints, std::vector<COutput>& vOutputs);
     bool isSpent(const COutPoint& outpoint) const;
     void listCoins(std::map<QString, std::vector<COutput> >& mapCoins) const;

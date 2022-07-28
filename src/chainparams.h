@@ -18,6 +18,10 @@
 #include "libzerocoin/Params.h"
 #include <vector>
 
+///Validator period is separated parameters for each network
+///this file are non mergable between repositories (added in pre-(post)merge.sh scripts)
+#define VALIDATORS_VOTING_PERIOD_LENGTH 80
+
 typedef unsigned char MessageStartChars[MESSAGE_START_SIZE];
 
 struct CDNSSeedData {
@@ -45,6 +49,8 @@ public:
         SECRET_KEY,     // BIP16
         STAKING_ADDRESS,
         LEASING_ADDRESS,
+        EXT_PUBLIC_KEY,
+        EXT_SECRET_KEY,
         MAX_BASE58_TYPES
     };
 
@@ -177,7 +183,7 @@ public:
     int MPoSRewardRecipients() const { return nMPoSRewardRecipients; }
 
     std::string EVMGenesisInfo(dev::eth::Network network) const;
-    
+    std::string EVMGenesisInfo() const;
     //Chainstate patching addresses
     const std::vector<std::string>& ExcludedBTCAddresses() const { return vExcludedAddresses; }
     const std::string& RechargedBTCAddress() const { return rechargedAddress; }

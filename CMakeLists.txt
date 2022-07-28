@@ -77,7 +77,7 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     endif()
 endif()
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_SHARED_LIBRARY_RUNTIME_C_FLAG 1)
 cmake_policy(SET CMP0077 NEW)
@@ -91,6 +91,8 @@ add_custom_target(print-version
   COMMENT "Print the current ${PROJECT_NAME} version"
   COMMAND "${CMAKE_COMMAND}" -E echo "${PROJECT_VERSION}"
 )
+
+add_definitions(-DQTUM_BUILD=1)
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     if (CMAKE_GENERATOR MATCHES "Visual Studio" OR MSVC)
@@ -667,7 +669,7 @@ include(BrewHelper)
 list(APPEND CMAKE_PREFIX_PATH ./src/jsoncpp)
 list(APPEND CMAKE_PREFIX_PATH ./src/libscrypt)
 list(APPEND CMAKE_PREFIX_PATH ./src/cryptopp)
-list(APPEND CMAKE_PREFIX_PATH ./src/cpp-ethereum/ethash)
+list(APPEND CMAKE_PREFIX_PATH ./src/eth_client/utils/ethash)
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     cmake_policy(SET CMP0074 NEW)
@@ -1050,7 +1052,7 @@ add_subdirectory(src/jsoncpp/jsoncpp)
 set(ETH_CMAKE_DIR "${CMAKE_CURRENT_LIST_DIR}/cmake" CACHE PATH "The path to the cmake directory")
 list(APPEND CMAKE_MODULE_PATH ${ETH_CMAKE_DIR})
 
-add_subdirectory(src/cpp-ethereum/ethash)
+add_subdirectory(src/eth_client/utils/ethash)
 
 # remove all NDEBUG flags due to it is restricted option
 if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Windows")
@@ -1274,94 +1276,83 @@ set(SERVER_SOURCES
         ./src/txmempool.cpp
         ./src/validationinterface.cpp
         ./src/zbtcuchain.cpp
-        ./src/cpp-ethereum/ethash/lib/ethash/keccak.c
-        ./src/cpp-ethereum/ethash/lib/ethash/ethash.cpp
-        ./src/cpp-ethereum/ethash/lib/ethash/keccakf1600.c
-        ./src/cpp-ethereum/ethash/lib/ethash/primes.c
-        ./src/cpp-ethereum/libdevcore/CommonData.cpp
+        ./src/eth_client/utils/ethash/lib/ethash/keccak.c
+        ./src/eth_client/utils/ethash/lib/ethash/ethash.cpp
+        ./src/eth_client/utils/ethash/lib/ethash/keccakf1600.c
+        ./src/eth_client/utils/ethash/lib/ethash/primes.c
+        ./src/eth_client/libdevcore/CommonData.cpp
         ./src/qtum/qtumDGP.cpp
         ./src/qtum/qtumstate.cpp
         ./src/qtum/qtumutils.cpp
-        #./src/cpp-ethereum/libethereum/State.cpp
 
-        ./src/cpp-ethereum/aleth/buildinfo.c
-        ./src/cpp-ethereum/evmc/lib/instructions/instruction_metrics.c
-        ./src/cpp-ethereum/evmc/lib/instructions/instruction_names.c
-        ./src/cpp-ethereum/libdevcore/Address.cpp
-        ./src/cpp-ethereum/libdevcore/Base64.cpp
-        ./src/cpp-ethereum/libdevcore/Common.cpp
-        ./src/cpp-ethereum/libdevcore/CommonData.cpp
-        ./src/cpp-ethereum/libdevcore/CommonIO.cpp
-        ./src/cpp-ethereum/libdevcore/CommonJS.cpp
-        ./src/cpp-ethereum/libdevcore/FileSystem.cpp
-        ./src/cpp-ethereum/libdevcore/FixedHash.cpp
-        ./src/cpp-ethereum/libdevcore/Guards.cpp
-        ./src/cpp-ethereum/libdevcrypto/Hash.cpp
-        ./src/cpp-ethereum/libdevcrypto/Blake2.cpp
-        ./src/cpp-ethereum/libdevcore/Log.cpp
-        ./src/cpp-ethereum/libdevcore/LevelDB.cpp
-        ./src/cpp-ethereum/libdevcore/MemoryDB.cpp
-        ./src/cpp-ethereum/libdevcore/OverlayDB.cpp
-        ./src/cpp-ethereum/libdevcore/StateCacheDB.cpp
-        ./src/cpp-ethereum/libdevcore/RLP.cpp
-        ./src/cpp-ethereum/libdevcore/SHA3.cpp
-        ./src/cpp-ethereum/libdevcore/TransientDirectory.cpp
-        ./src/cpp-ethereum/libdevcore/TrieCommon.cpp
-        ./src/cpp-ethereum/libdevcore/Worker.cpp
-        ./src/cpp-ethereum/libdevcore/DBFactory.cpp
-        ./src/cpp-ethereum/libdevcore/JsonUtils.cpp
-        ./src/cpp-ethereum/libevm/EVMC.cpp
-        ./src/cpp-ethereum/libevm/ExtVMFace.cpp
-        ./src/cpp-ethereum/libaleth-interpreter/VM.cpp
-        ./src/cpp-ethereum/libaleth-interpreter/VMOpt.cpp
-        ./src/cpp-ethereum/libaleth-interpreter/VMCalls.cpp
-        ./src/cpp-ethereum/libevm/VMFactory.cpp
-        ./src/cpp-ethereum/libevm/Instruction.cpp
-        ./src/cpp-ethereum/libevm/LegacyVM.cpp
-        ./src/cpp-ethereum/libevm/LegacyVMCalls.cpp
-        ./src/cpp-ethereum/libevm/LegacyVMOpt.cpp
-        ./src/cpp-ethereum/libethereum/ImportPerformanceLogger.cpp
-        ./src/cpp-ethereum/libethereum/Account.cpp
-        ./src/cpp-ethereum/libethereum/GasPricer.cpp
-        ./src/cpp-ethereum/libethereum/State.cpp
-        ./src/cpp-ethereum/libethcore/ABI.cpp
-        ./src/cpp-ethereum/libethcore/ChainOperationParams.cpp
-        ./src/cpp-ethereum/libethcore/Common.cpp
-        ./src/cpp-ethereum/libethcore/EVMSchedule.cpp
-        ./src/cpp-ethereum/libethcore/Precompiled.cpp
-        ./src/cpp-ethereum/libethcore/TransactionBase.cpp
-        ./src/cpp-ethereum/libdevcrypto/Common.cpp
-        ./src/cpp-ethereum/libdevcrypto/CryptoPP.cpp
-        ./src/cpp-ethereum/libdevcrypto/AES.cpp
-        ./src/cpp-ethereum/libdevcrypto/LibSnark.cpp
-        ./src/cpp-ethereum/libethereum/ChainParams.cpp
-        ./src/cpp-ethereum/libethereum/DatabasePaths.cpp
-        ./src/cpp-ethereum/libethereum/Transaction.cpp
-        ./src/cpp-ethereum/libethereum/Executive.cpp
-        ./src/cpp-ethereum/libethereum/ExtVM.cpp
-        ./src/cpp-ethereum/libethereum/Block.cpp
-        ./src/cpp-ethereum/libethereum/BlockChain.cpp
-        ./src/cpp-ethereum/libethereum/BlockDetails.cpp
-        ./src/cpp-ethereum/libethereum/TransactionQueue.cpp
-        ./src/cpp-ethereum/libethereum/BlockQueue.cpp
-        ./src/cpp-ethereum/libethcore/BlockHeader.cpp
-        ./src/cpp-ethereum/libdevcore/RLP.cpp
-        ./src/cpp-ethereum/libethereum/TransactionReceipt.cpp
-        ./src/cpp-ethereum/libethcore/SealEngine.cpp
-        ./src/cpp-ethereum/libdevcore/TrieHash.cpp
-        ./src/cpp-ethereum/libethereum/GenesisInfo.cpp
+        ./src/evmone/evmc/lib/instructions/instruction_metrics.c
+        ./src/evmone/evmc/lib/instructions/instruction_names.c
+        ./src/evmone/lib/evmone/analysis.cpp
+        ./src/evmone/lib/evmone/baseline.cpp
+        ./src/evmone/lib/evmone/baseline_instruction_table.cpp
+        ./src/evmone/lib/evmone/execution.cpp
+        ./src/evmone/lib/evmone/instructions_calls.cpp
+        ./src/evmone/lib/evmone/instructions.cpp
+        ./src/evmone/lib/evmone/tracing.cpp
+        ./src/evmone/lib/evmone/vm.cpp
 
-        ./src/cpp-ethereum/libethereum/ValidationSchemes.cpp
-        ./src/cpp-ethereum/libethcore/LogEntry.cpp
-        ./src/cpp-ethereum/ethash/lib/ethash/ethash.cpp
-        ./src/cpp-ethereum/ethash/lib/ethash/keccak.c
-        ./src/cpp-ethereum/ethash/lib/ethash/keccakf800.c
-        ./src/cpp-ethereum/ethash/lib/ethash/keccakf1600.c
-        ./src/cpp-ethereum/ethash/lib/ethash/managed.cpp
-        ./src/cpp-ethereum/ethash/lib/ethash/primes.c
-        ./src/cpp-ethereum/ethash/lib/ethash/progpow.cpp
-        ./src/cpp-ethereum/evmc/lib/loader/loader.c
-        ./src/cpp-ethereum/libdevcore/RocksDB.cpp
+        ./src/eth_client/libdevcore/Address.cpp
+        ./src/eth_client/libdevcore/Common.cpp
+        ./src/eth_client/libdevcore/CommonData.cpp
+        ./src/eth_client/libdevcore/CommonIO.cpp
+        ./src/eth_client/libdevcore/DBFactory.cpp
+        ./src/eth_client/libdevcore/FileSystem.cpp
+        ./src/eth_client/libdevcore/FixedHash.cpp
+        ./src/eth_client/libdevcore/JsonUtils.cpp
+        ./src/eth_client/libdevcore/LevelDB.cpp
+        ./src/eth_client/libdevcore/Log.cpp
+        ./src/eth_client/libdevcore/OverlayDB.cpp
+        ./src/eth_client/libdevcore/RLP.cpp
+        ./src/eth_client/libdevcore/SHA3.cpp
+        ./src/eth_client/libdevcore/StateCacheDB.cpp
+        ./src/eth_client/libdevcore/TrieCommon.cpp
+        ./src/eth_client/libdevcore/TrieHash.cpp
+        ./src/eth_client/libdevcrypto/Blake2.cpp
+        ./src/eth_client/libdevcrypto/Common.cpp
+        ./src/eth_client/libdevcrypto/CryptoPP.cpp
+        ./src/eth_client/libdevcrypto/Hash.cpp
+        ./src/eth_client/libdevcrypto/LibSnark.cpp
+        ./src/eth_client/libethashseal/GenesisInfo.cpp
+        ./src/eth_client/libethashseal/genesis/qtumNetwork.cpp
+        ./src/eth_client/libethcore/BlockHeader.cpp
+        ./src/eth_client/libethcore/ChainOperationParams.cpp
+        ./src/eth_client/libethcore/Common.cpp
+        ./src/eth_client/libethcore/EVMSchedule.cpp
+        ./src/eth_client/libethcore/LogEntry.cpp
+        ./src/eth_client/libethcore/Precompiled.cpp
+        ./src/eth_client/libethcore/SealEngine.cpp
+        ./src/eth_client/libethcore/TransactionBase.cpp
+        ./src/eth_client/libethereum/Account.cpp
+        ./src/eth_client/libethereum/ChainParams.cpp
+        ./src/eth_client/libethereum/DatabasePaths.cpp
+        ./src/eth_client/libethereum/Executive.cpp
+        ./src/eth_client/libethereum/ExtVM.cpp
+        ./src/eth_client/libethereum/State.cpp
+        ./src/eth_client/libethereum/Transaction.cpp
+        ./src/eth_client/libethereum/TransactionReceipt.cpp
+        ./src/eth_client/libethereum/ValidationSchemes.cpp
+        ./src/eth_client/libevm/EVMC.cpp
+        ./src/eth_client/libevm/ExtVMFace.cpp
+        ./src/eth_client/libevm/VMFactory.cpp
+        ./src/eth_client/utils/ethash/lib/ethash/ethash.cpp
+        ./src/eth_client/utils/ethash/lib/ethash/keccak.c
+        ./src/eth_client/utils/ethash/lib/ethash/keccakf1600.c
+        ./src/eth_client/utils/ethash/lib/ethash/keccakf800.c
+        ./src/eth_client/utils/ethash/lib/ethash/managed.cpp
+        ./src/eth_client/utils/ethash/lib/ethash/primes.c
+        ./src/eth_client/utils/ethash/lib/ethash/progpow.cpp
+        ./src/eth_client/utils/json_spirit/json_spirit_reader.cpp
+        ./src/eth_client/utils/json_spirit/json_spirit_value.cpp
+        ./src/eth_client/utils/json_spirit/json_spirit_writer.cpp
+
+
+
+
         ./src/validation.cpp
         ./src/consensus/consensus.cpp
         ./src/zbtcuchain.cpp
@@ -1392,14 +1383,15 @@ target_include_directories(SERVER_A
         ${OPENSSL_INCLUDE_DIR}
         ${Boost_INCLUDE_DIRS}
         ${Boost_INCLUDE_DIRS}/filesystem
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum/ethash/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum/evmc/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/evmone/evmc/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/evmone/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/eth_client
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/eth_client/utils/ethash/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src/qtum
         ${CMAKE_CURRENT_SOURCE_DIR}/src/secp256k1/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum/libdevcore
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum/utils
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum/utils/libscrypt
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/eth_client/libdevcore
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/eth_client/utils
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/eth_client/utils/libscrypt
         ${CMAKE_CURRENT_SOURCE_DIR}/src/libff/libff
         ${CMAKE_CURRENT_SOURCE_DIR}/src/libff
     )
@@ -1470,7 +1462,9 @@ set(WALLET_SOURCES
         ./src/zbtcu/deterministicmint.cpp
         ./src/zbtcu/zerocoin.cpp
         ./src/wallet/rpcwallet.cpp
+        ./src/util/strencodings.cpp
         ./src/kernel.cpp
+        ./src/key_io.cpp
         ./src/wallet/wallet.cpp
         ./src/wallet/wallet_zerocoin.cpp
         ./src/wallet/wallet_ismine.cpp
@@ -1516,9 +1510,9 @@ target_include_directories(WALLET_A PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_SOURCE_DIR}/src/univalue/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src/leveldb/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src/jsoncpp/jsoncpp/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum/ethash/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum/evmc/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/eth_client
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/eth_client/utils/ethash/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/evmone/evmc/include
         ${OPENSSL_INCLUDE_DIR}
         ${BerkeleyDB_INCLUDE_DIRS}
         ${Boost_INCLUDE_DIRS}
@@ -1579,7 +1573,6 @@ set(COMMON_SOURCES
         ./src/hash.cpp
         ./src/invalid.cpp
         ./src/key.cpp
-        ./src/btcu_address.cpp
         ./src/keystore.cpp
         ./src/netbase.cpp
         ./src/protocol.cpp
@@ -1588,18 +1581,14 @@ set(COMMON_SOURCES
         ./src/script/interpreter.cpp
         ./src/script/script.cpp
         ./src/script/sign.cpp
+        ./src/script/signingprovider.cpp
         ./src/script/standard.cpp
         ./src/script/script_error.cpp
         ./src/spork.cpp
         ./src/sporkdb.cpp
         ./src/validators_state.cpp
         ./src/validators_voting.cpp
-
-        ./src/cpp-ethereum/libethashseal/Ethash.cpp
-        ./src/cpp-ethereum/libethashseal/EthashCPUMiner.cpp
-        ./src/cpp-ethereum/libethashseal/EthashProofOfWork.cpp
-
-        ./src/cpp-ethereum/libethashseal/GenesisInfo.cpp
+        ./src/eth_client/libethashseal/GenesisInfo.cpp
         )
 
 add_library(COMMON_A STATIC ${BitcoinHeaders} ${COMMON_SOURCES})
@@ -1612,9 +1601,9 @@ target_include_directories(COMMON_A
         ${CMAKE_CURRENT_SOURCE_DIR}/src/jsoncpp/jsoncpp/include
         ${OPENSSL_INCLUDE_DIR}
         ${BerkeleyDB_INCLUDE_DIRS}
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum/ethash/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum/evmc/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/eth_client
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/eth_client/utils/ethash/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/evmone/evmc/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src/qtum
         )
 target_link_libraries(COMMON_A
@@ -1698,7 +1687,7 @@ target_include_directories(UTIL_A PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/src/univalue/include
             ${OPENSSL_INCLUDE_DIR}
             ${Boost_LIBRARIES} 
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum/
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/eth_client/
         )
 target_link_libraries(UTIL_A
             univalue
@@ -1779,13 +1768,18 @@ if(BUILD_UTILS)
         )
         list(APPEND btcu-tx_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/btcu-tx-res.rc)
     endif()
+    add_dependencies(btcu-tx leveldb leveldb_sse42 memenv)
     target_link_libraries(btcu-tx
             univalue
             COMMON_A
             SERVER_A
+            WALLET_A
             ZEROCOIN_A
             UTIL_A
             BITCOIN_CRYPTO_A
+            leveldb
+            leveldb_sse42
+            memenv
             secp256k1
             ${Boost_LIBRARIES} 
             ${OPENSSL_LIBRARIES}
@@ -1795,6 +1789,7 @@ if(BUILD_UTILS)
         target_link_libraries(btcu-tx ${GMP_LIBRARIES})
     endif()
     if(ZeroMQ_FOUND)
+        target_link_libraries(btcu-tx ZMQ_A)
         if(${CMAKE_SYSTEM_NAME} MATCHES "Windows" OR BUILD_STATIC)
             target_link_libraries(btcu-tx 
                 ZeroMQ::zmq
@@ -1878,7 +1873,7 @@ if(ENABLE_DAEMON)
                 ${ZeroMQ_LIBRARY}
                 )
         endif()
-        target_include_directories(btcud PUBLIC ${ZeroMQ_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum/)
+        target_include_directories(btcud PUBLIC ${ZeroMQ_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/src/eth_client/)
     endif()
     if(MINIUPNP_FOUND)
         if(${CMAKE_SYSTEM_NAME} MATCHES "Windows" OR BUILD_STATIC)
@@ -2080,14 +2075,14 @@ if(ENABLE_TESTS)
             ${OPENSSL_INCLUDE_DIR}
             ${Boost_INCLUDE_DIRS}
             ${Boost_INCLUDE_DIRS}/filesystem
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum/ethash/include
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum/evmc/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/eth_client
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/eth_client/utils/ethash/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/evmone/evmc/include
             ${CMAKE_CURRENT_SOURCE_DIR}/src/qtum
             ${CMAKE_CURRENT_SOURCE_DIR}/src/secp256k1/include
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum/libdevcore
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum/utils
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum/utils/libscrypt
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/eth_client/libdevcore
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/eth_client/utils
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/eth_client/utils/libscrypt
             ${CMAKE_CURRENT_SOURCE_DIR}/src/libff/libff
             ${CMAKE_CURRENT_SOURCE_DIR}/src/libff
         )
@@ -2139,9 +2134,9 @@ if(ENABLE_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/src/univalue/include
             ${CMAKE_CURRENT_SOURCE_DIR}/src/leveldb/include
             ${CMAKE_CURRENT_SOURCE_DIR}/src/jsoncpp/jsoncpp/include
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum/ethash/include
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum/evmc/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/eth_client
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/eth_client/utils/ethash/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/evmone/evmc/include
             ${OPENSSL_INCLUDE_DIR}
             ${BerkeleyDB_INCLUDE_DIRS}
             ${Boost_INCLUDE_DIRS}
@@ -2188,7 +2183,7 @@ if(ENABLE_TESTS)
     endif()
     if(ZeroMQ_FOUND)
         target_link_libraries(test_btcu ZMQ_A)
-        target_include_directories(test_btcu PUBLIC ${ZeroMQ_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp-ethereum/)
+        target_include_directories(test_btcu PUBLIC ${ZeroMQ_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/src/eth_client/)
         if(${CMAKE_SYSTEM_NAME} MATCHES "Windows" OR BUILD_STATIC)
             target_link_libraries(test_btcu 
                 ZeroMQ::zmq

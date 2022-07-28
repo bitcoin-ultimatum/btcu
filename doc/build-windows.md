@@ -67,7 +67,7 @@ Hint: You can also check the complete explanation of the installation process of
 
 You can clone the BTCU source code via installed prevously git cmd util, for that open desired folder for the project and run within it:
 ```cmd
-    git clone https://github.com/bitcoin-ultimatum/btcu
+    git clone https://github.com/bitcoin-ultimatum/btcu --recursive
     cd btcu
 ```
 

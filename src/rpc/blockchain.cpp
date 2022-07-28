@@ -28,6 +28,7 @@
 #include <numeric>
 #include <condition_variable>
 #include "contract.h"
+#include "key_io.h"
 
 struct CUpdatedBlock
 {
@@ -1347,7 +1348,7 @@ UniValue getserials(const UniValue& params, bool fHelp) {
                     if (!ExtractDestinations(tx.vout[0].scriptPubKey, type, addresses, nRequired)) {
                         spentTo = strprintf("type: %d", GetTxnOutputType(type));
                     } else {
-                        spentTo = CBTCUAddress(addresses[0]).ToString();
+                        spentTo = EncodeDestination(addresses[0]);
                     }
                 }
             }

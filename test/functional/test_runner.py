@@ -65,6 +65,7 @@ BASE_SCRIPTS= [
     # vv Tests less than 5m vv
     'mining_pos_coldStaking.py',                # ~ 289 sec
     'mining_pos_Leasing.py',                    # ~ 280 sec
+    'rpc_validators_orion.py'                   # ~ 172 sec
     'wallet_zerocoin_publicspends.py',          # ~ 270 sec
     'p2p_time_offset.py',                       # ~ 263 sec
     'wallet_abandonconflict.py',                # ~ 208 sec

@@ -76,8 +76,7 @@ static const bool DEFAULT_ALERTS = true;
 /** The maximum size for transactions we're willing to relay/mine */
 static const unsigned int MAX_STANDARD_TX_SIZE = 100000;
 static const unsigned int MAX_ZEROCOIN_TX_SIZE = 150000;
-/** Maximum number of signature check operations in an IsStandard() P2SH script */
-static const unsigned int MAX_P2SH_SIGOPS = 15;
+
 /** Default for -maxorphantx, maximum number of orphan transactions kept in memory */
 static const unsigned int DEFAULT_MAX_ORPHAN_TRANSACTIONS = 100;
 /** The maximum size of a blk?????.dat file (since 0.8) */
@@ -119,13 +118,6 @@ static const bool DEFAULT_BLOCK_SPAM_FILTER = true;
 static const unsigned int DEFAULT_BLOCK_SPAM_FILTER_MAX_SIZE = 100;
 /** Default for -blockspamfiltermaxavg, maximum average size of an index occurrence in the block spam filter */
 static const unsigned int DEFAULT_BLOCK_SPAM_FILTER_MAX_AVG = 10;
-
-/////////////////////////////////////////qtum
-/** The number of sender stack items in a standard sender signature script */
-static const unsigned int STANDARD_SENDER_STACK_ITEMS = 2;
-/** The maximum size of each sender stack item in a standard sender signature script */
-static const unsigned int MAX_STANDARD_SENDER_STACK_ITEM_SIZE = 80;
-////////////////////////////////////////////
 
 /**Masternode deposit size*/
 #define MN_DEPOSIT_SIZE 1000
@@ -251,6 +243,9 @@ void Misbehaving(NodeId nodeid, int howmuch);
 /** Flush all state, indexes and buffers to disk. */
 void FlushStateToDisk();
 
+///////qtum
+int GetSpendHeight(const CCoinsViewCache& inputs);
+///////////
 
 /** (try to) add transaction to memory pool **/
 bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState& state, const CTransaction& tx, bool fLimitFree, bool* pfMissingInputs, bool fRejectInsaneFee = false, bool ignoreFees = false);
@@ -293,7 +288,7 @@ bool AreInputsStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs)
  * This does not modify the UTXO set. If pvChecks is not NULL, script checks are pushed onto it
  * instead of being performed inline.
  */
-bool CheckInputs(const CTransaction& tx, CValidationState& state, const CCoinsViewCache& view, bool fScriptChecks, unsigned int flags, bool cacheStore, std::vector<CScriptCheck>* pvChecks = NULL);
+bool CheckInputs(const CTransaction& tx, CValidationState& state, const CCoinsViewCache& view, bool fScriptChecks, unsigned int flags, bool cacheStore, PrecomputedTransactionData& txdata, std::vector<CScriptCheck>* pvChecks = NULL);
 
 /** Apply the effects of this transaction on the UTXO set represented by view */
 void UpdateCoins(const CTransaction& tx, CValidationState& state, CCoinsViewCache& inputs, CTxUndo& txundo, int nHeight);
@@ -340,31 +335,37 @@ bool IsStandardTx(const CTransaction& tx, std::string& reason);
 class CScriptCheck
 {
 private:
-    CScript scriptPubKey;
-    const CTransaction* ptxTo;
-    unsigned int nIn;
-    unsigned int nFlags;
-    bool cacheStore;
-    ScriptError error;
+   CTxOut m_tx_out;
+   const CTransaction *ptxTo;
+   unsigned int nIn;
+   unsigned int nFlags;
+   bool cacheStore;
+   ScriptError error;
+   PrecomputedTransactionData *txdata;
+   int nOut;
 
 public:
-    CScriptCheck() : ptxTo(0), nIn(0), nFlags(0), cacheStore(false), error(SCRIPT_ERR_UNKNOWN_ERROR) {}
-    CScriptCheck(const CCoins& txFromIn, const CTransaction& txToIn, unsigned int nInIn, unsigned int nFlagsIn, bool cacheIn) : scriptPubKey(txFromIn.vout[txToIn.vin[nInIn].prevout.n].scriptPubKey),
-                                                                                                                                ptxTo(&txToIn), nIn(nInIn), nFlags(nFlagsIn), cacheStore(cacheIn), error(SCRIPT_ERR_UNKNOWN_ERROR) {}
+   CScriptCheck(): ptxTo(nullptr), nIn(0), nFlags(0), cacheStore(false), error(SCRIPT_ERR_UNKNOWN_ERROR), nOut(-1) {}
+   CScriptCheck(const CTxOut& outIn, const CTransaction& txToIn, unsigned int nInIn, unsigned int nFlagsIn, bool cacheIn, PrecomputedTransactionData* txdataIn) :
+   m_tx_out(outIn), ptxTo(&txToIn), nIn(nInIn), nFlags(nFlagsIn), cacheStore(cacheIn), error(SCRIPT_ERR_UNKNOWN_ERROR), txdata(txdataIn), nOut(-1) { }
+   CScriptCheck(const CTransaction& txToIn, int nOutIn, unsigned int nFlagsIn, bool cacheIn, PrecomputedTransactionData* txdataIn) :
+   ptxTo(&txToIn), nIn(0), nFlags(nFlagsIn), cacheStore(cacheIn), error(SCRIPT_ERR_UNKNOWN_ERROR), txdata(txdataIn), nOut(nOutIn){ }
 
-    bool operator()();
+   bool operator()();
 
-    void swap(CScriptCheck& check)
-    {
-        scriptPubKey.swap(check.scriptPubKey);
-        std::swap(ptxTo, check.ptxTo);
-        std::swap(nIn, check.nIn);
-        std::swap(nFlags, check.nFlags);
-        std::swap(cacheStore, check.cacheStore);
-        std::swap(error, check.error);
-    }
+   void swap(CScriptCheck &check) {
+      std::swap(ptxTo, check.ptxTo);
+      std::swap(m_tx_out, check.m_tx_out);
+      std::swap(nIn, check.nIn);
+      std::swap(nFlags, check.nFlags);
+      std::swap(cacheStore, check.cacheStore);
+      std::swap(error, check.error);
+      std::swap(txdata, check.txdata);
+      std::swap(nOut, check.nOut);
+   }
 
-    ScriptError GetScriptError() const { return error; }
+   ScriptError GetScriptError() const { return error; }
+   bool checkOutput() const { return nOut > -1; }
 };
 
 
@@ -387,7 +388,7 @@ bool DisconnectBlocks(int nBlocks);
 void ReprocessBlocks(int nBlocks);
 
 /** Apply the effects of this block (with given index) on the UTXO set represented by coins */
-bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pindex, CCoinsViewCache& coins, bool fJustCheck, bool fAlreadyChecked = false);
+bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pindex, CCoinsViewCache& coins, bool fJustCheck, bool fAlreadyChecked = false, bool fVerifyDB = false);
 
 /** Context-independent validity checks */
 bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state, bool fCheckPOW = true);

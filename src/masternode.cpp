@@ -10,6 +10,7 @@
 #include "obfuscation.h"
 #include "sync.h"
 #include "util.h"
+#include "key_io.h"
 
 // keep track of the scanning errors I've seen
 std::map<uint256, int> mapSeenMasternodeScanningErrors;
@@ -243,7 +244,7 @@ void CMasternode::Check(bool forceCheck)
 int64_t CMasternode::SecondsSincePayment()
 {
     CScript pubkeyScript;
-    pubkeyScript = GetScriptForDestination(pubKeyCollateralAddress.GetID());
+    pubkeyScript = GetScriptForDestination(PKHash(pubKeyCollateralAddress.GetID()));
 
     int64_t sec = (GetAdjustedTime() - GetLastPaid());
     int64_t month = 60 * 60 * 24 * 30;
@@ -264,7 +265,7 @@ int64_t CMasternode::GetLastPaid()
     if (pindexPrev == NULL) return false;
 
     CScript mnpayee;
-    mnpayee = GetScriptForDestination(pubKeyCollateralAddress.GetID());
+    mnpayee = GetScriptForDestination(PKHash(pubKeyCollateralAddress.GetID()));
 
     CHashWriter ss(SER_GETHASH, PROTOCOL_VERSION);
     ss << vin;
@@ -341,7 +342,7 @@ bool CMasternode::IsValidNetAddr()
 bool CMasternode::IsInputAssociatedWithPubkey() const
 {
     CScript payee;
-    payee = GetScriptForDestination(pubKeyCollateralAddress.GetID());
+    payee = GetScriptForDestination(PKHash(pubKeyCollateralAddress.GetID()));
 
     CTransaction txVin;
     uint256 hash;
@@ -440,8 +441,8 @@ bool CMasternodeBroadcast::Create(
     }
 
     LogPrint("masternode", "CMasternodeBroadcast::Create -- pubKeyCollateralAddressNew = %s, pubKeyLeasingAddressNew = %s, pubKeyMasternodeNew.GetID() = %s\n",
-        CBTCUAddress(pubKeyCollateralAddressNew.GetID()).ToString(),
-        CBTCUAddress(pubKeyLeasingNew.GetID()).ToString(),
+        EncodeDestination(PKHash(pubKeyCollateralAddressNew)),
+        EncodeDestination(PKHash(pubKeyLeasingNew)),
         pubKeyMasternodeNew.GetID().ToString());
 
     CMasternodePing mnp(txin);
@@ -558,7 +559,7 @@ bool CMasternodeBroadcast::CheckAndUpdate(int& nDos)
     }
 
     CScript pubkeyScript;
-    pubkeyScript = GetScriptForDestination(pubKeyCollateralAddress.GetID());
+    pubkeyScript = GetScriptForDestination(PKHash(pubKeyCollateralAddress.GetID()));
 
     if (pubkeyScript.size() != 25) {
         LogPrint("masternode","mnb - pubkey the wrong size\n");
@@ -567,7 +568,7 @@ bool CMasternodeBroadcast::CheckAndUpdate(int& nDos)
     }
 
     CScript pubkeyScript2;
-    pubkeyScript2 = GetScriptForDestination(pubKeyMasternode.GetID());
+    pubkeyScript2 = GetScriptForDestination(PKHash(pubKeyMasternode.GetID()));
 
     if (pubkeyScript2.size() != 25) {
         LogPrint("masternode","mnb - pubkey2 the wrong size\n");
@@ -577,7 +578,7 @@ bool CMasternodeBroadcast::CheckAndUpdate(int& nDos)
 
     if (pubKeyLeasing.size()) {
         CScript pubkeyScript3;
-        pubkeyScript3 = GetScriptForDestination(pubKeyLeasing.GetID());
+        pubkeyScript3 = GetScriptForDestination(PKHash(pubKeyLeasing.GetID()));
 
         if (pubkeyScript3.size() != 25) {
             LogPrint("masternode", "mnb - pubkey3 the wrong size\n");

@@ -442,7 +442,7 @@ CMasternode* CMasternodeMan::Find(const CScript& payee)
     CScript payee2;
 
     for (CMasternode& mn : vMasternodes) {
-        payee2 = GetScriptForDestination(mn.pubKeyCollateralAddress.GetID());
+        payee2 = GetScriptForDestination(PKHash(mn.pubKeyCollateralAddress.GetID()));
         if (payee2 == payee)
             return &mn;
     }
@@ -895,7 +895,7 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
         }
 
         CScript pubkeyScript;
-        pubkeyScript = GetScriptForDestination(pubkey.GetID());
+        pubkeyScript = GetScriptForDestination(PKHash(pubkey.GetID()));
 
         if (pubkeyScript.size() != 25) {
             LogPrintf("CMasternodeMan::ProcessMessage() : dsee - pubkey the wrong size\n");
@@ -904,7 +904,7 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
         }
 
         CScript pubkeyScript2;
-        pubkeyScript2 = GetScriptForDestination(pubkey2.GetID());
+        pubkeyScript2 = GetScriptForDestination(PKHash(pubkey2.GetID()));
 
         if (pubkeyScript2.size() != 25) {
             LogPrintf("CMasternodeMan::ProcessMessage() : dsee - pubkey2 the wrong size\n");

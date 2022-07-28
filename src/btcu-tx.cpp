@@ -4,7 +4,6 @@
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "btcu_address.h"
 #include "clientversion.h"
 #include "coins.h"
 #include "core_io.h"
@@ -18,6 +17,8 @@
 #include "util.h"
 #include "utilmoneystr.h"
 #include "utilstrencodings.h"
+#include "policy/policy.h"
+#include "key_io.h"
 
 #include <stdio.h>
 
@@ -27,7 +28,7 @@
 
 static bool fCreateBlank;
 static std::map<std::string, UniValue> registers;
-CClientUIInterface uiInterface;
+//CClientUIInterface uiInterface;
 
 static bool AppInitRawTx(int argc, char* argv[])
 {
@@ -221,12 +222,12 @@ static void MutateTxAddOutAddr(CMutableTransaction& tx, const std::string& strIn
 
     // extract and validate ADDRESS
     std::string strAddr = strInput.substr(pos + 1, std::string::npos);
-    CBTCUAddress addr(strAddr);
-    if (!addr.IsValid())
+    CTxDestination addr = DecodeDestination(strAddr);
+    if (!IsValidDestination(addr))
         throw std::runtime_error("invalid TX output address");
 
     // build standard output script via GetScriptForDestination()
-    CScript scriptPubKey = GetScriptForDestination(addr.Get());
+    CScript scriptPubKey = GetScriptForDestination(addr);
 
     // construct TxOut, append to transaction output list
     CTxOut txout(value, scriptPubKey);
@@ -353,12 +354,9 @@ static void MutateTxSign(CMutableTransaction& tx, const std::string& flagStr)
     for (unsigned int kidx = 0; kidx < keysObj.size(); kidx++) {
         if (!keysObj[kidx].isStr())
             throw std::runtime_error("privatekey not a string");
-        CBTCUSecret vchSecret;
-        bool fGood = vchSecret.SetString(keysObj[kidx].getValStr());
-        if (!fGood)
-            throw std::runtime_error("privatekey not valid");
-
-        CKey key = vchSecret.GetKey();
+        CKey key = DecodeSecret(keysObj[kidx].getValStr());
+        if(!key.IsValid())
+           throw std::runtime_error("privatekey not valid");
         tempKeystore.AddKey(key);
     }
 
@@ -415,6 +413,7 @@ static void MutateTxSign(CMutableTransaction& tx, const std::string& flagStr)
 
     bool fHashSingle = ((nHashType & ~SIGHASH_ANYONECANPAY) == SIGHASH_SINGLE);
 
+    const CTransaction txConst(mergedTx);
     // Sign what we can:
     for (unsigned int i = 0; i < mergedTx.vin.size(); i++) {
         CTxIn& txin = mergedTx.vin[i];
@@ -426,16 +425,19 @@ static void MutateTxSign(CMutableTransaction& tx, const std::string& flagStr)
         const CScript& prevPubKey = coins->vout[txin.prevout.n].scriptPubKey;
 
         txin.scriptSig.clear();
-        CScriptWitness witness;
+       const CAmount& amount = coins->vout[txin.prevout.n].nValue;
+       SignatureData sigdata;
         // Only sign SIGHASH_SINGLE if there's a corresponding output:
         if (!fHashSingle || (i < mergedTx.vout.size()))
-            SignSignature(keystore, prevPubKey, mergedTx, i, nHashType);
+           ProduceSignature(keystore, MutableTransactionSignatureCreator(&mergedTx, i, amount, nHashType), prevPubKey, sigdata);
 
         // ... and merge in other signatures:
         for (const CTransaction& txv : txVariants) {
-            txin.scriptSig = CombineSignatures(prevPubKey, mergedTx, i, txin.scriptSig, txv.vin[i].scriptSig);
+           sigdata = CombineSignatures(keystore, txv.vout[0], mergedTx, sigdata, DataFromTransaction(mergedTx, i, coins->vout[txin.prevout.n]));
+           UpdateInput(txin, sigdata);
         }
-        if (!BTC::VerifyScript(txin.scriptSig, prevPubKey, &witness, STANDARD_SCRIPT_VERIFY_FLAGS, MutableTransactionSignatureChecker(&mergedTx, i)))
+       ScriptError serror = SCRIPT_ERR_OK;
+       if (!VerifyScript(txin.scriptSig, prevPubKey, &txin.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, TransactionSignatureChecker(&txConst, i, amount, MissingDataBehavior::ASSERT_FAIL), &serror))
             fComplete = false;
     }
 

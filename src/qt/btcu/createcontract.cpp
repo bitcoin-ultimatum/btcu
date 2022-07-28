@@ -8,6 +8,7 @@
 #include <univalue.h>
 #include <qtum/qtumtransaction.h>
 #include "core_io.h"
+#include "key_io.h"
 
 CreateContract::CreateContract(BTCUGUI *parent) :
     PWidget(parent),
@@ -223,13 +224,13 @@ void CreateContract::onCreateContract()
     bool fHasSender = false;
     CTxDestination senderAddress;
     if(!ui->lineEditSenderAddress->text().isEmpty()) {
-        senderAddress = CBTCUAddress(address.toStdString()).Get();
-        if (senderAddress.which() == 0) {
+        senderAddress = DecodeDestination(address.toStdString());
+        if (senderAddress.index() == 0) {
             informError(tr("Invalid Qtum address to send from."));
             return;
         }
 
-        if (boost::get<CKeyID>(&senderAddress) == 0) {
+        if (std::get_if<PKHash>(&senderAddress) == 0) {
             informError(tr("Invalid contract sender address. Only P2PK and P2PKH allowed."));
             return;
         } else
@@ -277,7 +278,7 @@ void CreateContract::onCreateContract()
             const CScript scriptPubKey = out.tx->vout[out.i].scriptPubKey;
             bool fValidAddress = ExtractDestination(scriptPubKey, destAdress);
 
-            if (!fValidAddress || senderAddress != destAdress)
+            if (!fValidAddress || !(senderAddress == destAdress))
                 continue;
 
             coinControl->Select(COutPoint(out.tx->GetHash(),out.i));
@@ -384,7 +385,7 @@ void CreateContract::onCreateContract()
         CTxDestination txSenderAdress(txSenderDest);
         CKeyID keyid = GetKeyForDestination(*pwalletMain, txSenderAdress);
 
-        result.pushKV("sender", CBTCUAddress(txSenderAdress).ToString());
+        result.pushKV("sender", EncodeDestination(txSenderAdress));
         result.pushKV("hash160", HexStr(valtype(keyid.begin(),keyid.end())));
 
         std::vector<unsigned char> SHA256TxVout(32);
@@ -427,33 +428,33 @@ bool CreateContract::SetDefaultSignSenderAddress(CWallet* const pwallet, CTxDest
     for (const COutput& out : vecOutputs) {
         const CScript& scriptPubKey = out.tx->vout[out.i].scriptPubKey;
         bool fValidAddress = ExtractDestination(scriptPubKey, destAddress)
-                             && boost::get<CKeyID>(&destAddress) != 0;
+                             && std::get_if<PKHash>(&destAddress) != 0;
 
         if (!fValidAddress)
             continue;
         break;
     }
 
-    return !boost::get<CNoDestination>(&destAddress);
+    return !std::get_if<CNoDestination>(&destAddress);
 }
 
 CKeyID CreateContract::GetKeyForDestination(const CCryptoKeyStore& store, const CTxDestination& dest)
 {
     // Only supports destinations which map to single public keys, i.e. P2PKH,
     // P2WPKH, and P2SH-P2WPKH.
-    if (auto id = boost::get<CKeyID>(&dest)) {
-        return CKeyID(*id);
+    if (auto id = std::get_if<PKHash>(&dest)) {
+        return ToKeyID(*id);
     }
-    if (auto witness_id = boost::get<WitnessV0KeyHash>(&dest)) {
-        return CKeyID(*witness_id);
+    if (auto witness_id = std::get_if<WitnessV0KeyHash>(&dest)) {
+        return ToKeyID(*witness_id);
     }
-    if (auto script_hash = boost::get<CScriptID>(&dest)) {
+    if (auto script_hash = std::get_if<ScriptHash>(&dest)) {
         CScript script;
         CScriptID script_id(*script_hash);
         CTxDestination inner_dest;
         if (store.GetCScript(script_id, script) && ExtractDestination(script, inner_dest)) {
-            if (auto inner_witness_id = boost::get<WitnessV0KeyHash>(&inner_dest)) {
-                return CKeyID(*inner_witness_id);
+            if (auto inner_witness_id = std::get_if<WitnessV0KeyHash>(&inner_dest)) {
+                return ToKeyID(*inner_witness_id);
             }
         }
     }

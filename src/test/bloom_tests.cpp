@@ -6,7 +6,6 @@
 
 #include "bloom.h"
 
-#include "btcu_address.h"
 #include "clientversion.h"
 #include "key.h"
 #include "merkleblock.h"

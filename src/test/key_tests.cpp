@@ -6,12 +6,12 @@
 
 #include "key.h"
 
-#include "btcu_address.h"
 #include "script/script.h"
 #include "uint256.h"
 #include "util.h"
 #include "utilstrencodings.h"
 #include "test_btcu.h"
+#include "key_io.h"
 
 #include <string>
 #include <vector>
@@ -58,25 +58,18 @@ BOOST_FIXTURE_TEST_SUITE(key_tests, TestingSetup)
 
 BOOST_AUTO_TEST_CASE(key_test1)
 {
-    const CBTCUAddress addr1 ("1J8Wz5gecX3Bh8VsQbe9KvQu8Ff3JHHTJZ");
-    const CBTCUAddress addr2 ("1HCYAXkdTrzdCsuucxmGXpzdeujjcWc2ir");
-    const CBTCUAddress addr1C("196eHcVw3frkWbvrWSYseqf3a3MgwYgNMg");
-    const CBTCUAddress addr2C("1NwXuxAETu32zt6ZdXRRcVdFgvTLTf9Ud3");
+    const CTxDestination addr1 = DecodeDestination("1J8Wz5gecX3Bh8VsQbe9KvQu8Ff3JHHTJZ");
+    const CTxDestination addr2  = DecodeDestination("1HCYAXkdTrzdCsuucxmGXpzdeujjcWc2ir");
+    const CTxDestination addr1C = DecodeDestination("196eHcVw3frkWbvrWSYseqf3a3MgwYgNMg");
+    const CTxDestination addr2C = DecodeDestination("1NwXuxAETu32zt6ZdXRRcVdFgvTLTf9Ud3");
 
-    CBTCUSecret bsecret1, bsecret2, bsecret1C, bsecret2C, baddress1;
-    BOOST_CHECK( bsecret1.SetString (strSecret1));
-    BOOST_CHECK( bsecret2.SetString (strSecret2));
-    BOOST_CHECK( bsecret1C.SetString(strSecret1C));
-    BOOST_CHECK( bsecret2C.SetString(strSecret2C));
-    BOOST_CHECK(!baddress1.SetString(strAddressBad));
-
-    CKey key1  = bsecret1.GetKey();
+    CKey key1  = DecodeSecret(strSecret1);
     BOOST_CHECK(key1.IsCompressed() == false);
-    CKey key2  = bsecret2.GetKey();
+    CKey key2  = DecodeSecret(strSecret2);
     BOOST_CHECK(key2.IsCompressed() == false);
-    CKey key1C = bsecret1C.GetKey();
+    CKey key1C = DecodeSecret(strSecret1C);
     BOOST_CHECK(key1C.IsCompressed() == true);
-    CKey key2C = bsecret2C.GetKey();
+    CKey key2C = DecodeSecret(strSecret2C);
     BOOST_CHECK(key2C.IsCompressed() == true);
 
     CPubKey pubkey1  = key1. GetPubKey();
@@ -104,10 +97,10 @@ BOOST_AUTO_TEST_CASE(key_test1)
     BOOST_CHECK(!key2C.VerifyPubKey(pubkey2));
     BOOST_CHECK(key2C.VerifyPubKey(pubkey2C));
 
-    BOOST_CHECK(addr1.Get()  == CTxDestination(pubkey1.GetID()));
-    BOOST_CHECK(addr2.Get()  == CTxDestination(pubkey2.GetID()));
-    BOOST_CHECK(addr1C.Get() == CTxDestination(pubkey1C.GetID()));
-    BOOST_CHECK(addr2C.Get() == CTxDestination(pubkey2C.GetID()));
+    BOOST_CHECK(addr1  == CTxDestination(PKHash(pubkey1.GetID())));
+    BOOST_CHECK(addr2  == CTxDestination(PKHash(pubkey2.GetID())));
+    BOOST_CHECK(addr1C == CTxDestination(PKHash(pubkey1C.GetID())));
+    BOOST_CHECK(addr2C == CTxDestination(PKHash(pubkey2C.GetID())));
 
     for (int n=0; n<16; n++)
     {

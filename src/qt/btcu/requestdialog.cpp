@@ -12,6 +12,7 @@
 #include "amount.h"
 #include "pairresult.h"
 #include "optionsmodel.h"
+#include "key_io.h"
 
 RequestDialog::RequestDialog(QWidget *parent) :
     QDialog(parent),
@@ -133,7 +134,7 @@ void RequestDialog::onNextClicked(){
         std::string label = info->label.isEmpty() ? "" : info->label.toStdString();
         QString title;
 
-        CBTCUAddress address;
+        CTxDestination address;
         PairResult r(false);
         switch (this->requestType) {
             case RequestType::Payment:
@@ -156,7 +157,7 @@ void RequestDialog::onNextClicked(){
             return;
         }
 
-        info->address = QString::fromStdString(address.ToString());
+        info->address = QString::fromStdString(EncodeDestination(address));
         ui->labelTitle->setText(title);
 
         updateQr(info->address);

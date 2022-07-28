@@ -12,7 +12,8 @@
 #include "uint256.h"
 #include "base58.h"
 #include "guiinterface.h"
-#include "btcu_address.h"
+#include "key_io.h"
+
 
 #include <stdint.h>
 
@@ -308,11 +309,10 @@ bool CCoinsViewDB::Upgrade(const uint256& hashBestBlock) {
 
     //prepare excluded addresses
     for(auto a: Params().ExcludedBTCAddresses()){
-       CBTCUAddress address(a);
-       bool isValid = address.IsValid();
+       CTxDestination dest = DecodeDestination(a);
+       bool isValid = IsValidDestination(dest);
        if (isValid)
        {
-          CTxDestination dest = address.Get();
           CScript scriptPubKey = GetScriptForDestination(dest);
           sExcludedAddresses.insert(scriptPubKey);
        }
@@ -323,8 +323,8 @@ bool CCoinsViewDB::Upgrade(const uint256& hashBestBlock) {
     }
 
     //prepare recharged address
-    CBTCUAddress address(Params().RechargedBTCAddress());
-    CScript rchrScriptPubKey = GetScriptForDestination(address.Get());
+    CTxDestination address = DecodeDestination(Params().RechargedBTCAddress());
+    CScript rchrScriptPubKey = GetScriptForDestination(address);
 
     LogPrintf("Upgrading utxo-set database...\n");
     LogPrintf("[0%%]..."); /* Continued */

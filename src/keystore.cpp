@@ -10,7 +10,6 @@
 #include "crypter.h"
 #include "key.h"
 #include "script/script.h"
-#include "script/standard.h"
 #include "util.h"
 
 
@@ -158,4 +157,40 @@ bool CBasicKeyStore::GetKey(const CKeyID& address, CKey& keyOut) const
         }
     }
     return false;
+}
+
+bool CBasicKeyStore::GetKeyOrigin(const CKeyID& keyid, KeyOriginInfo& info) const
+{
+   std::pair<CPubKey, KeyOriginInfo> out;
+   //bool ret = LookupHelper(origins, keyid, out);
+   //if (ret) info = std::move(out.second);
+   return false;//ret;
+}
+
+bool CBasicKeyStore::GetTaprootSpendData(const XOnlyPubKey& output_key, TaprootSpendData& spenddata) const
+{
+   return false;//LookupHelper(tr_spenddata, output_key, spenddata);
+}
+
+CKeyID GetKeyForDestination(const CKeyStore& store, const CTxDestination& dest)
+{
+   // Only supports destinations which map to single public keys, i.e. P2PKH,
+   // P2WPKH, and P2SH-P2WPKH.
+   if (auto id = std::get_if<PKHash>(&dest)) {
+      return ToKeyID(*id);;
+   }
+   if (auto witness_id = std::get_if<WitnessV0KeyHash>(&dest)) {
+      return ToKeyID(*witness_id);
+   }
+   if (auto script_hash = std::get_if<ScriptHash>(&dest)) {
+      CScript script;
+      CScriptID script_id(*script_hash);
+      CTxDestination inner_dest;
+      if (store.GetCScript(script_id, script) && ExtractDestination(script, inner_dest)) {
+         if (auto inner_witness_id = std::get_if<WitnessV0KeyHash>(&inner_dest)) {
+            return ToKeyID(*inner_witness_id);
+         }
+      }
+   }
+   return CKeyID();
 }

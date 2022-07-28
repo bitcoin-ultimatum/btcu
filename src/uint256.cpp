@@ -375,3 +375,6 @@ uint64_t uint256::GetHash(const uint256& salt) const
 
     return ((((uint64_t)b) << 32) | c);
 }
+
+const uint256 uint256::ZERO(0);
+const uint256 uint256::ONE(1);

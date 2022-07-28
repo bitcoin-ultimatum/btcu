@@ -447,12 +447,11 @@ bool CActiveMasternode::GetVinFromOutput(COutput out, CTxIn& vin, CPubKey& pubke
     vin = CTxIn(out.tx->GetHash(), out.i);
     pubScript = out.tx->vout[out.i].scriptPubKey; // the inputs PubKey
 
-    CTxDestination address1;
-    ExtractDestination(pubScript, address1);
-    CBTCUAddress address2(address1);
+    CTxDestination dest;
+    ExtractDestination(pubScript, dest);
 
-    CKeyID keyID;
-    if (!address2.GetKeyID(keyID)) {
+    auto keyID = GetKeyForDestination(*pwalletMain, dest);
+    if (keyID.IsNull()) {
         LogPrintf("CActiveMasternode::GetMasterNodeVin - Address does not refer to a key\n");
         return false;
     }

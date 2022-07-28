@@ -182,6 +182,14 @@ bool ParseBool(const UniValue& o, std::string strKey)
     return v.get_bool();
 }
 
+std::string LabelFromValue(const UniValue& value)
+{
+   std::string label = value.get_str();
+   if (label == "*")
+      throw JSONRPCError(RPC_WALLET_INVALID_LABEL_NAME, "Invalid label name");
+   return label;
+}
+
 
 /**
  * Note: This interface may still be subject to change.

@@ -16,6 +16,7 @@
 #include "guiinterface.h"
 #include "util.h"
 #include "wallet/wallet.h"
+#include "key_io.h"
 
 #include <cstdlib>
 
@@ -194,11 +195,11 @@ void PaymentServer::ipcParseCommandLine(int argc, char* argv[])
 
             SendCoinsRecipient r;
             if (GUIUtil::parseBitcoinURI(arg, &r) && !r.address.isEmpty()) {
-                CBTCUAddress address(r.address.toStdString());
+                CTxDestination address = DecodeDestination(r.address.toStdString());
 
-                if (address.IsValid(Params(CBaseChainParams::MAIN))) {
+                if (IsValidDestinationString(EncodeDestination(address), Params(CBaseChainParams::MAIN))) {
                     SelectParams(CBaseChainParams::MAIN);
-                } else if (address.IsValid(Params(CBaseChainParams::TESTNET))) {
+                } else if (IsValidDestinationString(EncodeDestination(address), Params(CBaseChainParams::TESTNET))) {
                     SelectParams(CBaseChainParams::TESTNET);
                 }
             }
@@ -388,8 +389,8 @@ void PaymentServer::handleURIOrFile(const QString& s)
         {
             SendCoinsRecipient recipient;
             if (GUIUtil::parseBitcoinURI(s, &recipient)) {
-                CBTCUAddress address(recipient.address.toStdString());
-                if (!address.IsValid()) {
+                CTxDestination address = DecodeDestination(recipient.address.toStdString());
+                if (!IsValidDestination(address)) {
                     Q_EMIT message(tr("URI handling"), tr("Invalid payment address %1").arg(recipient.address),
                         CClientUIInterface::MSG_ERROR);
                 } else
@@ -509,7 +510,7 @@ bool PaymentServer::processPaymentRequest(PaymentRequestPlus& request, SendCoins
         CTxDestination dest;
         if (ExtractDestination(sendingTo.first, dest)) {
             // Append destination address
-            addresses.append(QString::fromStdString(CBTCUAddress(dest).ToString()));
+            addresses.append(QString::fromStdString(EncodeDestination(dest)));
         } else if (!recipient.authenticatedMerchant.isEmpty()) {
             // Insecure payments to custom btcu addresses are not supported
             // (there is no good way to tell the user where they are paying in a way
@@ -581,10 +582,11 @@ void PaymentServer::fetchPaymentACK(CWallet* wallet, SendCoinsRecipient recipien
     } else {
         CPubKey newKey;
         if (wallet->GetKeyFromPool(newKey)) {
-            CKeyID keyID = newKey.GetID();
-            wallet->SetAddressBook(keyID, strAccount, "refund");
 
-            CScript s = GetScriptForDestination(keyID);
+            CKeyID keyID = newKey.GetID();
+            wallet->SetAddressBook(PKHash(keyID), strAccount, "refund");
+
+            CScript s = GetScriptForDestination(PKHash(keyID));
             payments::Output* refund_to = payment.add_refund_to();
             refund_to->set_script(&s[0], s.size());
         } else {

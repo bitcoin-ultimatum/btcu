@@ -472,7 +472,6 @@ boost::optional<CKey> ValidatorWidget::getCollateralKey(CMasternode *pmn)
     auto addr = pmn->pubKeyCollateralAddress.GetID(); // public key ID for MN's collateral address
     if (pwalletMain->GetKey(addr, key)) // get key (private and public parts) from wallet
     {
-//        auto addr_str = CBTCUAddress(key.GetPubKey().GetID()).ToString();
         keyOpt.emplace(key);
     }
     return keyOpt;
@@ -553,7 +552,7 @@ boost::optional<std::pair<CTxIn, CKey>> ValidatorWidget::getVinKey(const std::st
     GetTransaction(uHash, tr, uBlock, true);
 
     CKeyID keyID;
-    walletModel->getKeyId(CBTCUAddress(mnAddress), keyID);
+    walletModel->getKeyId(DecodeDestination(mnAddress), keyID);
     CPubKey pubKey;
     walletModel->getPubKey(keyID, pubKey);
 
@@ -578,7 +577,7 @@ boost::optional<std::pair<CTxIn, CKey>> ValidatorWidget::getVinKey(const std::st
 
                 if (pwalletMain->GetKey(addr, key)) // get key (private and public parts) from wallet
                 {
-                    //auto addr_str = CBTCUAddress(key.GetPubKey().GetID()).ToString();
+                    //auto addr_str = EncodeDestination(key.GetPubKey().GetID());
                     keyOpt.emplace(key);
                 }
                 vinKeyOpt.emplace(std::pair<CTxIn, CKey>(tr.vin[0], keyOpt.value()));
@@ -636,9 +635,9 @@ std::string ValidatorWidget::createAndSendTransaction(const boost::optional<CVal
             {
                 CAmount amount;
                 CPubKey pubkey = valRegOpt.value().pubKey;
-                pwalletMain->pLeasingManager->GetAllAmountsLeasedFrom(pubkey, amount);
+                pwalletMain->pLeasingManager->GetAllAmountsLeasedTo(pubkey, amount);
 
-                if(amount/100000000 < LEASED_TO_VALIDATOR_MIN_AMOUNT)
+                if(amount < LEASED_TO_VALIDATOR_MIN_AMOUNT * COIN)
                 {
                     ret = "Not enough leased to validator candidate coins, min=" +
                                         std::to_string(LEASED_TO_VALIDATOR_MIN_AMOUNT) +
@@ -677,7 +676,7 @@ std::string ValidatorWidget::createAndSendTransaction(const boost::optional<CVal
         CReserveKey reservekey(pwalletMain);
         CPubKey vchPubKey;
         assert(reservekey.GetReservedKey(vchPubKey));
-        CTxDestination myAddress = vchPubKey.GetID();
+        CTxDestination myAddress = PKHash(vchPubKey.GetID());
 
         CAmount nAmount = AmountFromValue(
                 UniValue((double) 38 / COIN)); // send 38 satoshi (min tx fee per kb is 100 satoshi)

@@ -164,7 +164,6 @@ btcud
 test_btcu
 install_manifest.txt
 osx_volname
-lib/
 bin/
 conf*/*
 conftest.c
@@ -189,3 +188,16 @@ btcu.xcodeproj/
 
 CPackConfig.cmake
 CPackSourceConfig.cmake
+
+lib/
+src/eth_client/utils/ethash/CMakeFiles/
+src/eth_client/utils/ethash/lib/ethash/CMakeFiles/
+src/eth_client/utils/ethash/lib/ethash/ethashConfig.cmake
+src/eth_client/utils/ethash/lib/ethash/ethashConfigVersion.cmake
+src/eth_client/utils/ethash/test/CMakeFiles/
+src/eth_client/utils/ethash/test/benchmarks/CMakeFiles/
+src/eth_client/utils/ethash/test/fakeminer/CMakeFiles/
+src/eth_client/utils/ethash/test/integration/CMakeFiles/
+src/eth_client/utils/ethash/test/integration/compilation/CMakeFiles/
+src/eth_client/utils/ethash/test/tools/CMakeFiles/
+src/eth_client/utils/ethash/test/unittests/CMakeFiles/

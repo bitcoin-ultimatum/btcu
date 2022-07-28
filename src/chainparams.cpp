@@ -13,8 +13,8 @@
 #include "util.h"
 #include "utilstrencodings.h"
 #include "util/convert.h"
-#include "cpp-ethereum/libdevcore/SHA3.h"
-#include "cpp-ethereum/libdevcore/RLP.h"
+#include <libdevcore/SHA3.h>
+#include <libdevcore/RLP.h>
 #include <assert.h>
 
 #include <boost/assign/list_of.hpp>
@@ -283,6 +283,8 @@ public:
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,5);
         base58Prefixes[SECRET_KEY] =     std::vector<unsigned char>(1,128);
         base58Prefixes[STAKING_ADDRESS] = std::vector<unsigned char>(1,66);
+        base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x88, 0xB2, 0x1E};
+        base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x88, 0xAD, 0xE4};
 
         bech32_hrp = "bc";
 
@@ -570,6 +572,8 @@ public:
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1, 196); // (Bitcoin defaults)
         base58Prefixes[STAKING_ADDRESS] = std::vector<unsigned char>(1,53);  // starting with 'N'
         base58Prefixes[SECRET_KEY] = std::vector<unsigned char>(1, 239);     // Testnet private keys start with '9' or 'c' (Bitcoin defaults)
+        base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x35, 0x87, 0xCF};
+        base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x35, 0x83, 0x94};
 
         bech32_hrp = "tb";
 
@@ -750,9 +754,19 @@ std::string CChainParams::EVMGenesisInfo(dev::eth::Network network) const
 {
     // replace_constants
     std::string genesisInfo = dev::eth::genesisInfo(network);
-    ReplaceInt(446320, "QIP7_STARTING_BLOCK", genesisInfo);
-    ReplaceInt(446320, "QIP6_STARTING_BLOCK", genesisInfo);
+    ReplaceInt(0, "QIP7_STARTING_BLOCK", genesisInfo);
+    ReplaceInt(0, "QIP6_STARTING_BLOCK", genesisInfo);
     return genesisInfo;
+}
+
+std::string CChainParams::EVMGenesisInfo() const
+{
+   dev::eth::EVMConsensus evmConsensus;
+   evmConsensus.QIP6Height = 0;
+   evmConsensus.QIP7Height = 0;
+   evmConsensus.nMuirGlacierHeight = 0;
+   evmConsensus.nLondonHeight = 0;
+   return dev::eth::genesisInfoQtum(dev::eth::Network::qtumNetwork, evmConsensus);
 }
 
 std::string toHexString(int64_t intValue) {

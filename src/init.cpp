@@ -34,6 +34,7 @@
 #include "net.h"
 #include "rpc/server.h"
 #include "script/standard.h"
+#include <script/sigcache.h>
 #include "scheduler.h"
 #include "spork.h"
 #include "sporkdb.h"
@@ -872,6 +873,8 @@ bool AppInit2()
     if (!AppInitBasicSetup())
         return false;
 
+    InitSignatureCache();
+
     // ********************************************************* Step 2: parameter interactions
     // Set this early so that parameter interactions go to console
     fPrintToConsole = GetBoolArg("-printtoconsole", false);
@@ -1620,6 +1623,11 @@ bool AppInit2()
                             break;
                         }
                     }
+
+                    /////////////////////////////////qtum
+                    QtumDGP qtumDGP(globalState.get(), fGettingValuesDGP);
+                    globalSealEngine->setQtumSchedule(qtumDGP.getGasSchedule(chainActive.Height()));
+                    /////////////////////////////////////
 
                     // Zerocoin must check at level 4
                     if (!CVerifyDB().VerifyDB(pcoinsdbview, 4, GetArg("-checkblocks", 10))) {

@@ -10,7 +10,9 @@
 
 #include "key.h"
 #include "pubkey.h"
+#include <script/keyorigin.h>
 #include "sync.h"
+#include "script/standard.h"
 
 #include <boost/signals2/signal.hpp>
 
@@ -34,7 +36,10 @@ public:
     virtual bool HaveKey(const CKeyID& address) const = 0;
     virtual bool GetKey(const CKeyID& address, CKey& keyOut) const = 0;
     virtual void GetKeys(std::set<CKeyID>& setAddress) const = 0;
+    virtual bool GetKeyOrigin(const CKeyID& keyid, KeyOriginInfo& info) const = 0;
+    virtual bool GetTaprootSpendData(const XOnlyPubKey& output_key, TaprootSpendData& spenddata) const = 0;
     virtual bool GetPubKey(const CKeyID& address, CPubKey& vchPubKeyOut) const;
+
 
     //! Support for BIP 0013 : see https://github.com/bitcoin/bips/blob/master/bip-0013.mediawiki
     virtual bool AddCScript(const CScript& redeemScript) = 0;
@@ -53,6 +58,14 @@ public:
     virtual bool RemoveMultiSig(const CScript& dest) = 0;
     virtual bool HaveMultiSig(const CScript& dest) const = 0;
     virtual bool HaveMultiSig() const = 0;
+
+    bool GetKeyByXOnly(const XOnlyPubKey& pubkey, CKey& key) const
+   {
+      for (const auto& id : pubkey.GetKeyIDs()) {
+         if (GetKey(id, key)) return true;
+      }
+      return false;
+   }
 };
 
 typedef std::map<CKeyID, CKey> KeyMap;
@@ -70,10 +83,13 @@ protected:
     MultiSigScriptSet setMultiSig;
 
 public:
-    bool AddKeyPubKey(const CKey& key, const CPubKey& pubkey);
-    bool HaveKey(const CKeyID& address) const;
-    void GetKeys(std::set<CKeyID>& setAddress) const;
-    bool GetKey(const CKeyID& address, CKey& keyOut) const;
+    bool AddKeyPubKey(const CKey& key, const CPubKey& pubkey) override;
+    bool HaveKey(const CKeyID& address) const override;
+    void GetKeys(std::set<CKeyID>& setAddress) const override;
+    bool GetKey(const CKeyID& address, CKey& keyOut) const override;
+    bool GetKeyOrigin(const CKeyID& keyid, KeyOriginInfo& info) const override;
+    bool GetTaprootSpendData(const XOnlyPubKey& output_key, TaprootSpendData& spenddata) const override;
+
 
     virtual bool AddCScript(const CScript& redeemScript);
     virtual bool HaveCScript(const CScriptID& hash) const;
@@ -93,5 +109,8 @@ public:
 
 typedef std::vector<unsigned char, secure_allocator<unsigned char> > CKeyingMaterial;
 typedef std::map<CKeyID, std::pair<CPubKey, std::vector<unsigned char> > > CryptedKeyMap;
+
+/** Return the CKeyID of the key involved in a script (if there is a unique one). */
+CKeyID GetKeyForDestination(const CKeyStore& store, const CTxDestination& dest);
 
 #endif // BITCOIN_KEYSTORE_H

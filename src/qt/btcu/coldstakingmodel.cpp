@@ -9,6 +9,7 @@
 #include "guiutil.h"
 #include <iostream>
 #include "addressbook.h"
+#include "key_io.h"
 
 ColdStakingModel::ColdStakingModel(WalletModel* _model,
                                    TransactionTableModel* _tableModel,
@@ -80,15 +81,15 @@ bool ColdStakingModel::parseCSDelegation(const CTxOut& out, CSDelegation& ret, c
                 __func__, txId.toStdString(), utxoIndex);
     }
 
-    std::string stakingAddressStr = CBTCUAddress(
+    std::string stakingAddressStr = EncodeDestination(
             addresses[0],
             CChainParams::STAKING_ADDRESS
-    ).ToString();
+    );
 
-    std::string ownerAddressStr = CBTCUAddress(
+    std::string ownerAddressStr = EncodeDestination(
             addresses[1],
             CChainParams::PUBKEY_ADDRESS
-    ).ToString();
+    );
 
     ret = CSDelegation(stakingAddressStr, ownerAddressStr);
 

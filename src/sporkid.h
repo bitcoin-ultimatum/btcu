@@ -28,6 +28,7 @@ enum SporkId : int32_t {
     SPORK_1017_LEASING_ENFORCEMENT              = 11017, // BTCU
     SPORK_1018_MAX_VALIDATORS                   = 11018, // BTCU
     SPORK_1019_CREATECONTRACT_ANY_ALLOWED       = 11019, // BTCU
+    SPORK_1020_VALIDATOR_ENFORCEMENT            = 11020, // BTCU
 
     SPORK_INVALID                               = -1
 };

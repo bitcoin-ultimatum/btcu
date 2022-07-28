@@ -14,6 +14,7 @@
 #include "util.h"
 
 #include "utilstrencodings.h"
+#include "main.h"
 
 
 /**
@@ -91,7 +92,7 @@ isminetype IsMine(const CKeyStore& keystore, const CScript& scriptPubKey, IsMine
             // This also applies to the P2WSH case.
             break;
         }
-        return IsMine(keystore, GetScriptForDestination(CKeyID(uint160(vSolutions[0]))), IsMineSigVersion::WITNESS_V0);
+        return IsMine(keystore, GetScriptForDestination(PKHash(uint160(vSolutions[0]))), IsMineSigVersion::WITNESS_V0);
     }
     case TX_PUBKEYHASH: {
         keyID = CKeyID(uint160(vSolutions[0]));
@@ -153,15 +154,22 @@ isminetype IsMine(const CKeyStore& keystore, const CScript& scriptPubKey, IsMine
             return ISMINE_SPENDABLE_DELEGATED;
         break;
     }
+    case TX_LEASE_CLTV:
     case TX_LEASE: {
         if (sigversion != IsMineSigVersion::TOP) {
             break;
         }
 
-        CKeyID leaserKeyID = CKeyID(uint160(vSolutions[0]));
+        CKeyID leaserKeyID = (whichType == TX_LEASE) ? CKeyID(uint160(vSolutions[0])):CKeyID(uint160(vSolutions[1]));
         bool leaserKeyIsMine = keystore.HaveKey(leaserKeyID);
-        CKeyID ownerKeyID = CKeyID(uint160(vSolutions[1]));
+        CKeyID ownerKeyID = (whichType == TX_LEASE) ? CKeyID(uint160(vSolutions[1])): CKeyID(uint160(vSolutions[2]));
         bool spendKeyIsMine = keystore.HaveKey(ownerKeyID);
+
+        //check if leasing locktime has not yet come (if leasing locktime more then last blocktime then return ISMINE_NO)
+        if (whichType == TX_LEASE_CLTV) {
+              if (CScriptNum::vch_to_uint64(vSolutions[0]) > chainActive.Tip()->GetBlockTime())
+              return ISMINE_LEASED_LOCKED_CLTV;
+        }
 
         if (spendKeyIsMine && leaserKeyIsMine)
             return ISMINE_SPENDABLE_LEASING;

@@ -93,7 +93,6 @@ BITCOIN_CORE_H = \
   amount.h \
   base58.h \
   bech32.h \
-  btcu_address.h \
   bip38.h \
   bloom.h \
   blocksignature.h \
@@ -401,7 +400,6 @@ libbitcoin_common_a_SOURCES = \
   amount.cpp \
   base58.cpp \
   bech32.cpp \
-  btcu_address.cpp \
   bip38.cpp \
   chainparams.cpp \
   coins.cpp \

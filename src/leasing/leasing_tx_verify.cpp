@@ -69,7 +69,7 @@ bool CheckLeasedToValidatorTransaction(const uint256& blockHash, const CTransact
     for(auto v: tx.validatorRegister) {
         CAmount amount;
         leasingManager.GetAllAmountsLeasedTo(v.pubKey, amount);
-        if(amount < LEASED_TO_VALIDATOR_MIN_AMOUNT)
+        if(amount < LEASED_TO_VALIDATOR_MIN_AMOUNT * COIN)
             return state.DoS(10, error("%s: not enough leased to validator candidate coins, min=%d, current=%d, validator pubkey %s, tx %s",
                                     __func__,
                                     LEASED_TO_VALIDATOR_MIN_AMOUNT,
